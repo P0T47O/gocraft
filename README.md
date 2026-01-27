@@ -48,7 +48,11 @@
    **Note on Textures**: 
    This repository does not include copyrighted game assets. The game will run with fallback placeholders (checkerboard patterns) by default. To use a resource pack:
    1. Locate or create a `textures/` folder in the game directory.
-   2. Place your texture files (e.g., `block/dirt.png`) inside, matching the standard structure.
+   2. You can use standard Minecraft resource packs (Java Edition 1.20+ recommended).
+   3. Open the resource pack `.zip` file, navigate to `assets/minecraft/textures/`.
+   4. Extract the contents (folders like `block`, `item`, etc.) into your local `textures/` folder.
+   
+   *Disclaimer: You must ensure you have the legal right to use any texture packs or assets you import into the game.*
 
 ### Multiplayer
 

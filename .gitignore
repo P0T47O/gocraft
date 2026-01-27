@@ -14,3 +14,6 @@ textures/
 # IDEs
 .vscode/
 .idea/
+
+# Runtime Data
+saves/

@@ -209,15 +209,13 @@ func (a *RenderAssets) loadTexture(path string) rl.Texture2D {
 		}
 	}
 	if tex.ID == 0 {
-		img := rl.LoadImage(path)
-		if img != nil && img.Data != nil {
-		// General case: Check if file exists, if not generate fallback
 		if _, err := os.Stat(path); os.IsNotExist(err) {
-			// Generate Magenta/Black Checkerboard
+			// File missing: Generate Magenta/Black Checkerboard
 			img := rl.GenImageChecked(16, 16, 8, 8, rl.Magenta, rl.Black)
 			tex = rl.LoadTextureFromImage(img)
 			rl.UnloadImage(img)
 		} else {
+			// File exists: Load it
 			img := rl.LoadImage(path)
 			if img != nil && img.Data != nil {
 				w := float32(img.Width)
@@ -232,6 +230,7 @@ func (a *RenderAssets) loadTexture(path string) rl.Texture2D {
 			}
 		}
 	}
+
 	if tex.ID != 0 {
 		rl.SetTextureFilter(tex, rl.FilterPoint)
 	}
