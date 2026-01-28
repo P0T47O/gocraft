@@ -4,28 +4,41 @@
 
 [English](README.md) | [中文](README_zh.md)
 
-**GoCraft** is a high-performance voxel game engine written in Go, utilizing [raylib-go](https://github.com/gen2brain/raylib-go) for rendering. It features procedural terrain generation, efficient chunk management, and multiplayer support.
+> [!IMPORTANT]
+> **Project Status: Early Alpha**. GoCraft is currently a technical demonstration focusing on voxel engine mechanics. Many features are incomplete and significant bugs may exist.
+
+**GoCraft** is a high-performance voxel engine experiment written in Go...
 
 ![GoCraft](https://img.shields.io/badge/Language-Go-blue.svg)
 ![License](https://img.shields.io/badge/License-GPLv3-blue.svg)
 
 ## Features
 
-- **Efficient Voxel Engine**: 
-  - Chunk-based rendering with mesh pooling.
-  - Greedy meshing optimizations (Ambient Occlusion, Face Culling).
-  - Special rendering logic for seamless Ice/Water surfaces and detailed Glass/Leaves.
+- **Improved UI & UX**:
+  - Modern, centered menu layouts for all pages.
+  - Professional voxel-style project logo.
+  - In-game **Pause Menu** (ESC) with "Save & Quit" functionality.
+- **Customizable Settings**:
+  - Persistent settings saved to `settings.json`.
+  - **Resolution Support**: 16:9, 16:10, 21:9, and 4:3 display modes.
+  - **Mouse Sensitivity**: Adjustable slider for refined control.
 - **Multiplayer Support**:
   - Authoritative TCP Server/Client architecture.
   - Entity interpolation and synchronization.
-  - Dynamic chunk loading/unloading.
+  - Graceful server shutdown and resource cleanup.
 - **Procedural World**:
   - Infinite terrain generation using Simplex noise.
   - Biome systems with smooth color transitions (Grass, Water).
   - Cave generation and ore veins.
 - **Advanced Lighting**:
-  - Smooth Ambient Occlusion (AO).
   - Sky light propagation and day/night cycles.
+
+## 🚧 Current Development Status (WIP)
+
+- **Gameplay Mechanics**: Survival elements, crafting, and mob AI are in early stages.
+- **Inventory**: Basic UI is implemented, but advanced item management is ongoing.
+- **Audio**: Sound effects and music are yet to be integrated.
+- **Optimization**: While fast, large-scale concurrent chunk generation is still being tuned.
 
 ## Getting Started
 
@@ -70,6 +83,7 @@ go run . -name PlayerName
 
 ## Controls
 
+- **ESC**: Toggle Pause Menu
 - **W, A, S, D**: Move
 - **Space**: Jump / Fly Up
 - **Left Control**: Fly Down
@@ -77,7 +91,7 @@ go run . -name PlayerName
 - **Left Click**: Break Block
 - **Right Click**: Place Block
 - **1-9**: Select Block from Hotbar
-- **E**: Open Inventory (Work in Progress)
+- **E**: Open Inventory
 - **F3**: Toggle Debug Info
 
 ## License
