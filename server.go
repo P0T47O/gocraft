@@ -20,6 +20,9 @@ type Server struct {
 	InitialPosX, InitialPosY, InitialPosZ float64
 	HasSavedPos                           bool
 	LastSentPos                           map[string][3]float64
+	SavePath                              string
+	PendingChunks                         map[chunkKey][]string
+	Listener                              net.Listener
 }
 
 type lastPos struct {
@@ -40,25 +43,27 @@ type PacketWrapper struct {
 	From   string
 }
 
-func NewServer() *Server {
+func NewServer(savePath string) *Server {
 	world := NewFlatWorld()
 	// Authoritative Load (MUST BE BEFORE STARTING WORKERS)
-	hasPos, px, py, pz, _ := LoadWorld(world)
+	hasPos, px, py, pz, _ := LoadWorld(savePath, world)
 
 	// Now we can start the workers with the correct seed
 	fmt.Printf("Server: Authoritative Seed Loaded: %d\n", world.seed)
 	world.StartBackend()
 
 	s := &Server{
-		World:       world,
-		Clients:     make(map[string]*ClientConnection),
-		PacketCh:    make(chan PacketWrapper, 1024),
-		Shutdown:    make(chan bool),
-		InitialPosX: px,
-		InitialPosY: py,
-		InitialPosZ: pz,
-		HasSavedPos: hasPos,
-		LastSentPos: make(map[string][3]float64),
+		World:         world,
+		Clients:       make(map[string]*ClientConnection),
+		PacketCh:      make(chan PacketWrapper, 1024),
+		Shutdown:      make(chan bool),
+		InitialPosX:   px,
+		InitialPosY:   py,
+		InitialPosZ:   pz,
+		HasSavedPos:   hasPos,
+		LastSentPos:   make(map[string][3]float64),
+		SavePath:      savePath,
+		PendingChunks: make(map[chunkKey][]string),
 	}
 
 	if !hasPos && len(world.entities) == 0 {
@@ -78,9 +83,21 @@ func NewServer() *Server {
 	return s
 }
 
+func (s *Server) Stop() {
+	if s.Shutdown != nil {
+		select {
+		case <-s.Shutdown:
+			// Already closed
+		default:
+			close(s.Shutdown)
+		}
+	}
+}
+
 func (s *Server) Start() {
 	fmt.Println("Server starting...")
 	ticker := time.NewTicker(50 * time.Millisecond) // 20 TPS
+	defer ticker.Stop()
 
 	for {
 		select {
@@ -97,19 +114,23 @@ func (s *Server) Start() {
 
 func (s *Server) Save() {
 	fmt.Println("Server: Saving world state...")
+	// 0. Close listener if active
+	if s.Listener != nil {
+		s.Listener.Close()
+	}
 	// 1. Save Chunks
-	if err := SaveWorldChunks(s.World); err != nil {
+	if err := SaveWorldChunks(s.SavePath, s.World); err != nil {
 		fmt.Printf("Server Save Chunks Error: %v\n", err)
 	}
 	// 2. Save Entities
-	if err := SaveEntities(s.World); err != nil {
+	if err := SaveEntities(s.SavePath, s.World); err != nil {
 		fmt.Printf("Server Save Entities Error: %v\n", err)
 	}
 	// 3. Save Player (Authoritative local player if exists)
 	// In integrated server, we use the local client's position if possible
 	// For now, we rely on the last PacketPlayerMove update in s.InitialPos
 	// Actually we should capture the last known position of the local client
-	if err := SavePlayerState(float32(s.InitialPosX), float32(s.InitialPosY), float32(s.InitialPosZ), 0, make([]byte, 9), s.World.seed); err != nil {
+	if err := SavePlayerState(s.SavePath, float32(s.InitialPosX), float32(s.InitialPosY), float32(s.InitialPosZ), 0, make([]byte, 9), s.World.seed); err != nil {
 		fmt.Printf("Server Save Player Error: %v\n", err)
 	}
 	fmt.Println("Server: World saved successfully.")
@@ -117,6 +138,7 @@ func (s *Server) Save() {
 
 func (s *Server) Tick() {
 	s.World.ProcessGenResults()
+	s.processPendingChunks()
 	s.UpdateEntities()
 }
 
@@ -160,6 +182,7 @@ func (s *Server) StartTCP(addr string) error {
 	if err != nil {
 		return err
 	}
+	s.Listener = ln
 	fmt.Printf("Server listening on %s\n", addr)
 
 	go s.Start()
@@ -167,8 +190,15 @@ func (s *Server) StartTCP(addr string) error {
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
-			fmt.Printf("Accept error: %v\n", err)
-			continue
+			// Check if this is a shutdown
+			select {
+			case <-s.Shutdown:
+				// Silent exit on shutdown
+				return nil
+			default:
+				fmt.Printf("Accept error: %v\n", err)
+				continue
+			}
 		}
 		go s.handleNewConnection(conn)
 	}
@@ -198,7 +228,7 @@ func (s *Server) handleNewConnection(conn net.Conn) {
 	cc := &ClientConnection{
 		Name:        name,
 		Conn:        conn,
-		Send:        make(chan Packet, 256),
+		Send:        make(chan Packet, 4096), // Increased buffer for chunk bursts
 		KnownChunks: make(map[chunkKey]bool),
 	}
 	s.Clients[name] = cc
@@ -237,22 +267,22 @@ func (s *Server) Broadcast(p Packet) {
 	s.ClientsMu.RLock()
 	defer s.ClientsMu.RUnlock()
 	for _, c := range s.Clients {
+		// Non-blocking for global broadcast to prevent one laggy client from stalling server
 		select {
 		case c.Send <- p:
 		default:
+			// fmt.Println("Dropped broadcast packet to", c.Name)
 		}
 	}
 }
 
 func (s *Server) BroadcastTo(name string, p Packet) {
 	s.ClientsMu.RLock()
-	c, ok := s.Clients[name]
-	s.ClientsMu.RUnlock()
-	if ok {
-		select {
-		case c.Send <- p:
-		default:
-		}
+	defer s.ClientsMu.RUnlock()
+	if c, ok := s.Clients[name]; ok {
+		// Blocking send for critical per-user data (Chunks)
+		// With 4096 buffer, this should rarely block unless client is dead
+		c.Send <- p
 	}
 }
 
@@ -429,53 +459,79 @@ func (s *Server) SendChunksAround(username string, centerCX, centerCZ, radius in
 		return di < dj
 	})
 
-	go func() {
-		for i, key := range missing {
-			cx, cz := key.X, key.Z
-			// Trigger generation
-			s.World.requestChunk(cx, cz)
+	for _, key := range missing {
+		// Trigger generation priority
+		s.World.requestChunk(key.X, key.Z)
 
-			// Wait for generation
-			var chunk *Chunk
-			for {
-				chunk = s.World.getChunkIfGenerated(cx, cz)
-				if chunk != nil {
+		// Add to pending
+		if list, ok := s.PendingChunks[key]; ok {
+			// Check if already in list to avoid dups
+			found := false
+			for _, n := range list {
+				if n == username {
+					found = true
 					break
 				}
-				time.Sleep(5 * time.Millisecond) // Faster polling for priority chunks
 			}
+			if !found {
+				s.PendingChunks[key] = append(list, username)
+			}
+		} else {
+			s.PendingChunks[key] = []string{username}
+		}
+	}
+}
 
-			// Serialize (Read Lock)
-			data := make([]byte, chunkWidth*chunkHeight*chunkWidth)
-			light := make([]byte, chunkWidth*chunkHeight*chunkWidth)
+func (s *Server) processPendingChunks() {
+	if len(s.PendingChunks) == 0 {
+		return
+	}
 
-			chunk.mu.RLock()
-			idx := 0
-			for lx := 0; lx < chunkWidth; lx++ {
-				for y := 0; y < chunkHeight; y++ {
-					for lz := 0; lz < chunkWidth; lz++ {
-						data[idx] = chunk.blocks[lx][y][lz]
-						// Combine sky (high 4 bits) and block (low 4 bits)
-						light[idx] = (chunk.skyLight[lx][y][lz] << 4) | (chunk.blockLight[lx][y][lz] & 0x0F)
-						idx++
-					}
+	// Iterate keys (random order is fine-ish, generation order matters more)
+	// We could optimize to process only N per tick if needed
+
+	toRemove := []chunkKey{}
+
+	for key, users := range s.PendingChunks {
+		chunk := s.World.getChunkIfGenerated(key.X, key.Z)
+		if chunk == nil {
+			continue
+		}
+
+		// Chunk is ready! Serialize it.
+		data := make([]byte, chunkWidth*chunkHeight*chunkWidth)
+		light := make([]byte, chunkWidth*chunkHeight*chunkWidth)
+
+		chunk.mu.RLock()
+		idx := 0
+		for lx := 0; lx < chunkWidth; lx++ {
+			for y := 0; y < chunkHeight; y++ {
+				for lz := 0; lz < chunkWidth; lz++ {
+					data[idx] = chunk.blocks[lx][y][lz]
+					// Combine sky (high 4 bits) and block (low 4 bits)
+					light[idx] = (chunk.skyLight[lx][y][lz] << 4) | (chunk.blockLight[lx][y][lz] & 0x0F)
+					idx++
 				}
 			}
-			chunk.mu.RUnlock()
-
-			p := &PacketChunkData{
-				CX:        int32(cx),
-				CZ:        int32(cz),
-				Data:      data,
-				LightData: light,
-			}
-			s.BroadcastTo(username, p)
-
-			// Burst Mode: First 64 chunks (radius ~4) send with zero delay to fill proximity FAST.
-			// Then switch to small delay to prevent client network/CPU spikes.
-			if i > 64 {
-				time.Sleep(10 * time.Millisecond)
-			}
 		}
-	}()
+		chunk.mu.RUnlock()
+
+		p := &PacketChunkData{
+			CX:        int32(key.X),
+			CZ:        int32(key.Z),
+			Data:      data,
+			LightData: light,
+		}
+
+		// Send to all waiting users
+		for _, user := range users {
+			s.BroadcastTo(user, p)
+		}
+
+		toRemove = append(toRemove, key)
+	}
+
+	for _, key := range toRemove {
+		delete(s.PendingChunks, key)
+	}
 }

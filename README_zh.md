@@ -1,5 +1,7 @@
 # GoCraft
 
+![GoCraft Logo](assets/logo.png)
+
 [English](README.md) | [中文](README_zh.md)
 
 **GoCraft** 是一个使用 Go 语言编写的高性能体素游戏引擎，基于 [raylib-go](https://github.com/gen2brain/raylib-go) 渲染。它具有程序化地形生成、高效的区块管理和多人联机支持。

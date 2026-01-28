@@ -1,5 +1,7 @@
 # GoCraft
 
+![GoCraft Logo](assets/logo.png)
+
 [English](README.md) | [中文](README_zh.md)
 
 **GoCraft** is a high-performance voxel game engine written in Go, utilizing [raylib-go](https://github.com/gen2brain/raylib-go) for rendering. It features procedural terrain generation, efficient chunk management, and multiplayer support.

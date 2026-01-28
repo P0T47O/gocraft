@@ -39,7 +39,10 @@ func NewInputState() *InputState {
 		}
 	}
 	state.CurrentBlock = state.Hotbar[state.SelectedSlot]
-	state.Sensitivity = 0.0025
+
+	settings := LoadSettings()
+	state.Sensitivity = settings.Sensitivity
+
 	state.MoveSpeed = 30.0
 	return state
 }
@@ -225,12 +228,6 @@ func blockIndexFromCoord(v float32) int {
 func HandleInput(world *World, camera *rl.Camera3D, state *InputState, client *Client) hitInfo {
 	if rl.IsKeyPressed(rl.KeyF3) {
 		state.ShowDebug = !state.ShowDebug
-	}
-	if rl.IsKeyPressed(rl.KeyF5) {
-		_ = SaveGame(world, state, *camera)
-	}
-	if rl.IsKeyPressed(rl.KeyF9) {
-		_ = LoadGame(world, state, camera)
 	}
 	state.ToggleInventory()
 	if state.SkipCamera {

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"sync"
 )
 
@@ -88,6 +89,11 @@ func (w *World) StartMeshWorkers(assets *RenderAssets, workers int) {
 	}
 	for i := 0; i < workers; i++ {
 		go func() {
+			defer func() {
+				if r := recover(); r != nil {
+					fmt.Printf("MeshWorker Panic: %v\n", r)
+				}
+			}()
 			for job := range w.meshJobs {
 				snapshot := buildMeshSnapshotFromNeighbors(job)
 				results := assets.buildAllMeshData(&job.heightMap, job.baseX, job.baseZ, job.yMin, job.yMax, snapshot.blockAt, snapshot.lightAt, w.seed)

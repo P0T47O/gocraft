@@ -1,13 +1,12 @@
 # Binaries
 *.exe
-*.dll
 *.so
 *.dylib
 
 # Logs
 *.log
 
-# Assets (User-supplied)
+# Assets
 textures/
 !textures/.gitkeep
 

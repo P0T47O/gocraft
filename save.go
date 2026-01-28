@@ -3,20 +3,23 @@ package main
 import (
 	"bytes"
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
 	"os"
 	"path/filepath"
+	"time"
 
 	rl "github.com/gen2brain/raylib-go/raylib"
 	"github.com/klauspost/compress/zstd"
 )
 
 const (
-	saveDir     = "saves"
+	RootSaveDir = "saves"
 	chunkDir    = "chunks"
 	playerFile  = "player.bin"
+	levelFile   = "level.json"
 	chunkMagic  = "GCS1"
 	playerMagic = "GCP1"
 	saveVersion = 7
@@ -24,27 +27,66 @@ const (
 	entityMagic = "GCE1"
 )
 
+type LevelData struct {
+	Name       string `json:"name"`
+	Seed       int64  `json:"seed"`
+	LastPlayed int64  `json:"last_played"`
+	Version    int    `json:"version"`
+}
+
 const (
 	saveFlagPalette = 1 << iota
 	saveFlagRLE
 )
 
-func SaveGame(world *World, state *InputState, camera rl.Camera3D) error {
-	if err := SaveWorldChunks(world); err != nil {
+// ensureSaveDir creates the save directory if it doesn't exist
+func ensureSaveDir(savePath string) error {
+	return os.MkdirAll(savePath, 0o755)
+}
+
+func SaveGame(savePath string, world *World, state *InputState, camera rl.Camera3D) error {
+	if err := ensureSaveDir(savePath); err != nil {
 		return err
 	}
-	if err := SaveEntities(world); err != nil {
+
+	// Save Level Metadata
+	if err := SaveLevelData(savePath, world.seed); err != nil {
+		fmt.Printf("Error saving level data: %v\n", err)
+	}
+
+	if err := SaveWorldChunks(savePath, world); err != nil {
 		return err
 	}
-	if err := SavePlayerState(camera.Position.X, camera.Position.Y, camera.Position.Z, state.SelectedSlot, state.Hotbar[:], world.seed); err != nil {
+	if err := SaveEntities(savePath, world); err != nil {
+		return err
+	}
+	if err := SavePlayerState(savePath, camera.Position.X, camera.Position.Y, camera.Position.Z, state.SelectedSlot, state.Hotbar[:], world.seed); err != nil {
 		return err
 	}
 	return nil
 }
 
-func SaveEntities(world *World) error {
-	root := filepath.Join(saveDir)
-	if err := os.MkdirAll(root, 0o755); err != nil {
+func SaveLevelData(savePath string, seed uint32) error {
+	path := filepath.Join(savePath, levelFile)
+
+	// Try to read existing to keep created time or name if we had one
+	data := LevelData{
+		Name:       filepath.Base(savePath),
+		Seed:       int64(seed),
+		LastPlayed: time.Now().Unix(),
+		Version:    saveVersion,
+	}
+
+	// Perform the save
+	bytes, err := json.MarshalIndent(data, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, bytes, 0o644)
+}
+
+func SaveEntities(savePath string, world *World) error {
+	if err := ensureSaveDir(savePath); err != nil {
 		return err
 	}
 
@@ -69,13 +111,12 @@ func SaveEntities(world *World) error {
 		_ = binary.Write(&buf, binary.LittleEndian, pitch)
 	}
 
-	path := filepath.Join(root, entityFile)
+	path := filepath.Join(savePath, entityFile)
 	return os.WriteFile(path, buf.Bytes(), 0o644)
 }
 
-func SavePlayerState(x, y, z float32, selectedSlot int, hotbar []byte, seed uint32) error {
-	root := filepath.Join(saveDir)
-	if err := os.MkdirAll(root, 0o755); err != nil {
+func SavePlayerState(savePath string, x, y, z float32, selectedSlot int, hotbar []byte, seed uint32) error {
+	if err := ensureSaveDir(savePath); err != nil {
 		return err
 	}
 	var buf bytes.Buffer
@@ -89,13 +130,13 @@ func SavePlayerState(x, y, z float32, selectedSlot int, hotbar []byte, seed uint
 	writeFloat32(&buf, z)
 	writeUint32(&buf, seed)
 
-	path := filepath.Join(root, playerFile)
+	path := filepath.Join(savePath, playerFile)
 	return os.WriteFile(path, buf.Bytes(), 0o644)
 }
 
-func SaveWorldChunks(world *World) error {
-	root := filepath.Join(saveDir)
-	if err := os.MkdirAll(filepath.Join(root, chunkDir), 0o755); err != nil {
+func SaveWorldChunks(savePath string, world *World) error {
+	chunkPath := filepath.Join(savePath, chunkDir)
+	if err := os.MkdirAll(chunkPath, 0o755); err != nil {
 		return err
 	}
 	// Note: We don't ClearDirty here yet because we might want multiple clients to save.
@@ -104,7 +145,7 @@ func SaveWorldChunks(world *World) error {
 		if !chunk.dirty {
 			continue
 		}
-		if err := saveChunkFile(root, key.X, 0, key.Z, &chunk.blocks, &chunk.meta); err != nil {
+		if err := saveChunkFile(savePath, key.X, 0, key.Z, &chunk.blocks, &chunk.meta); err != nil {
 			return err
 		}
 		chunk.dirty = false
@@ -113,24 +154,23 @@ func SaveWorldChunks(world *World) error {
 	return nil
 }
 
-func SaveChunk(world *World, chunk *Chunk, chunkX, chunkZ int) error {
-	root := filepath.Join(saveDir)
-	if err := os.MkdirAll(filepath.Join(root, chunkDir), 0o755); err != nil {
+func SaveChunk(savePath string, chunk *Chunk, chunkX, chunkZ int) error {
+	chunkPath := filepath.Join(savePath, chunkDir)
+	if err := os.MkdirAll(chunkPath, 0o755); err != nil {
 		return err
 	}
-	if err := saveChunkFile(root, chunkX, 0, chunkZ, &chunk.blocks, &chunk.meta); err != nil {
+	if err := saveChunkFile(savePath, chunkX, 0, chunkZ, &chunk.blocks, &chunk.meta); err != nil {
 		return err
 	}
 	chunk.dirty = false
 	return nil
 }
 
-func LoadGame(world *World, state *InputState, camera *rl.Camera3D) error {
-	root := filepath.Join(saveDir)
-	if err := loadAllChunks(root, world); err != nil {
+func LoadGame(savePath string, world *World, state *InputState, camera *rl.Camera3D) error {
+	if err := loadAllChunks(savePath, world); err != nil {
 		return err
 	}
-	if err := loadPlayerFile(root, state, camera, world); err != nil {
+	if err := loadPlayerFile(savePath, state, camera, world); err != nil {
 		return err
 	}
 	state.Dragging = false
@@ -138,9 +178,8 @@ func LoadGame(world *World, state *InputState, camera *rl.Camera3D) error {
 	return nil
 }
 
-func LoadWorld(world *World) (bool, float64, float64, float64, error) {
-	root := filepath.Join(saveDir)
-	if _, err := os.Stat(filepath.Join(root, chunkDir)); err != nil {
+func LoadWorld(savePath string, world *World) (bool, float64, float64, float64, error) {
+	if _, err := os.Stat(filepath.Join(savePath, chunkDir)); err != nil {
 		return false, 0, 0, 0, nil // No save exists
 	}
 
@@ -148,7 +187,7 @@ func LoadWorld(world *World) (bool, float64, float64, float64, error) {
 	hasPos := false
 
 	// 1. Load Seed and Pos from player file (it's stored there for now)
-	playerPath := filepath.Join(root, playerFile)
+	playerPath := filepath.Join(savePath, playerFile)
 	if data, err := os.ReadFile(playerPath); err == nil && len(data) >= 4+1+1+1+12+4 {
 		// Version 7: [Magic:4][Ver:1][Selected:1][HotbarLen:1][Hotbar:9][PosX:4][PosY:4][PosZ:4][Seed:4]
 		hotbarLen := int(data[6])
@@ -165,18 +204,17 @@ func LoadWorld(world *World) (bool, float64, float64, float64, error) {
 	}
 
 	// 2. Load Chunks
-	if err := loadAllChunks(root, world); err != nil {
+	if err := loadAllChunks(savePath, world); err != nil {
 		return false, 0, 0, 0, err
 	}
 	// 3. Load Entities
-	_, _ = LoadEntities(world)
+	_, _ = LoadEntities(savePath, world)
 
 	return hasPos, posX, posY, posZ, nil
 }
 
-func LoadEntities(world *World) (bool, error) {
-	root := filepath.Join(saveDir)
-	path := filepath.Join(root, entityFile)
+func LoadEntities(savePath string, world *World) (bool, error) {
+	path := filepath.Join(savePath, entityFile)
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return false, err
@@ -244,12 +282,11 @@ func ReadUint32(r *bytes.Buffer) (uint32, error) {
 	return v, err
 }
 
-func LoadGameIfExists(world *World, state *InputState, camera *rl.Camera3D) (bool, bool, error) {
-	root := filepath.Join(saveDir)
-	playerPath := filepath.Join(root, playerFile)
+func LoadGameIfExists(savePath string, world *World, state *InputState, camera *rl.Camera3D) (bool, bool, error) {
+	playerPath := filepath.Join(savePath, playerFile)
 	chunkExists := false
-	if _, err := os.Stat(filepath.Join(root, chunkDir)); err == nil {
-		chunkFiles, _ := filepath.Glob(filepath.Join(root, chunkDir, "*.bin"))
+	if _, err := os.Stat(filepath.Join(savePath, chunkDir)); err == nil {
+		chunkFiles, _ := filepath.Glob(filepath.Join(savePath, chunkDir, "*.bin"))
 		chunkExists = len(chunkFiles) > 0
 	}
 	playerExists := true
@@ -264,12 +301,12 @@ func LoadGameIfExists(world *World, state *InputState, camera *rl.Camera3D) (boo
 		return false, false, nil
 	}
 	if chunkExists {
-		if err := loadAllChunks(root, world); err != nil {
+		if err := loadAllChunks(savePath, world); err != nil {
 			return false, false, err
 		}
 	}
 	if playerExists {
-		if err := loadPlayerFile(root, state, camera, world); err != nil {
+		if err := loadPlayerFile(savePath, state, camera, world); err != nil {
 			return false, false, err
 		}
 		state.Dragging = false
