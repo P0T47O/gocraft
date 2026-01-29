@@ -52,9 +52,9 @@ func (ui *UIComponents) DrawButton(rect rl.Rectangle, text string, active bool) 
 	return active && clicked
 }
 
-func (ui *UIComponents) DrawTextField(rect rl.Rectangle, text *string, id string, maxLength int) {
+func (ui *UIComponents) DrawTextField(rect rl.Rectangle, text *string, id string, maxLength int, blocked bool) {
 	hover := rl.CheckCollisionPointRec(rl.GetMousePosition(), rect)
-	if hover && rl.IsMouseButtonPressed(rl.MouseLeftButton) {
+	if !blocked && hover && rl.IsMouseButtonPressed(rl.MouseLeftButton) {
 		ui.ActiveID = id
 	} else if rl.IsMouseButtonPressed(rl.MouseLeftButton) && !hover {
 		if ui.ActiveID == id {
@@ -73,16 +73,30 @@ func (ui *UIComponents) DrawTextField(rect rl.Rectangle, text *string, id string
 
 	// Simple Input Handling
 	if active {
-		key := rl.GetKeyPressed()
-		for key != 0 {
-			if key == int32(rl.KeyBackspace) {
-				if len(*text) > 0 {
-					*text = (*text)[:len(*text)-1]
-				}
-			} else if key >= 32 && key <= 126 && len(*text) < maxLength {
-				*text += string(rune(key))
+		// Handle Character Input
+		char := rl.GetCharPressed()
+		for char != 0 {
+			if char >= 32 && len(*text) < maxLength {
+				*text += string(char)
 			}
-			key = rl.GetKeyPressed()
+			char = rl.GetCharPressed()
+		}
+
+		// Handle Special Keys
+		if rl.IsKeyPressed(rl.KeyBackspace) {
+			if len(*text) > 0 {
+				// Handle UTF-8 backspace properly-ish (assuming simple runes for now)
+				runes := []rune(*text)
+				if len(runes) > 0 {
+					*text = string(runes[:len(runes)-1])
+				}
+			}
+		}
+		// Repeat Backspace if held
+		if rl.IsKeyDown(rl.KeyBackspace) {
+			// Simple counter-based repeat could go here, but for now single press is safer/simpler
+			// forcing repeated tapping or holding logic requires state.
+			// Let's stick to IsKeyPressed for single delete to avoid accidental wipe.
 		}
 	}
 

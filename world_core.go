@@ -32,6 +32,7 @@ type EntityType int
 const (
 	EntityPlayer EntityType = iota
 	EntityPig
+	EntityItem
 )
 
 type Entity interface {
@@ -98,6 +99,94 @@ func (p *PigEntity) Tick(world *World) {
 		p.Y = h
 	}
 	p.Dirty = true
+}
+
+type ItemEntity struct {
+	BaseEntity
+	ItemID      byte
+	Count       int
+	Vx, Vy, Vz  float64
+	PickupDelay float32 // Seconds
+	Age         float32 // Seconds
+	Dead        bool    // Marked for removal after merge
+}
+
+const MaxStackSize = 64
+
+func (i *ItemEntity) Tick(world *World) {
+	if i.Dead {
+		return
+	}
+
+	// Gravity
+	i.Vy -= 0.04
+	// Terminal velocity
+	if i.Vy < -1.0 {
+		i.Vy = -1.0
+	}
+
+	// Move
+	i.X += i.Vx
+	i.Y += i.Vy
+	i.Z += i.Vz
+
+	// Friction
+	i.Vx *= 0.91
+	i.Vz *= 0.91
+
+	// Ground Collision (Simple)
+	bx, bz := int(math.Floor(i.X)), int(math.Floor(i.Z))
+	groundHeight := float64(world.HeightAt(bx, bz))
+
+	if i.Y < groundHeight+0.2 { // 0.2 is item radius approx
+		i.Y = groundHeight + 0.2
+		i.Vy = 0
+		i.Vx *= 0.6 // Ground friction
+		i.Vz *= 0.6
+	}
+
+	// Age & Pickup Delay
+	i.PickupDelay -= 0.05 // Assuming 20 TPS
+	i.Age += 0.05
+
+	// Auto-despawn after 5 minutes (300 seconds)
+	if i.Age >= 300.0 {
+		i.Dead = true
+		return
+	}
+
+	// Merge with nearby items (only when on ground and after pickup delay)
+	if i.PickupDelay <= 0 && i.Vy == 0 && i.Count < MaxStackSize {
+		for _, e := range world.entities {
+			other, ok := e.(*ItemEntity)
+			if !ok || other == i || other.Dead {
+				continue
+			}
+			if other.ItemID != i.ItemID {
+				continue
+			}
+			// Distance check (radius 1 block)
+			dx := other.X - i.X
+			dz := other.Z - i.Z
+			dy := other.Y - i.Y
+			distSq := dx*dx + dy*dy + dz*dz
+			if distSq < 1.0 { // Within 1 block
+				// Merge
+				space := MaxStackSize - i.Count
+				if other.Count <= space {
+					i.Count += other.Count
+					other.Dead = true
+				} else {
+					i.Count = MaxStackSize
+					other.Count -= space
+				}
+				i.Dirty = true
+				break // Only merge one per tick
+			}
+		}
+	}
+
+	i.Dirty = true
 }
 
 type PlayerEntity struct {

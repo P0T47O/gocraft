@@ -9,12 +9,14 @@ import (
 
 // Client represents the diverse state needed to communicate with the server.
 type Client struct {
-	Conn      net.Conn
-	Name      string
-	Incoming  chan Packet // Channel to receive packets from server
-	LastSentX float64
-	LastSentY float64
-	LastSentZ float64
+	Conn          net.Conn
+	Name          string
+	Incoming      chan Packet // Channel to receive packets from server
+	LastSentX     float64
+	LastSentY     float64
+	LastSentZ     float64
+	LastSentYaw   float32
+	LastSentPitch float32
 }
 
 func ConnectTCP(addr string, name string) (*Client, error) {
@@ -58,20 +60,29 @@ func (c *Client) Send(p Packet) {
 	}
 }
 
-func (c *Client) Update(camera *rl.Camera3D) {
-	// Send position only if it changed significantly (e.g. 0.1 blocks)
+func (c *Client) Update(camera *rl.Camera3D, input *InputState) {
+	// Send position/rotation if either position or rotation changed
 	distSq := (float64(camera.Position.X)-c.LastSentX)*(float64(camera.Position.X)-c.LastSentX) +
 		(float64(camera.Position.Y)-c.LastSentY)*(float64(camera.Position.Y)-c.LastSentY) +
 		(float64(camera.Position.Z)-c.LastSentZ)*(float64(camera.Position.Z)-c.LastSentZ)
 
-	if distSq > 0.01 {
+	// Also check rotation change
+	yawDiff := input.Yaw - c.LastSentYaw
+	pitchDiff := input.Pitch - c.LastSentPitch
+	rotChanged := (yawDiff*yawDiff + pitchDiff*pitchDiff) > 0.01
+
+	if distSq > 0.01 || rotChanged {
 		c.Send(&PacketPlayerMove{
-			X: float64(camera.Position.X),
-			Y: float64(camera.Position.Y),
-			Z: float64(camera.Position.Z),
+			X:     float64(camera.Position.X),
+			Y:     float64(camera.Position.Y),
+			Z:     float64(camera.Position.Z),
+			Yaw:   input.Yaw,
+			Pitch: input.Pitch,
 		})
 		c.LastSentX = float64(camera.Position.X)
 		c.LastSentY = float64(camera.Position.Y)
 		c.LastSentZ = float64(camera.Position.Z)
+		c.LastSentYaw = input.Yaw
+		c.LastSentPitch = input.Pitch
 	}
 }

@@ -13,6 +13,7 @@ type GameSettings struct {
 	Sensitivity      float32
 	ResolutionWidth  int
 	ResolutionHeight int
+	PlayerName       string
 }
 
 var currentSettings *GameSettings
@@ -21,11 +22,16 @@ const settingsFile = "settings.json"
 
 // LoadSettings attempts to load settings.json, or returns defaults
 func LoadSettings() *GameSettings {
+	if currentSettings != nil {
+		return currentSettings
+	}
+
 	// Defaults
 	settings := &GameSettings{
 		Sensitivity:      0.005,
 		ResolutionWidth:  1280,
 		ResolutionHeight: 720,
+		PlayerName:       "Player",
 	}
 
 	data, err := os.ReadFile(settingsFile)

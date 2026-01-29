@@ -18,6 +18,8 @@ const (
 	IDEntitySpawn   = 0x0C
 	IDEntityDespawn = 0x0D
 	IDEntityMove    = 0x08
+	IDPlayerAction  = 0x0E
+	IDEntityMeta    = 0x0F
 )
 
 type Packet interface {
@@ -85,6 +87,10 @@ func ReadPacket(conn io.Reader) (Packet, error) {
 		p = &PacketEntityDespawn{}
 	case IDEntityMove:
 		p = &PacketEntityMove{}
+	case IDPlayerAction:
+		p = &PacketPlayerAction{}
+	case IDEntityMeta:
+		p = &PacketEntityMeta{}
 	default:
 		return nil, fmt.Errorf("unknown packet ID: %d", id)
 	}
@@ -245,6 +251,7 @@ type PacketEntitySpawn struct {
 	Type       EntityType
 	X, Y, Z    float64
 	Yaw, Pitch float32
+	Metadata   int32
 }
 
 func (p *PacketEntitySpawn) ID() int32 { return IDEntitySpawn }
@@ -255,7 +262,8 @@ func (p *PacketEntitySpawn) Encode(w *bytes.Buffer) error {
 	binary.Write(w, binary.BigEndian, p.Y)
 	binary.Write(w, binary.BigEndian, p.Z)
 	binary.Write(w, binary.BigEndian, p.Yaw)
-	return binary.Write(w, binary.BigEndian, p.Pitch)
+	binary.Write(w, binary.BigEndian, p.Pitch)
+	return binary.Write(w, binary.BigEndian, p.Metadata)
 }
 func (p *PacketEntitySpawn) Decode(r *bytes.Buffer) error {
 	var err error
@@ -269,7 +277,8 @@ func (p *PacketEntitySpawn) Decode(r *bytes.Buffer) error {
 	binary.Read(r, binary.BigEndian, &p.Y)
 	binary.Read(r, binary.BigEndian, &p.Z)
 	binary.Read(r, binary.BigEndian, &p.Yaw)
-	return binary.Read(r, binary.BigEndian, &p.Pitch)
+	binary.Read(r, binary.BigEndian, &p.Pitch)
+	return binary.Read(r, binary.BigEndian, &p.Metadata)
 }
 
 type PacketEntityDespawn struct {
@@ -284,6 +293,25 @@ func (p *PacketEntityDespawn) Decode(r *bytes.Buffer) error {
 	var err error
 	p.EntityID, err = ReadString(r)
 	return err
+}
+
+type PacketEntityMeta struct {
+	EntityID string
+	Metadata int32
+}
+
+func (p *PacketEntityMeta) ID() int32 { return IDEntityMeta }
+func (p *PacketEntityMeta) Encode(w *bytes.Buffer) error {
+	WriteString(w, p.EntityID)
+	return binary.Write(w, binary.BigEndian, p.Metadata)
+}
+func (p *PacketEntityMeta) Decode(r *bytes.Buffer) error {
+	var err error
+	p.EntityID, err = ReadString(r)
+	if err != nil {
+		return err
+	}
+	return binary.Read(r, binary.BigEndian, &p.Metadata)
 }
 
 type PacketEntityMove struct {
@@ -383,4 +411,24 @@ func ReadVarIntFromReader(r io.Reader) (int32, error) {
 		}
 	}
 	return int32(val), nil
+}
+
+type PacketPlayerAction struct {
+	ActionType int32 // 0: DropOne, 1: DropStack
+	Value      int32 // Reserved
+}
+
+func (p *PacketPlayerAction) ID() int32 { return IDPlayerAction }
+func (p *PacketPlayerAction) Encode(w *bytes.Buffer) error {
+	WriteVarInt(w, p.ActionType)
+	return WriteVarInt(w, p.Value)
+}
+func (p *PacketPlayerAction) Decode(r *bytes.Buffer) error {
+	var err error
+	p.ActionType, err = ReadVarInt(r)
+	if err != nil {
+		return err
+	}
+	p.Value, err = ReadVarInt(r)
+	return err
 }

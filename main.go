@@ -65,8 +65,9 @@ type RemoteEntity struct {
 	ID         string
 	Type       EntityType
 	X, Y, Z    float64 // Visual position (Lerped)
-	TX, TY, TZ float64 // Target position (Network)
+	TX, TY, TZ float64 // Target position
 	Yaw, Pitch float32
+	Metadata   int32
 }
 
 func main() {
@@ -98,8 +99,18 @@ func main() {
 	perfMon = NewPerformanceMonitor()
 	defer perfMon.Close()
 
-	if *username == "" {
-		*username = "Player" + fmt.Sprint(time.Now().Unix()%1000)
+	if *username == "" || (*username)[:6] == "Player" { // Heuristic: If default or generic, use settings
+		if settings.PlayerName != "" {
+			*username = settings.PlayerName
+		} else {
+			// If settings is empty, set it to the random one and save
+			// Actually, settings default is "Player" now.
+			if settings.PlayerName == "Player" {
+				// Keep the random suffix if it's just "Player" to avoid collisions?
+				// Or just let user change it.
+			}
+			*username = settings.PlayerName
+		}
 	}
 
 	for !rl.WindowShouldClose() {
@@ -236,10 +247,10 @@ func drawMenu() {
 
 	case MenuCreateWorld:
 		ui.DrawLabel(centerX, h*0.3, "World Name", 20, rl.White)
-		ui.DrawTextField(rl.NewRectangle(centerX, h*0.35, btnWidth, 40), &newWorldName, "world_name", 20)
+		ui.DrawTextField(rl.NewRectangle(centerX, h*0.35, btnWidth, 40), &newWorldName, "world_name", 20, false)
 
 		ui.DrawLabel(centerX, h*0.45, "Seed (Number)", 20, rl.White)
-		ui.DrawTextField(rl.NewRectangle(centerX, h*0.5, btnWidth, 40), &newWorldSeed, "world_seed", 10)
+		ui.DrawTextField(rl.NewRectangle(centerX, h*0.5, btnWidth, 40), &newWorldSeed, "world_seed", 10, false)
 
 		if ui.DrawButton(rl.NewRectangle(centerX, h*0.7, btnWidth, btnHeight), "Create & Play", len(newWorldName) > 0) {
 			var seed int64 = 12345
@@ -257,7 +268,7 @@ func drawMenu() {
 
 	case MenuMultiplayer:
 		ui.DrawLabel(centerX, h*0.3, "Server IP", 20, rl.White)
-		ui.DrawTextField(rl.NewRectangle(centerX, h*0.35, btnWidth, 40), &ipInput, "server_ip", 30)
+		ui.DrawTextField(rl.NewRectangle(centerX, h*0.35, btnWidth, 40), &ipInput, "server_ip", 30, false)
 
 		if ui.DrawButton(rl.NewRectangle(centerX, h*0.5, btnWidth, btnHeight), "Connect", true) {
 			startGame("", ipInput, true)
@@ -311,12 +322,17 @@ func drawMenu() {
 		// Resolution + Options will be ON TOP of Sensitivity.
 		// Perfect.
 
+		// Player Name
+		dropdownOpen := ui.ActiveID == "res_dropdown"
+		ui.DrawLabel(centerX, h*0.35, "Player Name", 20, rl.White)
+		ui.DrawTextField(rl.NewRectangle(centerX, h*0.4, btnWidth, 30), &settings.PlayerName, "player_name", 16, dropdownOpen)
+
 		// Sensitivity (Draw First to be partially occluded by dropdown if needed)
 		ui.DrawLabel(centerX, h*0.45, fmt.Sprintf("Sensitivity: %.4f", settings.Sensitivity), 20, rl.White)
 		ui.DrawSlider(rl.NewRectangle(centerX, h*0.5, btnWidth, 20), &settings.Sensitivity, 0.001, 0.02, "sens_slider")
 
-		// Auto-save sensitivity on change
-		if rl.IsMouseButtonReleased(rl.MouseLeftButton) {
+		// Auto-save settings on change
+		if rl.IsMouseButtonReleased(rl.MouseLeftButton) || rl.IsKeyPressed(rl.KeyEnter) {
 			SaveSettings()
 		}
 
@@ -463,7 +479,7 @@ Loop:
 	HandleInput(world, &camera, input, client)
 	world.ProcessImmediateMeshes(assets, 16)
 
-	client.Update(&camera)
+	client.Update(&camera, input)
 
 	updateEntities(dt)
 	updateInterpolation(dt)
@@ -513,10 +529,12 @@ func handlePacket(pkt Packet) {
 
 	case *PacketEntitySpawn:
 		remoteEntities[p.EntityID] = &RemoteEntity{
-			ID: p.EntityID,
-			X:  p.X, Y: p.Y, Z: p.Z,
+			ID:   p.EntityID,
+			Type: p.Type, // THIS WAS MISSING!
+			X:    p.X, Y: p.Y, Z: p.Z,
 			TX: p.X, TY: p.Y, TZ: p.Z,
 			Yaw: p.Yaw, Pitch: p.Pitch,
+			Metadata: p.Metadata,
 		}
 	case *PacketEntityDespawn:
 		delete(remoteEntities, p.EntityID)
@@ -524,6 +542,10 @@ func handlePacket(pkt Packet) {
 		if e, ok := remoteEntities[p.EntityID]; ok {
 			e.TX, e.TY, e.TZ = p.X, p.Y, p.Z
 			e.Yaw, e.Pitch = p.Yaw, p.Pitch
+		}
+	case *PacketEntityMeta:
+		if e, ok := remoteEntities[p.EntityID]; ok {
+			e.Metadata = p.Metadata
 		}
 	}
 }
@@ -568,6 +590,8 @@ func drawGame() {
 		}
 		if e.Type == EntityPlayer {
 			drawCharacterModel(rl.NewVector3(float32(e.X), float32(e.Y), float32(e.Z)), e.Yaw)
+		} else if e.Type == EntityItem {
+			assets.DrawItem(e)
 		} else {
 			pos := rl.NewVector3(float32(e.X), float32(e.Y)+0.5, float32(e.Z))
 			rl.DrawCube(pos, 0.8, 0.8, 0.8, rl.Pink)

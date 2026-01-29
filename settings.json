@@ -1,5 +1,6 @@
 {
   "Sensitivity": 0.005,
-  "ResolutionWidth": 2560,
-  "ResolutionHeight": 1440
+  "ResolutionWidth": 1920,
+  "ResolutionHeight": 1080,
+  "PlayerName": "TUDOU"
 }

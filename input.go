@@ -237,12 +237,25 @@ func HandleInput(world *World, camera *rl.Camera3D, state *InputState, client *C
 	if state.InventoryOpen {
 		state.UpdateSelection(false)
 		state.UpdateInventoryPage()
-		state.UpdateInventorySelection()
+		state.UpdateInventorySelection(client)
 		return hitInfo{}
 	}
 
 	state.UpdateCamera(world, camera)
 	state.UpdateSelection(true)
+
+	if rl.IsKeyPressed(rl.KeyQ) {
+		item := state.Hotbar[state.SelectedSlot]
+		if item != blockAir && client != nil {
+			// Send Drop Packet
+			// Value = (Count=1 << 8) | ItemID
+			val := int32(1<<8) | int32(item)
+			client.Send(&PacketPlayerAction{
+				ActionType: 0,
+				Value:      val,
+			})
+		}
+	}
 
 	ray := state.RayFromCenter(*camera)
 	hit := world.HitTest(ray)
@@ -295,7 +308,7 @@ func (s *InputState) UpdateInventoryPage() {
 	}
 }
 
-func (s *InputState) UpdateInventorySelection() {
+func (s *InputState) UpdateInventorySelection(client *Client) {
 	if !rl.IsMouseButtonPressed(rl.MouseLeftButton) {
 		return
 	}
@@ -324,6 +337,21 @@ func (s *InputState) UpdateInventorySelection() {
 				s.Dragging = false
 				return
 			}
+		}
+
+		// Check if click is outside inventory window (Drop item)
+		scale := inventoryScale()
+		winW := float32(176) * scale
+		winH := float32(196) * scale
+		// OriginX/Y from layout
+		if !rl.CheckCollisionPointRec(mouse, rl.NewRectangle(layout.OriginX, layout.OriginY, winW, winH)) {
+			// Dropped outside
+			if client != nil {
+				val := int32(1<<8) | int32(s.DragBlock)
+				client.Send(&PacketPlayerAction{0, val}) // Action 0 (Drop)
+			}
+			s.Dragging = false
+			s.DragBlock = 0
 		}
 		return
 	}

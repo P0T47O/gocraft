@@ -9,22 +9,23 @@ import (
 )
 
 type RenderAssets struct {
-	textures     map[string]rl.Texture2D
-	faceMeshes   map[string]faceMesh
-	faceModels   map[string]rl.Model
-	iconRenders  map[byte]rl.RenderTexture2D
-	iconOffsets  map[byte]rl.Vector2
-	animated     map[string]*AnimatedTexture
-	materials    map[string]rl.Material
-	hotbarTex    rl.Texture2D
-	hotbarSel    rl.Texture2D
-	slotTex      rl.Texture2D
-	slotSelect   rl.Texture2D
-	inventoryTex rl.Texture2D
-	iconCamera   rl.Camera3D
-	cutoutShader rl.Shader
-	fogShader    rl.Shader
-	atlas        *TextureAtlas
+	textures        map[string]rl.Texture2D
+	faceMeshes      map[string]faceMesh
+	faceModels      map[string]rl.Model
+	iconRenders     map[byte]rl.RenderTexture2D
+	iconOffsets     map[byte]rl.Vector2
+	animated        map[string]*AnimatedTexture
+	materials       map[string]rl.Material
+	crossItemModels map[byte]rl.Model // Pre-generated extruded meshes for cross-type items
+	hotbarTex       rl.Texture2D
+	hotbarSel       rl.Texture2D
+	slotTex         rl.Texture2D
+	slotSelect      rl.Texture2D
+	inventoryTex    rl.Texture2D
+	iconCamera      rl.Camera3D
+	cutoutShader    rl.Shader
+	fogShader       rl.Shader
+	atlas           *TextureAtlas
 }
 
 type AnimatedTexture struct {
@@ -41,13 +42,14 @@ type TextureAtlas struct {
 
 func loadRenderAssets() *RenderAssets {
 	assets := &RenderAssets{
-		textures:    map[string]rl.Texture2D{},
-		faceMeshes:  map[string]faceMesh{},
-		faceModels:  map[string]rl.Model{},
-		iconRenders: map[byte]rl.RenderTexture2D{},
-		iconOffsets: map[byte]rl.Vector2{},
-		animated:    map[string]*AnimatedTexture{},
-		materials:   map[string]rl.Material{},
+		textures:        map[string]rl.Texture2D{},
+		faceMeshes:      map[string]faceMesh{},
+		faceModels:      map[string]rl.Model{},
+		iconRenders:     map[byte]rl.RenderTexture2D{},
+		iconOffsets:     map[byte]rl.Vector2{},
+		animated:        map[string]*AnimatedTexture{},
+		materials:       map[string]rl.Material{},
+		crossItemModels: map[byte]rl.Model{},
 		iconCamera: rl.Camera3D{
 			Position:   rl.NewVector3(2.3, 2.3, 2.3),
 			Target:     rl.NewVector3(0, 0, 0),
@@ -85,6 +87,7 @@ func loadRenderAssets() *RenderAssets {
 	assets.initFaceMeshes()
 	assets.initFaceModels()
 	assets.initIcons()
+	assets.initCrossItemModels()
 
 	return assets
 }

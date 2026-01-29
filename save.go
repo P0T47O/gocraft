@@ -109,6 +109,13 @@ func SaveEntities(savePath string, world *World) error {
 		_ = binary.Write(&buf, binary.LittleEndian, z)
 		_ = binary.Write(&buf, binary.LittleEndian, yaw)
 		_ = binary.Write(&buf, binary.LittleEndian, pitch)
+
+		// Save ItemEntity-specific data
+		if item, ok := e.(*ItemEntity); ok {
+			buf.WriteByte(item.ItemID)
+			_ = binary.Write(&buf, binary.LittleEndian, int32(item.Count))
+			_ = binary.Write(&buf, binary.LittleEndian, item.Age)
+		}
 	}
 
 	path := filepath.Join(savePath, entityFile)
@@ -262,6 +269,23 @@ func LoadEntities(savePath string, world *World) (bool, error) {
 					X: x, Y: y, Z: z,
 					Yaw: yaw, Pitch: pitch,
 				},
+			}
+		case EntityItem:
+			// Read ItemEntity-specific data
+			itemID, _ := buf.ReadByte()
+			var count int32
+			var age float32
+			_ = binary.Read(buf, binary.LittleEndian, &count)
+			_ = binary.Read(buf, binary.LittleEndian, &age)
+			e = &ItemEntity{
+				BaseEntity: BaseEntity{
+					UUID: uuid, Type: EntityType(etype),
+					X: x, Y: y, Z: z,
+					Yaw: yaw, Pitch: pitch,
+				},
+				ItemID: itemID,
+				Count:  int(count),
+				Age:    age,
 			}
 		default:
 			e = &BaseEntity{

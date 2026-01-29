@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"math"
+	"math/rand"
 	"net"
 	"sort"
 	"sync"
@@ -20,6 +21,7 @@ type Server struct {
 	InitialPosX, InitialPosY, InitialPosZ float64
 	HasSavedPos                           bool
 	LastSentPos                           map[string][3]float64
+	LastSentMeta                          map[string]int32
 	SavePath                              string
 	PendingChunks                         map[chunkKey][]string
 	Listener                              net.Listener
@@ -62,6 +64,7 @@ func NewServer(savePath string) *Server {
 		InitialPosZ:   pz,
 		HasSavedPos:   hasPos,
 		LastSentPos:   make(map[string][3]float64),
+		LastSentMeta:  make(map[string]int32),
 		SavePath:      savePath,
 		PendingChunks: make(map[chunkKey][]string),
 	}
@@ -145,6 +148,26 @@ func (s *Server) Tick() {
 func (s *Server) UpdateEntities() {
 	s.World.TickEntities()
 
+	// Remove dead entities
+	s.World.entitiesMu.Lock()
+	var toRemove []string
+	for _, e := range s.World.entities {
+		if item, ok := e.(*ItemEntity); ok && item.Dead {
+			toRemove = append(toRemove, e.GetUUID())
+		}
+	}
+	for _, uuid := range toRemove {
+		for i, e := range s.World.entities {
+			if e.GetUUID() == uuid {
+				s.World.entities = append(s.World.entities[:i], s.World.entities[i+1:]...)
+				break
+			}
+		}
+		s.Broadcast(&PacketEntityDespawn{EntityID: uuid})
+		delete(s.LastSentPos, uuid)
+	}
+	s.World.entitiesMu.Unlock()
+
 	s.World.entitiesMu.RLock()
 	defer s.World.entitiesMu.RUnlock()
 
@@ -172,6 +195,20 @@ func (s *Server) UpdateEntities() {
 				s.Broadcast(move)
 				s.LastSentPos[e.GetUUID()] = [3]float64{x, y, z}
 			}
+
+			// Update metadata for items (count changed)
+			if item, ok := e.(*ItemEntity); ok {
+				meta := int32(item.ItemID) | (int32(item.Count) << 8)
+				lastMeta, hasLast := s.LastSentMeta[e.GetUUID()]
+				if !hasLast || lastMeta != meta {
+					s.Broadcast(&PacketEntityMeta{
+						EntityID: e.GetUUID(),
+						Metadata: meta,
+					})
+					s.LastSentMeta[e.GetUUID()] = meta
+				}
+			}
+
 			e.ClearDirty()
 		}
 	}
@@ -293,6 +330,12 @@ func (s *Server) SpawnEntity(e Entity) {
 
 	x, y, z := e.GetPosition()
 	yaw, pitch := e.GetRotation()
+
+	meta := int32(0)
+	if item, ok := e.(*ItemEntity); ok {
+		meta = int32(item.ItemID) | (int32(item.Count) << 8)
+	}
+
 	s.Broadcast(&PacketEntitySpawn{
 		EntityID: e.GetUUID(),
 		Type:     e.GetType(),
@@ -301,6 +344,7 @@ func (s *Server) SpawnEntity(e Entity) {
 		Z:        z,
 		Yaw:      yaw,
 		Pitch:    pitch,
+		Metadata: meta,
 	})
 }
 
@@ -353,6 +397,12 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 			} // Skip self if represented as entity
 			ex, ey, ez := e.GetPosition()
 			eyaw, epitch := e.GetRotation()
+
+			meta := int32(0)
+			if item, ok := e.(*ItemEntity); ok {
+				meta = int32(item.ItemID) | (int32(item.Count) << 8)
+			}
+
 			s.Clients[p.Username].Send <- &PacketEntitySpawn{
 				EntityID: e.GetUUID(),
 				Type:     e.GetType(),
@@ -361,18 +411,34 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 				Z:        ez,
 				Yaw:      eyaw,
 				Pitch:    epitch,
+				Metadata: meta,
 			}
 		}
 		s.World.entitiesMu.RUnlock()
 
 		// 4. Register new player as entity and broadcast to others
-		playerEnt := &PlayerEntity{
-			BaseEntity: BaseEntity{
-				UUID: p.Username, Type: EntityPlayer,
-				X: spawnX, Y: spawnY, Z: spawnZ,
-			},
+		// Check if entity already exists (rejoining)
+		var exists bool
+		s.World.entitiesMu.RLock()
+		for _, e := range s.World.entities {
+			if e.GetUUID() == p.Username {
+				exists = true
+				break
+			}
 		}
-		s.SpawnEntity(playerEnt)
+		s.World.entitiesMu.RUnlock()
+
+		if !exists {
+			playerEnt := &PlayerEntity{
+				BaseEntity: BaseEntity{
+					UUID: p.Username, Type: EntityPlayer,
+					X: spawnX, Y: spawnY, Z: spawnZ,
+				},
+			}
+			s.SpawnEntity(playerEnt)
+		} else {
+			fmt.Printf("Player %s rejoining existing entity\n", p.Username)
+		}
 
 	case *PacketPlayerMove:
 		// Update player position in ServerWorld for saving
@@ -424,6 +490,68 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 			key := chunkKey{X: int(p.CX), Z: int(p.CZ)}
 			delete(client.KnownChunks, key)
 		}
+
+	case *PacketPlayerAction:
+		// 1. Find player pos/rot
+		s.World.entitiesMu.RLock()
+		var px, py, pz float64
+		var yaw, pitch float32
+		found := false
+		for _, e := range s.World.entities {
+			if e.GetUUID() == wrap.From {
+				px, py, pz = e.GetPosition()
+				px, py, pz = e.GetPosition()
+				yaw, pitch = e.GetRotation()
+				found = true
+				break
+			}
+		}
+		s.World.entitiesMu.RUnlock()
+
+		if !found {
+			return
+		}
+
+		// 2. Spawn Item
+		itemID := byte(p.Value & 0xFF)
+		count := int((p.Value >> 8) & 0xFF)
+		if count <= 0 {
+			count = 1
+		}
+
+		// Calculate Toss Velocity (based on Camera Forward)
+		// Matches input.go logic:
+		// X = Sin(Yaw)*Cos(Pitch)
+		// Y = Sin(Pitch)
+		// Z = Cos(Yaw)*Cos(Pitch)
+		radYaw := float64(yaw)
+		radPitch := float64(pitch)
+
+		dirX := math.Sin(radYaw) * math.Cos(radPitch)
+		dirY := math.Sin(radPitch)
+		dirZ := math.Cos(radYaw) * math.Cos(radPitch)
+
+		speed := 0.5 // Normal speed
+
+		item := &ItemEntity{
+			BaseEntity: BaseEntity{
+				UUID:  fmt.Sprintf("item-%d-%d", time.Now().UnixNano(), rand.Int()),
+				Type:  EntityItem,
+				X:     px,       // Spawn at eye position (adjust if needed, but 0.3 offset caused clipping if looking down)
+				Y:     py - 0.1, // Slightly below eyes
+				Z:     pz,
+				Yaw:   0,
+				Pitch: 0,
+			},
+			ItemID:      itemID,
+			Count:       count,
+			Vx:          dirX * speed,
+			Vy:          dirY * speed, // Follow look direction exactly
+			Vz:          dirZ * speed,
+			PickupDelay: 1.5,
+			Age:         0,
+		}
+		s.SpawnEntity(item)
 	}
 }
 
