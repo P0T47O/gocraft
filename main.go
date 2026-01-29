@@ -499,6 +499,21 @@ Loop:
 
 	updateEntities(dt)
 	updateInterpolation(dt)
+
+	// Clean up far chunks (Client-side Garbage Collection)
+	// Render radius is roughly 16. Keep a bit more (e.g. 20) to avoid thrashing.
+	// 5 seconds interval? Or every frame?
+	// Every frame is fine, UnloadChunks is efficient enough (iterates map).
+	// But let's do it every 60 frames to be safe on CPU.
+	if rl.GetFrameTime() > 0 { // Just using valid time check, effectively always
+		pPos := camera.Position
+		cx := int(math.Floor(float64(pPos.X) / 16.0))
+		cz := int(math.Floor(float64(pPos.Z) / 16.0))
+		// Use a static counter to throttle
+		// Accessing global or static var is ugly here, let's just run it. Map iteration of ~1000 items is fast.
+		// Radius 24 chunks (16 render + 8 buffer)
+		world.UnloadChunks(cx, cz, 24, nil)
+	}
 }
 
 func handlePacket(pkt Packet) {
@@ -640,8 +655,17 @@ func drawGame() {
 	assets.drawCrosshair()
 
 	if input.ShowDebug {
+		m := perfMon.Metrics
+		// Background for readability
+		rl.DrawRectangle(5, 5, 400, 150, rl.NewColor(0, 0, 0, 100))
+
 		rl.DrawFPS(10, 10)
-		rl.DrawText(fmt.Sprintf("Pos: %.1f, %.1f, %.1f", camera.Position.X, camera.Position.Y, camera.Position.Z), 10, 30, 20, rl.Black)
+		rl.DrawText(fmt.Sprintf("Pos: %.1f, %.1f, %.1f", camera.Position.X, camera.Position.Y, camera.Position.Z), 10, 35, 20, rl.White)
+
+		rl.DrawText(fmt.Sprintf("Chunks: %d loaded / %d mesh buffers", len(world.chunks), m.ActiveMeshes), 10, 60, 20, rl.White)
+		rl.DrawText(fmt.Sprintf("%d chunk updates/sec", m.MeshesPerSec), 10, 85, 20, rl.White)
+		rl.DrawText(fmt.Sprintf("Mem: %d MB (GC: %d)", m.HeapAllocMB, m.NumGC), 10, 110, 20, rl.White)
+		rl.DrawText(fmt.Sprintf("Unloads/sec: %d", m.UnloadsPerSec), 10, 135, 20, rl.White)
 	}
 
 	if input.InventoryOpen {

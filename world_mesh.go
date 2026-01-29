@@ -11,6 +11,7 @@ type meshKind int
 type meshSnapshot struct {
 	blocks []byte
 	light  []byte
+	meta   []byte
 	sizeX  int
 	sizeZ  int
 	baseX  int
@@ -40,6 +41,14 @@ func (s *meshSnapshot) lightAt(wx, wy, wz int) byte {
 		return 15
 	}
 	return s.light[idx]
+}
+
+func (s *meshSnapshot) metaAt(wx, wy, wz int) byte {
+	idx := s.index(wx, wy, wz)
+	if idx < 0 {
+		return 0
+	}
+	return s.meta[idx]
 }
 
 type meshJob struct {
@@ -95,8 +104,10 @@ func (w *World) StartMeshWorkers(assets *RenderAssets, workers int) {
 				}
 			}()
 			for job := range w.meshJobs {
+				// Debug logging
+				// fmt.Printf("Starting mesh job: %v\n", job.key)
 				snapshot := buildMeshSnapshotFromNeighbors(job)
-				results := assets.buildAllMeshData(&job.heightMap, job.baseX, job.baseZ, job.yMin, job.yMax, snapshot.blockAt, snapshot.lightAt, w.seed)
+				results := assets.buildAllMeshData(&job.heightMap, job.baseX, job.baseZ, job.yMin, job.yMax, snapshot.blockAt, snapshot.lightAt, snapshot.metaAt, w.seed)
 				snapshot.Release() // Return buffers to pool
 				w.meshResults <- meshResult{
 					key:     job.key,
@@ -116,18 +127,18 @@ func buildMeshSnapshotFromNeighbors(job meshJob) *meshSnapshot {
 	// Allocate from pool
 	blocks := meshBufferPool.Get().([]byte)
 	light := meshBufferPool.Get().([]byte)
-
-	// Zero out buffers just in case (optional but safer)
-	// Actually no need to zero blocks as we overwrite or ignore out of bounds
-	// But light needs to be initiated to 15?
+	meta := meshBufferPool.Get().([]byte)
 
 	// Initialize light to 15 (Skylight) so unloaded chunks don't cause black chunk borders
 	for i := range light {
 		light[i] = 15
 	}
-	// Zero blocks?
+	// Zero blocks and meta
 	for i := range blocks {
 		blocks[i] = 0 // Air
+	}
+	for i := range meta {
+		meta[i] = 0
 	}
 
 	baseX := job.baseX
@@ -161,6 +172,7 @@ func buildMeshSnapshotFromNeighbors(job meshJob) *meshSnapshot {
 			for y := 0; y < chunkHeight; y++ {
 				idx := ((ix+1)*chunkHeight+y)*sizeZ + (iz + 1)
 				blocks[idx] = chunk.blocks[lx][y][lz]
+				meta[idx] = chunk.meta[lx][y][lz]
 				sky := chunk.skyLight[lx][y][lz]
 				block := chunk.blockLight[lx][y][lz]
 				if block > sky {
@@ -183,6 +195,7 @@ func buildMeshSnapshotFromNeighbors(job meshJob) *meshSnapshot {
 	return &meshSnapshot{
 		blocks: blocks,
 		light:  light,
+		meta:   meta,
 		sizeX:  sizeX,
 		sizeZ:  sizeZ,
 		baseX:  baseX,
@@ -236,15 +249,26 @@ func (w *World) ProcessImmediateMeshes(assets *RenderAssets, max int) {
 		return
 	}
 	count := 0
+	// We iterate the map directly. To allow safe modification (re-adding if full),
+	// we use the safe deletion pattern, but re-adding in loop is tricky.
+	// Since immediate updates are critical, we can try to process them all.
+	// But let's pull keys first to be safe and deterministic.
+
+	// Optimization: Reuse a static buffer for keys if possible?
+	// For now, simple slice is fine.
 	keys := make([]sectionKey, 0, len(w.immediate))
 	for key := range w.immediate {
 		keys = append(keys, key)
 	}
+
 	for _, key := range keys {
 		if count >= max {
 			break
 		}
+		// We process it, so remove from queue.
+		// If we fail to send, we re-add it.
 		delete(w.immediate, key)
+
 		chunk := w.getChunkIfGenerated(key.X, key.Z)
 		if chunk == nil {
 			continue
@@ -253,68 +277,63 @@ func (w *World) ProcessImmediateMeshes(assets *RenderAssets, max int) {
 		if key.Section < 0 || key.Section >= sectionCount {
 			continue
 		}
-		rebuildOpaque := chunk.sectionDirty[key.Section] || chunk.opaqueMeshes[key.Section] == nil
-		rebuildWater := chunk.sectionDirty[key.Section] || chunk.waterMeshes[key.Section] == nil
-		rebuildCutout := chunk.sectionDirty[key.Section] || chunk.cutoutMeshes[key.Section] == nil
-		rebuildGlass := chunk.sectionDirty[key.Section] || chunk.glassMeshes[key.Section] == nil
-		if !rebuildOpaque && !rebuildWater && !rebuildCutout && !rebuildGlass {
+
+		// Check what needs rebuilding
+		sec := key.Section
+		dirty := chunk.sectionDirty[sec]
+
+		// If perfectly clean and meshes exist, skip
+		if !dirty && chunk.opaqueMeshes[sec] != nil && chunk.waterMeshes[sec] != nil &&
+			chunk.cutoutMeshes[sec] != nil && chunk.glassMeshes[sec] != nil {
 			continue
 		}
+
+		// Prepare Neighbors
 		var neighbors [3][3]*Chunk
 		for dx := -1; dx <= 1; dx++ {
 			for dz := -1; dz <= 1; dz++ {
 				neighbors[dx+1][dz+1] = w.getChunkIfGenerated(key.X+dx, key.Z+dz)
 			}
 		}
+
 		baseX := key.X * chunkWidth
 		baseZ := key.Z * chunkWidth
 		yMin := key.Section * sectionHeight
 		yMax := yMin + sectionHeight
-		if rebuildOpaque || rebuildWater || rebuildCutout || rebuildGlass {
-			job := meshJob{
-				key:       chunkKey{X: key.X, Z: key.Z},
-				baseX:     baseX,
-				baseZ:     baseZ,
-				heightMap: chunk.heightMap,
-				centerCX:  key.X,
-				centerCZ:  key.Z,
-				neighbors: neighbors,
-				section:   key.Section,
-				yMin:      yMin,
-				yMax:      yMax,
-				version:   chunk.meshVersion[key.Section],
-			}
-			snapshot := buildMeshSnapshotFromNeighbors(job)
-			results := assets.buildAllMeshData(&job.heightMap, baseX, baseZ, yMin, yMax, snapshot.blockAt, snapshot.lightAt, w.seed)
-			snapshot.Release()
 
-			passCleanup := func(meshes map[string][]*ChunkMesh) {
-				for _, list := range meshes {
-					for _, m := range list {
-						m.unload()
-					}
-				}
-			}
-
-			passCleanup(chunk.opaqueMeshes[key.Section])
-			chunk.opaqueMeshes[key.Section] = assets.applyMeshData(results["opaque"])
-
-			passCleanup(chunk.waterMeshes[key.Section])
-			chunk.waterMeshes[key.Section] = assets.applyMeshData(results["water"])
-
-			passCleanup(chunk.cutoutMeshes[key.Section])
-			chunk.cutoutMeshes[key.Section] = assets.applyMeshData(results["cutout"])
-
-			passCleanup(chunk.glassMeshes[key.Section])
-			chunk.glassMeshes[key.Section] = assets.applyMeshData(results["glass"])
+		// Construct Job
+		job := meshJob{
+			key:       chunkKey{X: key.X, Z: key.Z},
+			baseX:     baseX,
+			baseZ:     baseZ,
+			heightMap: chunk.heightMap,
+			centerCX:  key.X,
+			centerCZ:  key.Z,
+			neighbors: neighbors,
+			section:   key.Section,
+			yMin:      yMin,
+			yMax:      yMax,
+			version:   chunk.meshVersion[key.Section],
 		}
-		chunk.pendingOpaque[key.Section] = false
-		chunk.pendingWater[key.Section] = false
-		chunk.pendingCutout[key.Section] = false
-		chunk.pendingGlass[key.Section] = false
-		clearSectionDirtyIfReady(chunk, key.Section)
-		count++
-		perfMon.IncrementMeshBuild()
+
+		// Set Pending Flags (so we know a result is coming)
+		chunk.pendingOpaque[sec] = true
+		chunk.pendingWater[sec] = true
+		chunk.pendingCutout[sec] = true
+		chunk.pendingGlass[sec] = true
+
+		// Attempt to Send
+		select {
+		case w.meshJobs <- job:
+			// Success
+			count++
+		default:
+			// Channel Full!
+			// Re-queue this job for next frame
+			w.immediate[key] = true
+			// We can stop processing to prevent thrashing
+			return
+		}
 	}
 }
 

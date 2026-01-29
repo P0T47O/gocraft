@@ -16,7 +16,7 @@ import (
 type PerformanceMonitor struct {
 	file           *os.File
 	updateTicker   *time.Ticker
-	metrics        PerfMetrics
+	Metrics        PerfMetrics
 	chunksMeshed   int
 	chunksLoaded   int
 	chunksUnloaded int
@@ -100,16 +100,16 @@ func (pm *PerformanceMonitor) logMetrics() {
 	runtime.ReadMemStats(&m)
 
 	if rl.IsWindowReady() {
-		pm.metrics.FPS = rl.GetFPS()
-		pm.metrics.FrameTime = rl.GetFrameTime() * 1000.0 // ms
+		pm.Metrics.FPS = rl.GetFPS()
+		pm.Metrics.FrameTime = rl.GetFrameTime() * 1000.0 // ms
 	}
-	pm.metrics.HeapAllocMB = m.HeapAlloc / 1024 / 1024
-	pm.metrics.NumGC = m.NumGC
-	pm.metrics.Goroutines = runtime.NumGoroutine()
-	pm.metrics.MeshesPerSec = pm.chunksMeshed
-	pm.metrics.ChunksPerSec = pm.chunksLoaded
-	pm.metrics.UnloadsPerSec = pm.chunksUnloaded
-	pm.metrics.ActiveMeshes = atomic.LoadInt64(&platform.ActiveMeshCount)
+	pm.Metrics.HeapAllocMB = m.HeapAlloc / 1024 / 1024
+	pm.Metrics.NumGC = m.NumGC
+	pm.Metrics.Goroutines = runtime.NumGoroutine()
+	pm.Metrics.MeshesPerSec = pm.chunksMeshed
+	pm.Metrics.ChunksPerSec = pm.chunksLoaded
+	pm.Metrics.UnloadsPerSec = pm.chunksUnloaded
+	pm.Metrics.ActiveMeshes = atomic.LoadInt64(&platform.ActiveMeshCount)
 
 	// Reset counters
 	pm.chunksMeshed = 0
@@ -120,14 +120,14 @@ func (pm *PerformanceMonitor) logMetrics() {
 
 	line := fmt.Sprintf("%.2f,%d,%.2f,%d,%d,%d,%d,%d,%d\n",
 		timestamp,
-		pm.metrics.FPS,
-		pm.metrics.FrameTime,
-		pm.metrics.HeapAllocMB,
-		pm.metrics.Goroutines,
-		pm.metrics.MeshesPerSec,
-		pm.metrics.ChunksPerSec,
-		pm.metrics.UnloadsPerSec,
-		pm.metrics.ActiveMeshes,
+		pm.Metrics.FPS,
+		pm.Metrics.FrameTime,
+		pm.Metrics.HeapAllocMB,
+		pm.Metrics.Goroutines,
+		pm.Metrics.MeshesPerSec,
+		pm.Metrics.ChunksPerSec,
+		pm.Metrics.UnloadsPerSec,
+		pm.Metrics.ActiveMeshes,
 	)
 
 	_, err := pm.file.WriteString(line)

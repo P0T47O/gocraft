@@ -252,7 +252,31 @@ func (w *World) updateBlockLight(x, y, z int, oldBlock, newBlock byte) {
 		w.setBlockLightAtInternal(x, y, z, 0)
 		decrease = append(decrease, node{x: x, y: y, z: z, l: oldLight})
 	}
-	if newEmit > 0 {
+
+	// FIX: Check if we can receive light from neighbors (inflow)
+	// This handles the case where an opaque block is removed (stone -> air)
+	// and should be lit by neighbors.
+	calculatedLight := newEmit
+	if !isOpaqueBlock(newBlock) {
+		maxNb := byte(0)
+		neighbors := [][]int{{1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}}
+		for _, offset := range neighbors {
+			nb := w.LightBlockAt(x+offset[0], y+offset[1], z+offset[2])
+			if nb > maxNb {
+				maxNb = nb
+			}
+		}
+		if maxNb > 1 {
+			if maxNb-1 > calculatedLight {
+				calculatedLight = maxNb - 1
+			}
+		}
+	}
+
+	if calculatedLight > 0 {
+		w.setBlockLightAtInternal(x, y, z, calculatedLight)
+		increase = append(increase, node{x: x, y: y, z: z, l: calculatedLight})
+	} else if newEmit > 0 { // Should be covered above, but safe fallback
 		w.setBlockLightAtInternal(x, y, z, newEmit)
 		increase = append(increase, node{x: x, y: y, z: z, l: newEmit})
 	}

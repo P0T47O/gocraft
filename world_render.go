@@ -26,7 +26,7 @@ type waterDraw struct {
 func (w *World) Draw(assets *RenderAssets, camera rl.Camera3D) {
 	// Calculate MVP matrices manually for PureGL
 	aspect := float32(rl.GetScreenWidth()) / float32(rl.GetScreenHeight())
-	proj := mgl32.Perspective(mgl32.DegToRad(camera.Fovy), aspect, 0.01, 1000.0)
+	proj := mgl32.Perspective(mgl32.DegToRad(camera.Fovy), aspect, 0.1, 1000.0)
 
 	camPos := mgl32.Vec3{camera.Position.X, camera.Position.Y, camera.Position.Z}
 	camTarget := mgl32.Vec3{camera.Target.X, camera.Target.Y, camera.Target.Z}
@@ -275,6 +275,10 @@ func (w *World) Draw(assets *RenderAssets, camera rl.Camera3D) {
 	rl.DisableDepthMask()
 	platform.ActiveTexture(platform.GL_TEXTURE0)
 
+	// Apply Polygon Offset to prevent Z-fighting with solid blocks (especially bottom faces if drawn)
+	platform.Enable(platform.GL_POLYGON_OFFSET_FILL)
+	platform.PolygonOffset(-1.0, -1.0)
+
 	for _, item := range waterDraws {
 		for sec := 0; sec < sectionCount; sec++ {
 			// Sort keys for deterministic order to prevent z-fighting flicker
@@ -299,6 +303,7 @@ func (w *World) Draw(assets *RenderAssets, camera rl.Camera3D) {
 			}
 		}
 	}
+	platform.Disable(platform.GL_POLYGON_OFFSET_FILL)
 	rl.EnableDepthMask() // Reset for safety, though disabled again below if needed
 	// Actually Glass needs it Disabled too.
 	rl.DisableDepthMask()
