@@ -9,18 +9,59 @@ import (
 
 // PacketID definitions
 const (
-	IDLogin         = 0x01
-	IDChunkData     = 0x02
-	IDBlockChange   = 0x03
-	IDPlayerMove    = 0x04
-	IDSpawnPoint    = 0x0A
-	IDUnloadChunk   = 0x0B
-	IDEntitySpawn   = 0x0C
-	IDEntityDespawn = 0x0D
-	IDEntityMove    = 0x08
-	IDPlayerAction  = 0x0E
-	IDEntityMeta    = 0x0F
+	IDLogin           = 0x01
+	IDChunkData       = 0x02
+	IDBlockChange     = 0x03
+	IDPlayerMove      = 0x04
+	IDSpawnPoint      = 0x0A
+	IDUnloadChunk     = 0x0B
+	IDEntitySpawn     = 0x0C
+	IDEntityDespawn   = 0x0D
+	IDEntityMove      = 0x08
+	IDPlayerAction    = 0x0E
+	IDEntityMeta      = 0x0F
+	IDGameMode        = 0x10
+	IDInventoryUpdate = 0x11
 )
+
+type PacketGameMode struct {
+	Mode byte // 0: Creative, 1: Survival
+}
+
+func (p *PacketGameMode) ID() int32 { return IDGameMode }
+func (p *PacketGameMode) Encode(w *bytes.Buffer) error {
+	return binary.Write(w, binary.LittleEndian, p.Mode)
+}
+func (p *PacketGameMode) Decode(r *bytes.Buffer) error {
+	return binary.Read(r, binary.LittleEndian, &p.Mode)
+}
+
+type PacketInventoryUpdate struct {
+	SlotID int32 // 0-8: Hotbar, 9-35: Inventory
+	ItemID int32
+	Count  int32
+}
+
+func (p *PacketInventoryUpdate) ID() int32 { return IDInventoryUpdate }
+func (p *PacketInventoryUpdate) Encode(w *bytes.Buffer) error {
+	WriteVarInt(w, p.SlotID)
+	WriteVarInt(w, p.ItemID)
+	WriteVarInt(w, p.Count)
+	return nil
+}
+func (p *PacketInventoryUpdate) Decode(r *bytes.Buffer) error {
+	var err error
+	if p.SlotID, err = ReadVarInt(r); err != nil {
+		return err
+	}
+	if p.ItemID, err = ReadVarInt(r); err != nil {
+		return err
+	}
+	if p.Count, err = ReadVarInt(r); err != nil {
+		return err
+	}
+	return nil
+}
 
 type Packet interface {
 	ID() int32
@@ -91,6 +132,10 @@ func ReadPacket(conn io.Reader) (Packet, error) {
 		p = &PacketPlayerAction{}
 	case IDEntityMeta:
 		p = &PacketEntityMeta{}
+	case IDGameMode:
+		p = &PacketGameMode{}
+	case IDInventoryUpdate:
+		p = &PacketInventoryUpdate{}
 	default:
 		return nil, fmt.Errorf("unknown packet ID: %d", id)
 	}

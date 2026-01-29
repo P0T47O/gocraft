@@ -145,13 +145,68 @@ func (s *Server) Tick() {
 	s.UpdateEntities()
 }
 
+func (s *Server) SendInventory(player *PlayerEntity) {
+	// Sync entire inventory to client
+	// We MUST send empty slots (ID=0) too, otherwise client won't know items were consumed!
+	for i, item := range player.Inventory.Slots {
+		p := &PacketInventoryUpdate{
+			SlotID: int32(i),
+			ItemID: item.ID,
+			Count:  item.Count,
+		}
+		s.BroadcastTo(player.UUID, p)
+	}
+}
+
 func (s *Server) UpdateEntities() {
 	s.World.TickEntities()
 
-	// Remove dead entities
+	// Handle Item Pickup & Remove dead entities
 	s.World.entitiesMu.Lock()
 	var toRemove []string
+
+	// Collect Players for distance check
+	var players []*PlayerEntity
 	for _, e := range s.World.entities {
+		if p, ok := e.(*PlayerEntity); ok {
+			players = append(players, p)
+		}
+	}
+
+	for _, e := range s.World.entities {
+		// Item Pickup Logic
+		if item, ok := e.(*ItemEntity); ok && !item.Dead && item.PickupDelay <= 0 {
+			for _, player := range players {
+				// Distance Check (Radius 1.5)
+				dx := player.X - item.X
+				dy := player.Y - item.Y
+				dz := player.Z - item.Z
+				distSq := dx*dx + dy*dy + dz*dz
+
+				if distSq < 2.25 {
+					// Try add to inventory
+					rem := player.Inventory.Add(int32(item.ItemID), int32(item.Count))
+					if rem < int32(item.Count) {
+						// Some or all picked up
+						// Sync Inventory
+						s.SendInventory(player)
+
+						if rem == 0 {
+							item.Dead = true
+						} else {
+							item.Count = int(rem)
+							// Update count for others
+							meta := int32(item.ItemID) | (int32(item.Count) << 8)
+							s.Broadcast(&PacketEntityMeta{
+								EntityID: item.GetUUID(),
+								Metadata: meta,
+							})
+						}
+					}
+				}
+			}
+		}
+
 		if item, ok := e.(*ItemEntity); ok && item.Dead {
 			toRemove = append(toRemove, e.GetUUID())
 		}
@@ -165,6 +220,7 @@ func (s *Server) UpdateEntities() {
 		}
 		s.Broadcast(&PacketEntityDespawn{EntityID: uuid})
 		delete(s.LastSentPos, uuid)
+		delete(s.LastSentMeta, uuid)
 	}
 	s.World.entitiesMu.Unlock()
 
@@ -359,6 +415,7 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 		p.Seed = s.World.seed
 
 		// Register Client if not exists
+		s.ClientsMu.Lock()
 		if _, ok := s.Clients[p.Username]; !ok {
 			conn := &ClientConnection{
 				Name:        p.Username,
@@ -367,6 +424,7 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 			}
 			s.Clients[p.Username] = conn
 		}
+		s.ClientsMu.Unlock()
 
 		// 1. Send Initial Chunks (Radius 16)
 		s.SendChunksAround(p.Username, 0, 0, 16)
@@ -440,6 +498,25 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 			fmt.Printf("Player %s rejoining existing entity\n", p.Username)
 		}
 
+	case *PacketGameMode:
+		// Switch GameMode
+		s.World.entitiesMu.RLock()
+		var player *PlayerEntity
+		for _, e := range s.World.entities {
+			if pEnt, ok := e.(*PlayerEntity); ok && pEnt.UUID == wrap.From {
+				player = pEnt
+				break
+			}
+		}
+		s.World.entitiesMu.RUnlock()
+
+		if player != nil {
+			player.GameMode = p.Mode
+			fmt.Printf("Player %s switched to GameMode %d\n", wrap.From, p.Mode)
+			// Echo back to confirm (or broadcast if others need to know)
+			s.BroadcastTo(wrap.From, p)
+		}
+
 	case *PacketPlayerMove:
 		// Update player position in ServerWorld for saving
 		s.InitialPosX = p.X
@@ -473,6 +550,40 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 		}
 
 	case *PacketBlockChange:
+		// Attempt to place/break block
+		s.World.entitiesMu.RLock()
+		var player *PlayerEntity
+		for _, e := range s.World.entities {
+			if e.GetUUID() == wrap.From {
+				player = e.(*PlayerEntity)
+				break
+			}
+		}
+		s.World.entitiesMu.RUnlock()
+
+		if player == nil {
+			return
+		}
+
+		if p.BlockID != blockAir {
+			// Placement Logic
+			if player.GameMode == ModeSurvival {
+				// Try to consume 1 of this block
+				if !player.Inventory.Consume(int32(p.BlockID), 1) {
+					// Failed to consume (cheating? lag?), revert client block
+					// We need to send a BlockChange back to client with AIR (or whatever is actually there)
+					fmt.Printf("Player %s tried to place Block %d without item.\n", wrap.From, p.BlockID)
+					// In a real server, we'd resend the chunk section or specific block
+					// For now, let's just ignore the placement which causes a desync until chunk update,
+					// or we can explicitly set it back to air on client
+					s.BroadcastTo(wrap.From, &PacketBlockChange{X: p.X, Y: p.Y, Z: p.Z, BlockID: blockAir})
+					return
+				}
+				// Sync Inventory
+				s.SendInventory(player)
+			}
+		}
+
 		// Apply block change to World
 		// Validation logic would go here
 		fmt.Printf("Server: Block set at %d %d %d\n", p.X, p.Y, p.Z)
@@ -517,6 +628,29 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 		count := int((p.Value >> 8) & 0xFF)
 		if count <= 0 {
 			count = 1
+		}
+
+		s.World.entitiesMu.RLock()
+		// Re-fetch player safely (reuse finding logic or just grab from loop above which we already did)
+		// We found 'player' in s.World.entities earlier but didn't cast/store it as *PlayerEntity cleanly.
+		// Let's optimize: reuse the 'found' logic to get the PlayerEntity object properly.
+		var player *PlayerEntity
+		for _, e := range s.World.entities {
+			if e.GetUUID() == wrap.From {
+				player = e.(*PlayerEntity)
+				break
+			}
+		}
+		s.World.entitiesMu.RUnlock()
+
+		if player != nil && player.GameMode == ModeSurvival {
+			if !player.Inventory.Consume(int32(itemID), int32(count)) {
+				// Failed to consume, cannot drop
+				fmt.Printf("Player %s tried to drop Item %d without valid count.\n", wrap.From, itemID)
+				s.SendInventory(player) // Sync back to fix client state
+				return
+			}
+			s.SendInventory(player) // Sync successful removal
 		}
 
 		// Calculate Toss Velocity (based on Camera Forward)

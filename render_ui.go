@@ -1,6 +1,8 @@
 package main
 
 import (
+	"fmt"
+
 	rl "github.com/gen2brain/raylib-go/raylib"
 )
 
@@ -37,16 +39,33 @@ func (a *RenderAssets) drawHotbar(state *InputState) {
 	}
 
 	for i, b := range hotbarBlocks {
-		if b == blockAir {
-			continue
+		if currentGameMode == ModeSurvival {
+			item := localInventory.Slots[i]
+			if item.ID != 0 {
+				iconX := hbX + float32(i)*slotWidth*scale + (slotWidth*scale-slotSize)/2
+				iconY := hbY + (hotbarHeight-slotSize)/2
+				a.drawIcon(byte(item.ID), iconX, iconY, slotSize)
+				if item.Count > 1 {
+					rl.DrawText(fmt.Sprintf("%d", item.Count), int32(iconX+slotSize-30), int32(iconY+slotSize-25), 20, rl.White)
+				}
+			}
+		} else {
+			if b == blockAir {
+				continue
+			}
+			iconX := hbX + float32(i)*slotWidth*scale + (slotWidth*scale-slotSize)/2
+			iconY := hbY + (hotbarHeight-slotSize)/2
+			a.drawIcon(b, iconX, iconY, slotSize)
 		}
-		iconX := hbX + float32(i)*slotWidth*scale + (slotWidth*scale-slotSize)/2
-		iconY := hbY + (hotbarHeight-slotSize)/2
-		a.drawIcon(b, iconX, iconY, slotSize)
 	}
 }
 
 func (a *RenderAssets) drawInventory(state *InputState) {
+	if currentGameMode == ModeSurvival {
+		a.drawSurvivalInventory(state)
+		return
+	}
+
 	layout := inventoryLayout()
 	scale := inventoryScale()
 
@@ -79,6 +98,72 @@ func (a *RenderAssets) drawInventory(state *InputState) {
 	a.drawHotbarSlots(layout, state, drawFrames)
 	if state.Dragging {
 		a.drawDraggedIcon(state.DragBlock, layout.SlotSize)
+	}
+}
+
+func (a *RenderAssets) drawSurvivalInventory(state *InputState) {
+	scale := inventoryScale()
+	w := float32(rl.GetScreenWidth())
+	h := float32(rl.GetScreenHeight())
+
+	// Darken background
+	rl.DrawRectangle(0, 0, int32(w), int32(h), rl.Fade(rl.Black, 0.5))
+
+	// Layout Config
+	slotSize := 36 * scale / 2 // Adjust scale as needed, existing scale might be 2x or 3x
+	if slotSize < 32 {
+		slotSize = 32
+	}
+	stride := slotSize + 4
+	cols := 9
+	rows := 3 // Main inventory
+
+	invW := float32(cols)*stride + 20
+	invH := float32(rows+1)*stride + 60 // +1 for hotbar, +padding
+
+	startX := (w - invW) / 2
+	startY := (h - invH) / 2
+
+	// Window BG
+	bgRect := rl.NewRectangle(startX, startY, invW, invH)
+	rl.DrawRectangleRec(bgRect, rl.NewColor(198, 198, 198, 255))
+	rl.DrawRectangleLinesEx(bgRect, 2, rl.White)
+	rl.DrawRectangleLinesEx(rl.NewRectangle(startX-2, startY-2, invW+4, invH+4), 2, rl.NewColor(85, 85, 85, 255))
+
+	rl.DrawText("Survival Inventory", int32(startX+10), int32(startY+10), 20, rl.DarkGray)
+
+	// Draw Inventory Slots (9-35)
+	for i := 9; i < 36; i++ {
+		idx := i - 9
+		r := idx / 9
+		c := idx % 9
+		x := startX + 10 + float32(c)*stride
+		y := startY + 40 + float32(r)*stride
+
+		a.drawSlot(x, y, slotSize)
+
+		item := localInventory.Slots[i]
+		if item.ID != 0 {
+			a.drawIcon(byte(item.ID), x, y, slotSize)
+			if item.Count > 1 {
+				rl.DrawText(fmt.Sprintf("%d", item.Count), int32(x+slotSize-30), int32(y+slotSize-25), 20, rl.White)
+			}
+		}
+	}
+
+	// Draw Hotbar Slots (0-8)
+	hotbarY := startY + invH - stride - 10
+	for i := 0; i < 9; i++ {
+		x := startX + 10 + float32(i)*stride
+		a.drawSlot(x, hotbarY, slotSize)
+
+		item := localInventory.Slots[i]
+		if item.ID != 0 {
+			a.drawIcon(byte(item.ID), x, hotbarY, slotSize)
+			if item.Count > 1 {
+				rl.DrawText(fmt.Sprintf("%d", item.Count), int32(x+slotSize-30), int32(hotbarY+slotSize-25), 20, rl.White)
+			}
+		}
 	}
 }
 

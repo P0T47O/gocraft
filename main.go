@@ -59,6 +59,10 @@ var (
 	newWorldName string = "New World"
 	newWorldSeed string = "12345"
 	isPaused     bool   = false
+
+	// Client Game State
+	localInventory  Inventory
+	currentGameMode byte = ModeCreative
 )
 
 type RemoteEntity struct {
@@ -454,6 +458,18 @@ func updateGame() {
 		}
 	}
 
+	// GameMode Switch (F1)
+	if rl.IsKeyPressed(rl.KeyF1) {
+		newMode := byte(ModeCreative)
+		if currentGameMode == ModeCreative {
+			newMode = ModeSurvival
+		}
+		// Request mode switch
+		client.Send(&PacketGameMode{Mode: newMode})
+	}
+
+	// Inventory toggle is handled in HandleInput -> ToggleInventory
+
 	// Singleplayer Pause: Freeze update loop
 	if isPaused && server != nil {
 		return
@@ -546,6 +562,21 @@ func handlePacket(pkt Packet) {
 	case *PacketEntityMeta:
 		if e, ok := remoteEntities[p.EntityID]; ok {
 			e.Metadata = p.Metadata
+		}
+	case *PacketGameMode:
+		currentGameMode = p.Mode
+		fmt.Printf("GameMode switched to %d\n", p.Mode)
+
+	case *PacketInventoryUpdate:
+		if p.SlotID >= 0 && p.SlotID < 36 {
+			localInventory.Slots[p.SlotID] = Item{ID: p.ItemID, Count: p.Count}
+			// Sync Hotbar
+			if p.SlotID < 9 {
+				input.Hotbar[p.SlotID] = byte(p.ItemID)
+				if input.SelectedSlot == int(p.SlotID) {
+					input.CurrentBlock = byte(p.ItemID)
+				}
+			}
 		}
 	}
 }

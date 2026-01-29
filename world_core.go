@@ -21,6 +21,7 @@ type World struct {
 	meshResults      chan meshResult
 	immediate        map[sectionKey]bool
 	chunkPool        *ChunkPool
+	IsClient         bool // True if this is a client-side world (rendering only)
 
 	// Entity System
 	entities   []Entity
@@ -189,8 +190,101 @@ func (i *ItemEntity) Tick(world *World) {
 	i.Dirty = true
 }
 
+// GameMode definitions
+const (
+	ModeCreative = 0
+	ModeSurvival = 1
+)
+
+type Item struct {
+	ID    int32
+	Count int32
+}
+
+type Inventory struct {
+	Slots [36]Item // 0-8: Hotbar, 9-35: Inventory
+}
+
+func (inv *Inventory) Add(id int32, count int32) int32 {
+	// 1. Try to stack
+	for i := 0; i < 36; i++ {
+		if inv.Slots[i].ID == id && inv.Slots[i].Count < 64 {
+			space := 64 - inv.Slots[i].Count
+			if count <= space {
+				inv.Slots[i].Count += count
+				return 0
+			}
+			inv.Slots[i].Count += space
+			count -= space
+		}
+	}
+	// 2. Try empty slots
+	for i := 0; i < 36; i++ {
+		if inv.Slots[i].ID == 0 {
+			inv.Slots[i].ID = id
+			inv.Slots[i].Count = count
+			return 0
+		}
+	}
+	return count // Return remaining
+}
+
+// Consume attempts to remove 'count' of 'id' from the inventory.
+// Returns true if successful (enough items found), false otherwise.
+// Prioritizes removing from the hotbar (0-8) first, then main inventory.
+func (inv *Inventory) Consume(id int32, count int32) bool {
+	// First check if we have enough
+	total := int32(0)
+	for i := 0; i < 36; i++ {
+		if inv.Slots[i].ID == id {
+			total += inv.Slots[i].Count
+		}
+	}
+	if total < count {
+		return false
+	}
+
+	remaining := count
+
+	// Pass 1: Hotbar
+	for i := 0; i < 9; i++ {
+		if remaining <= 0 {
+			break
+		}
+		if inv.Slots[i].ID == id {
+			if inv.Slots[i].Count > remaining {
+				inv.Slots[i].Count -= remaining
+				remaining = 0
+			} else {
+				remaining -= inv.Slots[i].Count
+				inv.Slots[i] = Item{} // Clear slot
+			}
+		}
+	}
+
+	// Pass 2: Main Inventory
+	for i := 9; i < 36; i++ {
+		if remaining <= 0 {
+			break
+		}
+		if inv.Slots[i].ID == id {
+			if inv.Slots[i].Count > remaining {
+				inv.Slots[i].Count -= remaining
+				remaining = 0
+			} else {
+				remaining -= inv.Slots[i].Count
+				inv.Slots[i] = Item{} // Clear slot
+			}
+		}
+	}
+
+	return true
+}
+
 type PlayerEntity struct {
 	BaseEntity
+	GameMode  byte
+	Inventory Inventory
 }
 
 func (p *PlayerEntity) Tick(world *World) {
@@ -245,8 +339,8 @@ func NewFlatWorld() *World {
 		genQueue:    make(chan chunkKey, 1024),
 		genResults:  make(chan chunkGenResult, 1024),
 		pending:     make(map[chunkKey]bool),
-		meshJobs:    make(chan meshJob, 1024),
-		meshResults: make(chan meshResult, 1024),
+		meshJobs:    make(chan meshJob, 4096),
+		meshResults: make(chan meshResult, 4096),
 		immediate:   make(map[sectionKey]bool),
 		chunkPool:   NewChunkPool(1024),
 	}
@@ -271,6 +365,7 @@ func NewClientWorld() *World {
 		meshResults: make(chan meshResult, 128),
 		immediate:   map[sectionKey]bool{},
 		chunkPool:   NewChunkPool(1024),
+		IsClient:    true,
 	}
 	// Client world does not spawn generation workers.
 	// It relies on receiving chunk data from the server.
@@ -423,15 +518,22 @@ func (w *World) SetMetaAt(x, y, z int, meta byte) {
 	lz := modFloor(z, chunkWidth)
 	chunk := w.requestChunk(cx, cz)
 	if !chunk.generated {
-		generateChunkData(w.seed, cx, cz, chunk)
-		chunk.mu.Lock()
-		// blocks and heightMap are already filled in chunk
-		ensureChunkSections(chunk)
-		for i := range chunk.sectionDirty {
-			chunk.sectionDirty[i] = true
-			chunk.meshVersion[i]++
+		if !w.IsClient {
+			generateChunkData(w.seed, cx, cz, chunk)
+			chunk.mu.Lock()
+			// blocks and heightMap are already filled in chunk
+			ensureChunkSections(chunk)
+			for i := range chunk.sectionDirty {
+				chunk.sectionDirty[i] = true
+				chunk.meshVersion[i]++
+			}
+			chunk.mu.Unlock()
+		} else {
+			// Client: Don't generate, just ensure sections exist
+			chunk.mu.Lock()
+			ensureChunkSections(chunk)
+			chunk.mu.Unlock()
 		}
-		chunk.mu.Unlock()
 		chunk.generated = true
 		w.chunksMu.Lock()
 		delete(w.pending, chunkKey{X: cx, Z: cz})
@@ -469,15 +571,22 @@ func (w *World) SetBlockAt(x, y, z int, block byte) {
 	lz := modFloor(z, chunkWidth)
 	chunk := w.requestChunk(cx, cz)
 	if !chunk.generated {
-		generateChunkData(w.seed, cx, cz, chunk)
-		chunk.mu.Lock()
-		// blocks and heightMap are already filled in chunk
-		ensureChunkSections(chunk)
-		for i := range chunk.sectionDirty {
-			chunk.sectionDirty[i] = true
-			chunk.meshVersion[i]++
+		if !w.IsClient {
+			generateChunkData(w.seed, cx, cz, chunk)
+			chunk.mu.Lock()
+			// blocks and heightMap are already filled in chunk
+			ensureChunkSections(chunk)
+			for i := range chunk.sectionDirty {
+				chunk.sectionDirty[i] = true
+				chunk.meshVersion[i]++
+			}
+			chunk.mu.Unlock()
+		} else {
+			// Client: Don't generate, just ensure sections exist
+			chunk.mu.Lock()
+			ensureChunkSections(chunk)
+			chunk.mu.Unlock()
 		}
-		chunk.mu.Unlock()
 		chunk.generated = true
 		w.chunksMu.Lock()
 		delete(w.pending, chunkKey{X: cx, Z: cz})
