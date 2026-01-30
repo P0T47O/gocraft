@@ -22,7 +22,22 @@ const (
 	IDEntityMeta      = 0x0F
 	IDGameMode        = 0x10
 	IDInventoryUpdate = 0x11
+	IDChat            = 0x12
 )
+
+type PacketChat struct {
+	Message string
+}
+
+func (p *PacketChat) ID() int32 { return IDChat }
+func (p *PacketChat) Encode(w *bytes.Buffer) error {
+	return WriteString(w, p.Message)
+}
+func (p *PacketChat) Decode(r *bytes.Buffer) error {
+	var err error
+	p.Message, err = ReadString(r)
+	return err
+}
 
 type PacketGameMode struct {
 	Mode byte // 0: Creative, 1: Survival
@@ -136,6 +151,8 @@ func ReadPacket(conn io.Reader) (Packet, error) {
 		p = &PacketGameMode{}
 	case IDInventoryUpdate:
 		p = &PacketInventoryUpdate{}
+	case IDChat:
+		p = &PacketChat{}
 	default:
 		return nil, fmt.Errorf("unknown packet ID: %d", id)
 	}

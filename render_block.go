@@ -1,6 +1,8 @@
 package main
 
 import (
+	"gocraft/platform"
+
 	rl "github.com/gen2brain/raylib-go/raylib"
 )
 
@@ -320,15 +322,47 @@ func (a *RenderAssets) drawBlock(block byte, pos rl.Vector3, getBlock BlockGette
 		rl.DrawModel(a.getFaceModelAnimated("bottom", faces.Bottom), pos, 1, applyAO(bottomTint, aoBottom(), false, lightBottom))
 	}
 	if shouldDrawFace(x, y, z-1) {
-		rl.DrawModel(a.getFaceModelAnimated("north", faces.North), pos, 1, applyAO(northTint, aoNorth(), false, lightNorth))
+		if block == blockGrass {
+			rl.DrawModel(a.getFaceModelAnimated("north_base", faces.Bottom), pos, 1, applyAO(northTint, aoNorth(), false, lightNorth))
+			platform.Enable(platform.GL_POLYGON_OFFSET_FILL)
+			platform.PolygonOffset(-1.0, -1.0)
+			rl.DrawModel(a.getFaceModelAnimated("north_overlay", "textures/block/grass_block_side_overlay.png"), pos, 1, applyAO(northTint, aoNorth(), true, lightNorth))
+			platform.Disable(platform.GL_POLYGON_OFFSET_FILL)
+		} else {
+			rl.DrawModel(a.getFaceModelAnimated("north", faces.North), pos, 1, applyAO(northTint, aoNorth(), false, lightNorth))
+		}
 	}
 	if shouldDrawFace(x, y, z+1) {
-		rl.DrawModel(a.getFaceModelAnimated("south", faces.South), pos, 1, applyAO(southTint, aoSouth(), false, lightSouth))
+		if block == blockGrass {
+			rl.DrawModel(a.getFaceModelAnimated("south_base", faces.Bottom), pos, 1, applyAO(southTint, aoSouth(), false, lightSouth))
+			platform.Enable(platform.GL_POLYGON_OFFSET_FILL)
+			platform.PolygonOffset(-1.0, -1.0)
+			rl.DrawModel(a.getFaceModelAnimated("south_overlay", "textures/block/grass_block_side_overlay.png"), pos, 1, applyAO(southTint, aoSouth(), true, lightSouth))
+			platform.Disable(platform.GL_POLYGON_OFFSET_FILL)
+		} else {
+			rl.DrawModel(a.getFaceModelAnimated("south", faces.South), pos, 1, applyAO(southTint, aoSouth(), false, lightSouth))
+		}
 	}
 	if shouldDrawFace(x-1, y, z) {
-		rl.DrawModel(a.getFaceModelAnimated("west", faces.West), pos, 1, applyAO(westTint, aoWest(), false, lightWest))
+		if block == blockGrass {
+			rl.DrawModel(a.getFaceModelAnimated("west_base", faces.Bottom), pos, 1, applyAO(westTint, aoWest(), false, lightWest))
+			platform.Enable(platform.GL_POLYGON_OFFSET_FILL)
+			platform.PolygonOffset(-1.0, -1.0)
+			rl.DrawModel(a.getFaceModelAnimated("west_overlay", "textures/block/grass_block_side_overlay.png"), pos, 1, applyAO(westTint, aoWest(), true, lightWest))
+			platform.Disable(platform.GL_POLYGON_OFFSET_FILL)
+		} else {
+			rl.DrawModel(a.getFaceModelAnimated("west", faces.West), pos, 1, applyAO(westTint, aoWest(), false, lightWest))
+		}
 	}
 	if shouldDrawFace(x+1, y, z) {
-		rl.DrawModel(a.getFaceModelAnimated("east", faces.East), pos, 1, applyAO(eastTint, aoEast(), false, lightEast))
+		if block == blockGrass {
+			rl.DrawModel(a.getFaceModelAnimated("east_base", faces.Bottom), pos, 1, applyAO(eastTint, aoEast(), false, lightEast))
+			platform.Enable(platform.GL_POLYGON_OFFSET_FILL)
+			platform.PolygonOffset(-1.0, -1.0)
+			rl.DrawModel(a.getFaceModelAnimated("east_overlay", "textures/block/grass_block_side_overlay.png"), pos, 1, applyAO(eastTint, aoEast(), true, lightEast))
+			platform.Disable(platform.GL_POLYGON_OFFSET_FILL)
+		} else {
+			rl.DrawModel(a.getFaceModelAnimated("east", faces.East), pos, 1, applyAO(eastTint, aoEast(), false, lightEast))
+		}
 	}
 }

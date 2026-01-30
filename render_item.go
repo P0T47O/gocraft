@@ -51,26 +51,34 @@ func (a *RenderAssets) DrawItem(e *RemoteEntity) {
 		{X: -0.08, Y: 0.08, Z: 0.08},
 	}
 
-	rl.PushMatrix()
-	rl.Translatef(pos.X, pos.Y, pos.Z)
-	rl.Rotatef(rot, 0, 1, 0)
+	// Calculate Rotation Matrix
+	matRot := rl.MatrixRotate(rl.NewVector3(0, 1, 0), rot*math.Pi/180.0)
+
+	rl.DisableBackfaceCulling() // Keep this just in case
 
 	for i := 0; i < numItems; i++ {
 		off := offsets[i]
+
+		// Rotate offset
+		offVec := rl.NewVector3(off.X, off.Y, off.Z)
+		rotatedOff := rl.Vector3Transform(offVec, matRot)
+
+		// Final Position
+		finalPos := rl.Vector3Add(pos, rotatedOff)
+
 		if def.RenderType == RenderTypeCross {
 			// Use pre-generated model
 			if model, ok := a.crossItemModels[itemID]; ok {
-				rl.DrawModel(model, off, 1.0, rl.White)
+				rl.DrawModel(model, finalPos, 1.0, rl.White)
 			}
 		} else {
-			a.drawBlockItem(itemID, off, 0.25)
+			a.drawBlockItem(itemID, finalPos, 0.25, rot)
 		}
 	}
-
-	rl.PopMatrix()
+	rl.EnableBackfaceCulling()
 }
 
-func (a *RenderAssets) drawBlockItem(block byte, offset rl.Vector3, scale float32) {
+func (a *RenderAssets) drawBlockItem(block byte, position rl.Vector3, scale float32, rotation float32) {
 	def := GetBlock(block)
 	if def == nil {
 		return
@@ -106,15 +114,16 @@ func (a *RenderAssets) drawBlockItem(block byte, offset rl.Vector3, scale float3
 		return col
 	}
 
-	blockPos := rl.NewVector3(offset.X, offset.Y, offset.Z)
+	blockPos := position // Already absolute
 	scaleVec := rl.NewVector3(scale, scale, scale)
+	axis := rl.NewVector3(0, 1, 0)
 
-	rl.DrawModelEx(a.getFaceModel("top", faces.Top), blockPos, rl.NewVector3(0, 1, 0), 0, scaleVec, applyBiomeTint(topTint, true))
-	rl.DrawModelEx(a.getFaceModel("bottom", faces.Bottom), blockPos, rl.NewVector3(0, 1, 0), 0, scaleVec, applyBiomeTint(bottomTint, false))
-	rl.DrawModelEx(a.getFaceModel("north", faces.North), blockPos, rl.NewVector3(0, 1, 0), 0, scaleVec, applyBiomeTint(northTint, false))
-	rl.DrawModelEx(a.getFaceModel("south", faces.South), blockPos, rl.NewVector3(0, 1, 0), 0, scaleVec, applyBiomeTint(southTint, false))
-	rl.DrawModelEx(a.getFaceModel("west", faces.West), blockPos, rl.NewVector3(0, 1, 0), 0, scaleVec, applyBiomeTint(westTint, false))
-	rl.DrawModelEx(a.getFaceModel("east", faces.East), blockPos, rl.NewVector3(0, 1, 0), 0, scaleVec, applyBiomeTint(eastTint, false))
+	rl.DrawModelEx(a.getFaceModel("top", faces.Top), blockPos, axis, rotation, scaleVec, applyBiomeTint(topTint, true))
+	rl.DrawModelEx(a.getFaceModel("bottom", faces.Bottom), blockPos, axis, rotation, scaleVec, applyBiomeTint(bottomTint, false))
+	rl.DrawModelEx(a.getFaceModel("north", faces.North), blockPos, axis, rotation, scaleVec, applyBiomeTint(northTint, false))
+	rl.DrawModelEx(a.getFaceModel("south", faces.South), blockPos, axis, rotation, scaleVec, applyBiomeTint(southTint, false))
+	rl.DrawModelEx(a.getFaceModel("west", faces.West), blockPos, axis, rotation, scaleVec, applyBiomeTint(westTint, false))
+	rl.DrawModelEx(a.getFaceModel("east", faces.East), blockPos, axis, rotation, scaleVec, applyBiomeTint(eastTint, false))
 }
 
 // initCrossItemModels pre-generates meshes for cross-type items (flowers, etc.)

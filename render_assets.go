@@ -81,6 +81,9 @@ func loadRenderAssets() *RenderAssets {
 	}
 
 	assets.loadBlockTextures()
+	// Explicitly load grass side overlay for multi-pass rendering
+	assets.loadTexture("textures/block/grass_block_side_overlay.png")
+
 	assets.generateAtlas()
 	assets.cutoutShader = loadCutoutShader()
 	assets.fogShader = assets.loadFogShader()

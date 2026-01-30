@@ -63,6 +63,11 @@ var (
 	// Client Game State
 	localInventory  Inventory
 	currentGameMode byte = ModeCreative
+
+	// Chat
+	isChatOpen  bool   = false
+	chatInput   string = ""
+	chatHistory []string
 )
 
 type RemoteEntity struct {
@@ -440,6 +445,45 @@ func exitGame() {
 }
 
 func updateGame() {
+	// Chat Input
+	if isChatOpen {
+		// Handle keys
+		char := rl.GetCharPressed()
+		for char > 0 {
+			if char >= 32 && char <= 125 {
+				chatInput += string(char)
+			}
+			char = rl.GetCharPressed()
+		}
+
+		if rl.IsKeyPressed(rl.KeyBackspace) {
+			if len(chatInput) > 0 {
+				chatInput = chatInput[:len(chatInput)-1]
+			}
+		}
+
+		if rl.IsKeyPressed(rl.KeyEnter) {
+			if len(chatInput) > 0 {
+				client.Send(&PacketChat{Message: chatInput})
+				chatInput = ""
+			}
+			isChatOpen = false
+			rl.DisableCursor()
+		}
+
+		if rl.IsKeyPressed(rl.KeyEscape) {
+			isChatOpen = false
+			rl.DisableCursor()
+		}
+
+		return // Block other inputs while chat is open
+	} else if rl.IsKeyPressed(rl.KeyEnter) {
+		isChatOpen = true
+		rl.EnableCursor()
+		// rl.SetMousePosition? No, let cursor be free.
+		return
+	}
+
 	if rl.IsKeyPressed(rl.KeyEscape) {
 		if input.InventoryOpen {
 			input.InventoryOpen = false
@@ -574,6 +618,29 @@ func handlePacket(pkt Packet) {
 			e.TX, e.TY, e.TZ = p.X, p.Y, p.Z
 			e.Yaw, e.Pitch = p.Yaw, p.Pitch
 		}
+
+	case *PacketPlayerMove:
+		// Server forcing position (Teleport)
+		// Usually client is authoritative, but if server sends it, we should respect.
+		// Update camera immediately.
+		camera.Position = rl.NewVector3(float32(p.X), float32(p.Y), float32(p.Z))
+		// Reset interpolation or smoothing?
+		// Also update last sent to avoid loop
+		client.LastSentX = p.X
+		client.LastSentY = p.Y
+		client.LastSentZ = p.Z
+		// We don't change Yaw/Pitch if they are 0 (which server sends on TP), unless we want to reset view.
+		// server sent 0,0. Let's keep view for now unless flag is set. Simple TP usually keeps rotation or sets it.
+		// Server code sent 0,0. Let's ignore rotation if 0,0? Or set it?
+		// Let's just set position.
+
+	case *PacketChat:
+		// Add to history
+		chatHistory = append(chatHistory, p.Message)
+		// Keep max 10
+		if len(chatHistory) > 10 {
+			chatHistory = chatHistory[len(chatHistory)-10:]
+		}
 	case *PacketEntityMeta:
 		if e, ok := remoteEntities[p.EntityID]; ok {
 			e.Metadata = p.Metadata
@@ -672,6 +739,28 @@ func drawGame() {
 		assets.drawInventory(input)
 	} else {
 		assets.drawHotbar(input)
+	}
+
+	// Chat UI
+	if len(chatHistory) > 0 || isChatOpen {
+		// Draw History
+		historyH := int32(len(chatHistory) * 20)
+		baseY := int32(rl.GetScreenHeight()) - 50 - historyH
+		if baseY < int32(rl.GetScreenHeight())/2 {
+			baseY = int32(rl.GetScreenHeight()) / 2
+		}
+
+		rl.DrawRectangle(5, baseY-5, 500, historyH+10, rl.NewColor(0, 0, 0, 100))
+		for i, msg := range chatHistory {
+			rl.DrawText(msg, 10, baseY+int32(i*20), 18, rl.White)
+		}
+	}
+
+	if isChatOpen {
+		// Draw Input
+		baseY := int32(rl.GetScreenHeight()) - 40
+		rl.DrawRectangle(5, baseY, 500, 30, rl.NewColor(0, 0, 0, 200))
+		rl.DrawText("> "+chatInput+"_", 10, baseY+6, 20, rl.Yellow)
 	}
 
 	if isPaused {
