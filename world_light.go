@@ -254,10 +254,10 @@ func (w *World) updateBlockLight(x, y, z int, oldBlock, newBlock byte) {
 	}
 
 	// FIX: Check if we can receive light from neighbors (inflow)
-	// This handles the case where an opaque block is removed (stone -> air)
-	// and should be lit by neighbors.
+	// This only applies if we were NOT already lit (i.e. mining opaque block)
+	// If we were lit (oldLight > 0), the decrease logic handles clearing and re-flooding.
 	calculatedLight := newEmit
-	if !isOpaqueBlock(newBlock) {
+	if oldLight == 0 && !isOpaqueBlock(newBlock) {
 		maxNb := byte(0)
 		neighbors := [][]int{{1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}}
 		for _, offset := range neighbors {
@@ -276,7 +276,7 @@ func (w *World) updateBlockLight(x, y, z int, oldBlock, newBlock byte) {
 	if calculatedLight > 0 {
 		w.setBlockLightAtInternal(x, y, z, calculatedLight)
 		increase = append(increase, node{x: x, y: y, z: z, l: calculatedLight})
-	} else if newEmit > 0 { // Should be covered above, but safe fallback
+	} else if newEmit > 0 {
 		w.setBlockLightAtInternal(x, y, z, newEmit)
 		increase = append(increase, node{x: x, y: y, z: z, l: newEmit})
 	}
@@ -394,9 +394,16 @@ func (w *World) updateSkyLight(x, y, z int) {
 				continue
 			}
 
-			if n.l == 15 && offset[1] == -1 {
-				// Special case: sunlight propagation downward
-			} else if light < n.l {
+			shouldRemove := false
+			if light < n.l {
+				shouldRemove = true
+			} else if n.l == 15 && offset[1] == -1 && light == 15 {
+				// Special case: Sunlight (15) propagates to sunlight (15) downwards.
+				// If we lose sunlight, the block below also loses it (unless it's a separate column, which is impossible if we are directly above it).
+				shouldRemove = true
+			}
+
+			if shouldRemove {
 				w.setSkyLightAtInternal(nx, ny, nz, 0)
 				decrease = append(decrease, node{nx, ny, nz, light})
 			} else if light >= n.l {
