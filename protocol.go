@@ -23,7 +23,57 @@ const (
 	IDGameMode        = 0x10
 	IDInventoryUpdate = 0x11
 	IDChat            = 0x12
+	IDSlotChange      = 0x13
+	IDClickWindow     = 0x14
+	IDChunkRequest    = 0x15
 )
+
+type PacketClickWindow struct {
+	SlotID     int32
+	Button     int32 // 0: Left, 1: Right
+	IsCreative bool  // Whether source is creative palette (for server logic)
+	// Mode? 0: Click, 1: ShiftClick, 2: Drop, etc. For now just Button.
+}
+
+func (p *PacketClickWindow) ID() int32 { return IDClickWindow }
+func (p *PacketClickWindow) Encode(w *bytes.Buffer) error {
+	WriteVarInt(w, p.SlotID)
+	WriteVarInt(w, p.Button)
+	if p.IsCreative {
+		w.WriteByte(1)
+	} else {
+		w.WriteByte(0)
+	}
+	return nil
+}
+func (p *PacketClickWindow) Decode(r *bytes.Buffer) error {
+	var err error
+	p.SlotID, err = ReadVarInt(r)
+	if err != nil {
+		return err
+	}
+	p.Button, err = ReadVarInt(r)
+	if err != nil {
+		return err
+	}
+	b, _ := r.ReadByte()
+	p.IsCreative = (b == 1)
+	return nil
+}
+
+type PacketSlotChange struct {
+	Slot int32
+}
+
+func (p *PacketSlotChange) ID() int32 { return IDSlotChange }
+func (p *PacketSlotChange) Encode(w *bytes.Buffer) error {
+	return WriteVarInt(w, p.Slot)
+}
+func (p *PacketSlotChange) Decode(r *bytes.Buffer) error {
+	var err error
+	p.Slot, err = ReadVarInt(r)
+	return err
+}
 
 type PacketChat struct {
 	Message string
@@ -84,7 +134,14 @@ type Packet interface {
 	Decode(r *bytes.Buffer) error
 }
 
-func WritePacket(conn io.Writer, p Packet) error {
+func WritePacket(conn io.Writer, p Packet) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Printf("PANIC in WritePacket for ID %d: %v\n", p.ID(), r)
+			err = fmt.Errorf("panic: %v", r)
+		}
+	}()
+
 	var buf bytes.Buffer
 	// 1. Write Packet ID as VarInt
 	WriteVarInt(&buf, p.ID())
@@ -99,7 +156,7 @@ func WritePacket(conn io.Writer, p Packet) error {
 	WriteVarInt(&final, int32(len(payload)))
 	final.Write(payload)
 
-	_, err := conn.Write(final.Bytes())
+	_, err = conn.Write(final.Bytes())
 	return err
 }
 
@@ -151,8 +208,14 @@ func ReadPacket(conn io.Reader) (Packet, error) {
 		p = &PacketGameMode{}
 	case IDInventoryUpdate:
 		p = &PacketInventoryUpdate{}
+	case IDSlotChange:
+		p = &PacketSlotChange{}
+	case IDClickWindow:
+		p = &PacketClickWindow{}
 	case IDChat:
 		p = &PacketChat{}
+	case IDChunkRequest:
+		p = &PacketChunkRequest{}
 	default:
 		return nil, fmt.Errorf("unknown packet ID: %d", id)
 	}
@@ -250,6 +313,25 @@ func (p *PacketBlockChange) Decode(r *bytes.Buffer) error {
 		return err
 	}
 	return binary.Read(r, binary.BigEndian, &p.BlockID)
+}
+
+type PacketChunkRequest struct {
+	CX, CZ int32
+}
+
+func (p *PacketChunkRequest) ID() int32 { return IDChunkRequest }
+func (p *PacketChunkRequest) Encode(w *bytes.Buffer) error {
+	_ = WriteVarInt(w, p.CX)
+	return WriteVarInt(w, p.CZ)
+}
+func (p *PacketChunkRequest) Decode(r *bytes.Buffer) error {
+	var err error
+	p.CX, err = ReadVarInt(r)
+	if err != nil {
+		return err
+	}
+	p.CZ, err = ReadVarInt(r)
+	return err
 }
 
 type PacketPlayerMove struct {

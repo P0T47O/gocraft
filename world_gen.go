@@ -75,8 +75,20 @@ func (w *World) genWorker() {
 	for key := range w.genQueue {
 		// Use a chunk from the pool to avoid 64KB allocation per chunk
 		chunk := w.allocChunk()
-		chunk.generated = true // Mark as generated immediately so it's valid when returned
-		generateChunkData(w.seed, key.X, key.Z, chunk)
+
+		// Try loading from saved data first (if SavePath is set)
+		if w.SavePath != "" && TryLoadChunk(w.SavePath, chunk, key.X, key.Z) {
+			// Successfully loaded from disk
+			chunk.generated = true
+			ensureChunkSections(chunk)
+			chunk.rebuildHeightMap()
+			chunk.rebuildTorchCount()
+		} else {
+			// No saved data or no save path, generate terrain
+			chunk.generated = true
+			generateChunkData(w.seed, key.X, key.Z, chunk)
+		}
+
 		w.genResults <- chunkGenResult{
 			key:   key,
 			chunk: chunk,

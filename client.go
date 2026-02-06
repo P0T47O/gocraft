@@ -17,6 +17,7 @@ type Client struct {
 	LastSentZ     float64
 	LastSentYaw   float32
 	LastSentPitch float32
+	Inventory     Inventory
 }
 
 func ConnectTCP(addr string, name string) (*Client, error) {
@@ -28,7 +29,7 @@ func ConnectTCP(addr string, name string) (*Client, error) {
 	c := &Client{
 		Conn:     conn,
 		Name:     name,
-		Incoming: make(chan Packet, 256),
+		Incoming: make(chan Packet, 4096),
 	}
 
 	// Reader Loop

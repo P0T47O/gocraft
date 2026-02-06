@@ -98,23 +98,33 @@ func (w *World) StartMeshWorkers(assets *RenderAssets, workers int) {
 	}
 	for i := 0; i < workers; i++ {
 		go func() {
-			defer func() {
-				if r := recover(); r != nil {
-					fmt.Printf("MeshWorker Panic: %v\n", r)
-				}
-			}()
 			for job := range w.meshJobs {
-				// Debug logging
-				// fmt.Printf("Starting mesh job: %v\n", job.key)
-				snapshot := buildMeshSnapshotFromNeighbors(job)
-				results := assets.buildAllMeshData(&job.heightMap, job.baseX, job.baseZ, job.yMin, job.yMax, snapshot.blockAt, snapshot.lightAt, snapshot.metaAt, w.seed)
-				snapshot.Release() // Return buffers to pool
-				w.meshResults <- meshResult{
-					key:     job.key,
-					results: results,
-					section: job.section,
-					version: job.version,
-				}
+				func() {
+					defer func() {
+						if r := recover(); r != nil {
+							fmt.Printf("MeshWorker Panic on Chunk %d,%d Section %d: %v\n", job.key.X, job.key.Z, job.section, r)
+							// Send empty result to clear pending flags and prevent deadlock
+							w.meshResults <- meshResult{
+								key:     job.key,
+								results: nil, // Partial/Nil result
+								section: job.section,
+								version: job.version,
+							}
+						}
+					}()
+
+					// Debug logging
+					// fmt.Printf("Starting mesh job: %v\n", job.key)
+					snapshot := buildMeshSnapshotFromNeighbors(job)
+					results := assets.buildAllMeshData(&job.heightMap, job.baseX, job.baseZ, job.yMin, job.yMax, snapshot.blockAt, snapshot.lightAt, snapshot.metaAt, w.seed)
+					snapshot.Release() // Return buffers to pool
+					w.meshResults <- meshResult{
+						key:     job.key,
+						results: results,
+						section: job.section,
+						version: job.version,
+					}
+				}()
 			}
 		}()
 	}
@@ -360,6 +370,32 @@ func (w *World) ProcessMeshResults(assets *RenderAssets, maxPerFrame int) {
 				chunk.pendingGlass[res.section] = false
 				continue
 			}
+
+			if res.results == nil {
+				// Job failed/panicked
+				chunk.meshRetries[res.section]++
+				if chunk.meshRetries[res.section] > 5 {
+					// Stop trying to mesh this section
+					chunk.sectionDirty[res.section] = false // Mark clean so we don't retry
+
+					// Clear pending implies we are done (failed)
+					chunk.pendingOpaque[res.section] = false
+					chunk.pendingWater[res.section] = false
+					chunk.pendingCutout[res.section] = false
+					chunk.pendingGlass[res.section] = false
+					fmt.Printf("Disabled corrupted Chunk Section %d,%d Sec %d after 5 retries\n", res.key.X, res.key.Z, res.section)
+				} else {
+					// Retry next frame
+					chunk.pendingOpaque[res.section] = false
+					chunk.pendingWater[res.section] = false
+					chunk.pendingCutout[res.section] = false
+					chunk.pendingGlass[res.section] = false
+				}
+				continue
+			}
+
+			// Success - Reset retries
+			chunk.meshRetries[res.section] = 0
 
 			// Clean up old meshes
 			passCleanup := func(meshes map[string][]*ChunkMesh) {

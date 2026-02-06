@@ -21,7 +21,8 @@ type World struct {
 	meshResults      chan meshResult
 	immediate        map[sectionKey]bool
 	chunkPool        *ChunkPool
-	IsClient         bool // True if this is a client-side world (rendering only)
+	IsClient         bool   // True if this is a client-side world (rendering only)
+	SavePath         string // Path to save directory (for loading saved chunks)
 
 	// Entity System
 	entities   []Entity
@@ -58,6 +59,7 @@ type Chunk struct {
 	glassMeshes   []map[string][]*ChunkMesh
 	skyLight      [chunkWidth][chunkHeight][chunkWidth]byte
 	blockLight    [chunkWidth][chunkHeight][chunkWidth]byte
+	meshRetries   [sectionCount]byte // Track failures to prevent infinite retry loops
 	dirty         bool
 	generated     bool
 	sectionDirty  []bool
@@ -98,8 +100,8 @@ func NewClientWorld() *World {
 		genQueue:    make(chan chunkKey, 512),
 		genResults:  make(chan chunkGenResult, 512),
 		pending:     map[chunkKey]bool{},
-		meshJobs:    make(chan meshJob, 128),
-		meshResults: make(chan meshResult, 128),
+		meshJobs:    make(chan meshJob, 4096),
+		meshResults: make(chan meshResult, 4096),
 		immediate:   map[sectionKey]bool{},
 		chunkPool:   NewChunkPool(1024),
 		IsClient:    true,
@@ -154,7 +156,7 @@ func (w *World) PlaceAdjacent(hit hitInfo, block byte) (int, int, int, bool) {
 	if ny < 0 || ny >= chunkHeight {
 		return 0, 0, 0, false
 	}
-	if w.BlockAt(nx, ny, nz) != blockAir {
+	if w.BlockAt(nx, ny, nz) != blockAir && w.BlockAt(nx, ny, nz) != blockWater {
 		return 0, 0, 0, false
 	}
 	if block == blockTorch {

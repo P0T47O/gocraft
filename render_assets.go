@@ -2,13 +2,16 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"strings"
+	"sync"
 
 	rl "github.com/gen2brain/raylib-go/raylib"
 )
 
 type RenderAssets struct {
+	mu              sync.RWMutex
 	textures        map[string]rl.Texture2D
 	faceMeshes      map[string]faceMesh
 	faceModels      map[string]rl.Model
@@ -150,6 +153,16 @@ func (a *RenderAssets) unload() {
 }
 
 func (a *RenderAssets) loadTexture(path string) rl.Texture2D {
+	a.mu.RLock()
+	if tex, ok := a.textures[path]; ok {
+		a.mu.RUnlock()
+		return tex
+	}
+	a.mu.RUnlock()
+
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	// Double check
 	if tex, ok := a.textures[path]; ok {
 		return tex
 	}
@@ -245,12 +258,26 @@ func (a *RenderAssets) loadTexture(path string) rl.Texture2D {
 }
 
 func (a *RenderAssets) getMaterial(path string, tex rl.Texture2D) rl.Material {
+	a.mu.RLock()
+	if mat, ok := a.materials[path]; ok {
+		a.mu.RUnlock()
+		return mat
+	}
+	a.mu.RUnlock()
+
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	// Double check
 	if mat, ok := a.materials[path]; ok {
 		return mat
 	}
 
 	material := rl.LoadMaterialDefault()
+	if material.Maps == nil {
+		fmt.Printf("ERROR: LoadMaterialDefault returned nil Maps for %s\n", path)
+	}
 	if tex.ID != 0 {
+		// fmt.Printf("DEBUG: SetMaterialTexture [%s] MatPtr=%p Maps=%p TexID=%d\n", path, &material, material.Maps, tex.ID)
 		rl.SetMaterialTexture(&material, rl.MapDiffuse, tex)
 	}
 

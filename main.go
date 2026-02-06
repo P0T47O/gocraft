@@ -31,9 +31,10 @@ const (
 )
 
 var (
-	chunkPool      *ChunkPool
-	perfMon        *PerformanceMonitor
-	remoteEntities = make(map[string]*RemoteEntity)
+	chunkPool            *ChunkPool
+	perfMon              *PerformanceMonitor
+	remoteEntities       = make(map[string]*RemoteEntity)
+	pendingChunkRequests = make(map[chunkKey]bool) // Track in-flight chunk requests
 
 	// CLI Flags
 	isServer   = flag.Bool("server", false, "Start as dedicated server")
@@ -93,6 +94,7 @@ func main() {
 
 	// Load Settings
 	settings := LoadSettings()
+	rl.SetTraceLogLevel(rl.LogWarning) // Suppress INFO logs (texture, etc.)
 	rl.InitWindow(int32(settings.ResolutionWidth), int32(settings.ResolutionHeight), "GoCraft")
 	rl.SetExitKey(0) // Disable default ESC exit to allow custom Pause Menu
 	defer rl.CloseWindow()
@@ -431,7 +433,12 @@ func exitGame() {
 	}
 	if server != nil {
 		server.Stop()
-		time.Sleep(200 * time.Millisecond)
+		// Wait for server to finish saving
+		select {
+		case <-server.Done:
+		case <-time.After(5 * time.Second): // Fail-safe
+			fmt.Println("Server shutdown timed out")
+		}
 		server = nil
 	}
 	if assets != nil {
@@ -534,10 +541,13 @@ Loop:
 		}
 	}
 
-	world.ProcessMeshResults(assets, 64)
+	world.ProcessMeshResults(assets, 512)
 
 	HandleInput(world, &camera, input, client)
 	world.ProcessImmediateMeshes(assets, 16)
+
+	// Client-Pull: Request any missing chunks
+	requestMissingChunks()
 
 	client.Update(&camera, input)
 
@@ -556,7 +566,64 @@ Loop:
 		// Use a static counter to throttle
 		// Accessing global or static var is ugly here, let's just run it. Map iteration of ~1000 items is fast.
 		// Radius 24 chunks (16 render + 8 buffer)
-		world.UnloadChunks(cx, cz, 24, nil)
+		world.UnloadChunks(cx, cz, 24, func(chunkX, chunkZ int) {
+			// Notify server that we unloaded this chunk
+			// So it knows to resend if we return
+			if client != nil {
+				client.Send(&PacketUnloadChunk{CX: int32(chunkX), CZ: int32(chunkZ)})
+			}
+		})
+	}
+}
+
+// Client-Pull: Request chunks we need but don't have
+func requestMissingChunks() {
+	if client == nil || world == nil {
+		return
+	}
+
+	pPos := camera.Position
+	cx := int(math.Floor(float64(pPos.X) / 16.0))
+	cz := int(math.Floor(float64(pPos.Z) / 16.0))
+	renderRadius := 16
+	maxRequestsPerFrame := 32 // Increased for faster loading
+
+	requestCount := 0
+
+	// Check chunks in render distance (spiral out from center)
+	for r := 0; r <= renderRadius && requestCount < maxRequestsPerFrame; r++ {
+		for dz := -r; dz <= r && requestCount < maxRequestsPerFrame; dz++ {
+			for dx := -r; dx <= r && requestCount < maxRequestsPerFrame; dx++ {
+				// Only check edge of current ring (optimization)
+				if r > 0 && dx > -r && dx < r && dz > -r && dz < r {
+					continue
+				}
+
+				// Match render distance: use circular (not square) range
+				if dx*dx+dz*dz > renderRadius*renderRadius {
+					continue
+				}
+
+				chunkX, chunkZ := cx+dx, cz+dz
+				key := chunkKey{X: chunkX, Z: chunkZ}
+
+				// Skip if already have this chunk
+				chunk := world.getChunkIfGenerated(chunkX, chunkZ)
+				if chunk != nil && chunk.generated {
+					continue
+				}
+
+				// Skip if already requested (but don't skip forever - re-request if too long)
+				if pendingChunkRequests[key] {
+					continue
+				}
+
+				// Request the chunk from server
+				pendingChunkRequests[key] = true
+				client.Send(&PacketChunkRequest{CX: int32(chunkX), CZ: int32(chunkZ)})
+				requestCount++
+			}
+		}
 	}
 }
 
@@ -564,6 +631,8 @@ func handlePacket(pkt Packet) {
 	switch p := pkt.(type) {
 	case *PacketChunkData:
 		cx, cz := int(p.CX), int(p.CZ)
+		// Clear pending request
+		delete(pendingChunkRequests, chunkKey{X: cx, Z: cz})
 		chunk := world.requestChunk(cx, cz)
 		chunk.mu.Lock()
 		idx := 0
@@ -650,9 +719,17 @@ func handlePacket(pkt Packet) {
 		fmt.Printf("GameMode switched to %d\n", p.Mode)
 
 	case *PacketInventoryUpdate:
-		if p.SlotID >= 0 && p.SlotID < 36 {
-			localInventory.Slots[p.SlotID] = Item{ID: p.ItemID, Count: p.Count}
-			// Sync Hotbar
+		if p.SlotID == -1 {
+			// Update Cursor Item (Held on mouse)
+			input.CursorItem = Item{ID: p.ItemID, Count: p.Count}
+		} else if p.SlotID >= 0 && p.SlotID < 36 {
+			// Update the authoritative inventory
+			if client != nil {
+				client.Inventory.Slots[p.SlotID] = Item{ID: p.ItemID, Count: p.Count}
+			} else {
+				localInventory.Slots[p.SlotID] = Item{ID: p.ItemID, Count: p.Count}
+			}
+			// Sync Hotbar input state
 			if p.SlotID < 9 {
 				input.Hotbar[p.SlotID] = byte(p.ItemID)
 				if input.SelectedSlot == int(p.SlotID) {

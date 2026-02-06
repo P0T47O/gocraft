@@ -23,8 +23,7 @@ type InputState struct {
 	Pitch         float32
 	Sensitivity   float32
 	MoveSpeed     float32
-	Dragging      bool
-	DragBlock     byte
+	CursorItem    Item // Held item on mouse cursor
 	InventoryPage int
 	ShowDebug     bool
 }
@@ -69,7 +68,7 @@ func (s *InputState) ToggleInventory() {
 	if s.InventoryOpen && rl.IsKeyPressed(rl.KeyEscape) {
 		s.InventoryOpen = false
 		s.SkipCamera = true
-		s.Dragging = false
+
 		rl.SetMousePosition(int32(rl.GetScreenWidth()/2), int32(rl.GetScreenHeight()/2))
 		rl.DisableCursor()
 	}
@@ -145,11 +144,17 @@ func (s *InputState) UpdateSelection(allowWheel bool) {
 		if s.SelectedSlot >= len(s.Hotbar) {
 			s.SelectedSlot = len(s.Hotbar) - 1
 		}
+		if client != nil {
+			client.Send(&PacketSlotChange{Slot: int32(s.SelectedSlot)})
+		}
 	}
 	for i := 0; i < 9; i++ {
 		if rl.IsKeyPressed(int32(rl.KeyOne + int32(i))) {
 			if i < len(s.Hotbar) {
 				s.SelectedSlot = i
+				if client != nil {
+					client.Send(&PacketSlotChange{Slot: int32(i)})
+				}
 			}
 			break
 		}
@@ -188,7 +193,7 @@ func resolveCollision(world *World, pos rl.Vector3, delta rl.Vector3) rl.Vector3
 func collides(world *World, pos rl.Vector3) bool {
 	feetY := pos.Y - playerEyeY
 	minX := pos.X - playerRadius - 0.001
-	maxX := pos.X + playerRadius + 0.001
+	maxX := pos.X + playerRadius - 0.001
 	minZ := pos.Z - playerRadius - 0.001
 	maxZ := pos.Z + playerRadius + 0.001
 	minY := feetY
@@ -205,7 +210,13 @@ func collides(world *World, pos rl.Vector3) bool {
 		for y := minBY; y <= maxBY; y++ {
 			for z := minBZ; z <= maxBZ; z++ {
 				if isSolidBlock(world.BlockAt(x, y, z)) {
-					return true
+					// Precise AABB check for centered blocks
+					bx, by, bz := float32(x), float32(y), float32(z)
+					if maxX > bx-0.5 && minX < bx+0.5 &&
+						maxY > by-0.5 && minY < by+0.5 &&
+						maxZ > bz-0.5 && minZ < bz+0.5 {
+						return true
+					}
 				}
 			}
 		}
@@ -228,6 +239,16 @@ func blockIndexFromCoord(v float32) int {
 func HandleInput(world *World, camera *rl.Camera3D, state *InputState, client *Client) hitInfo {
 	if rl.IsKeyPressed(rl.KeyF3) {
 		state.ShowDebug = !state.ShowDebug
+	}
+	if rl.IsKeyPressed(rl.KeyF1) {
+		if currentGameMode == ModeCreative {
+			currentGameMode = ModeSurvival
+		} else {
+			currentGameMode = ModeCreative
+		}
+		if client != nil {
+			client.Send(&PacketGameMode{Mode: byte(currentGameMode)})
+		}
 	}
 	state.ToggleInventory()
 	if state.SkipCamera {
@@ -273,14 +294,27 @@ func HandleInput(world *World, camera *rl.Camera3D, state *InputState, client *C
 	}
 
 	if hit.hit && rl.IsMouseButtonPressed(rl.MouseRightButton) {
-		px, py, pz, ok := world.PlaceAdjacent(hit, state.CurrentBlock)
-		if ok && client != nil {
-			client.Send(&PacketBlockChange{
-				X:       int32(px),
-				Y:       int32(py),
-				Z:       int32(pz),
-				BlockID: state.CurrentBlock,
-			})
+		nx := hit.x + int(math.Round(float64(hit.normal.X)))
+		ny := hit.y + int(math.Round(float64(hit.normal.Y)))
+		nz := hit.z + int(math.Round(float64(hit.normal.Z)))
+
+		canPlace := true
+		if isSolidBlock(state.CurrentBlock) {
+			if collidesWithBlock(camera.Position, nx, ny, nz) {
+				canPlace = false
+			}
+		}
+
+		if canPlace {
+			px, py, pz, ok := world.PlaceAdjacent(hit, state.CurrentBlock)
+			if ok && client != nil {
+				client.Send(&PacketBlockChange{
+					X:       int32(px),
+					Y:       int32(py),
+					Z:       int32(pz),
+					BlockID: state.CurrentBlock,
+				})
+			}
 		}
 	}
 
@@ -309,78 +343,272 @@ func (s *InputState) UpdateInventoryPage() {
 }
 
 func (s *InputState) UpdateInventorySelection(client *Client) {
-	if !rl.IsMouseButtonPressed(rl.MouseLeftButton) {
+	// Sync Hotbar Logic (always active)
+	if client != nil {
+		for i := 0; i < 9; i++ {
+			item := client.Inventory.Slots[i]
+			if item.ID != 0 {
+				s.Hotbar[i] = byte(item.ID)
+			} else {
+				s.Hotbar[i] = blockAir
+			}
+		}
+		s.CurrentBlock = s.Hotbar[s.SelectedSlot]
+	}
+
+	if !s.InventoryOpen {
 		return
 	}
-	layout := inventoryLayout()
+
+	// Constants
+	scale := inventoryScale()
+	w := float32(rl.GetScreenWidth())
+	h := float32(rl.GetScreenHeight())
 	mouse := rl.GetMousePosition()
+	leftClick := rl.IsMouseButtonPressed(rl.MouseLeftButton)
+	rightClick := rl.IsMouseButtonPressed(rl.MouseRightButton)
 
-	slotX := func(col int) float32 {
-		return layout.GridX + float32(col)*layout.Stride
+	// Unified Interaction Handler
+	handleSlotInteraction := func(slotIndex int, isCreativeSource bool) {
+		button := -1
+		if rl.IsMouseButtonPressed(rl.MouseLeftButton) {
+			button = 0
+		} else if rl.IsMouseButtonPressed(rl.MouseRightButton) {
+			button = 1
+		}
+
+		if button == -1 {
+			return
+		}
+
+		// Server Authoritative Mode (Survival)
+		if client != nil && !isCreativeSource {
+			client.Send(&PacketClickWindow{
+				SlotID:     int32(slotIndex),
+				Button:     int32(button),
+				IsCreative: false,
+			})
+			return
+		}
+
+		// Local / Creative Source Logic
+		// If Creative Source, we simulate picking even if connected (client side palette)
+		// Or we can send IsCreative=true in packet.
+		// For now, let's keep Creative Source local for "Cursor Filling"
+		// BUT if we want true server auth, we should send it.
+		// Let's keep strict server auth for Survival Inventory.
+
+		if isCreativeSource {
+			// Creative Palette Logic (Client Side for now, or send specific packet)
+			// Since our PacketClickWindow supports IsCreative, let's try sending it!
+			// But the server logic for IsCreative was "TODO".
+			// So let's keep Local logic for Creative Source for now to ensure it works.
+			if button == 0 { // Left
+				if slotIndex >= 0 && slotIndex < len(allBlocks) {
+					blockID := allBlocks[slotIndex]
+					if blockID != 0 {
+						s.CursorItem = Item{ID: int32(blockID), Count: MaxStackSize}
+						// If connected, maybe we should tell server we picked this up?
+						// Server thinks we have nothing.
+						// We need to sync Cursor to server.
+						// Existing PacketInventoryUpdate with Slot -1 will do this?
+						// But Client -> Server inventory update is "suspicous".
+						// For Creative, it's allowed.
+						if client != nil {
+							client.Send(&PacketInventoryUpdate{
+								SlotID: -1,
+								ItemID: int32(blockID),
+								Count:  MaxStackSize,
+							})
+						}
+					}
+				}
+			} else if button == 1 { // Right
+				if slotIndex >= 0 && slotIndex < len(allBlocks) {
+					blockID := allBlocks[slotIndex]
+					if blockID != 0 {
+						s.CursorItem = Item{ID: int32(blockID), Count: 1}
+						if client != nil {
+							client.Send(&PacketInventoryUpdate{
+								SlotID: -1,
+								ItemID: int32(blockID),
+								Count:  1,
+							})
+						}
+					}
+				}
+			}
+			return
+		}
+
+		// Offline Survival Logic (Fallback)
+		currentInventory := &localInventory
+		if slotIndex < 0 || slotIndex >= len(currentInventory.Slots) {
+			return
+		}
+		targetSlot := &currentInventory.Slots[slotIndex]
+		cursor := &s.CursorItem
+
+		if button == 0 { // Left Click
+			if cursor.ID == 0 {
+				if targetSlot.ID != 0 {
+					*cursor = *targetSlot
+					*targetSlot = Item{}
+				}
+			} else {
+				if targetSlot.ID == 0 {
+					*targetSlot = *cursor
+					*cursor = Item{}
+				} else if targetSlot.ID == cursor.ID {
+					space := int32(MaxStackSize) - targetSlot.Count
+					if space > 0 {
+						toAdd := cursor.Count
+						if toAdd > space {
+							toAdd = space
+						}
+						targetSlot.Count += toAdd
+						cursor.Count -= toAdd
+						if cursor.Count == 0 {
+							cursor.ID = 0
+						}
+					}
+				} else {
+					tmp := *cursor
+					*cursor = *targetSlot
+					*targetSlot = tmp
+				}
+			}
+		} else if button == 1 { // Right Click
+			if cursor.ID == 0 {
+				if targetSlot.ID != 0 {
+					split := int32(math.Ceil(float64(targetSlot.Count) / 2.0))
+					*cursor = Item{ID: targetSlot.ID, Count: split}
+					targetSlot.Count -= split
+					if targetSlot.Count == 0 {
+						targetSlot.ID = 0
+					}
+				}
+			} else {
+				if targetSlot.ID == 0 {
+					*targetSlot = Item{ID: cursor.ID, Count: 1}
+					cursor.Count--
+				} else if targetSlot.ID == cursor.ID {
+					if targetSlot.Count < MaxStackSize {
+						targetSlot.Count++
+						cursor.Count--
+					}
+				}
+				if cursor.Count == 0 {
+					cursor.ID = 0
+				}
+			}
+		}
 	}
-	slotY := func(row int) float32 {
-		return layout.GridY + float32(row)*layout.Stride
-	}
 
-	itemsPerPage := layout.Cols * layout.Rows
-	start := s.InventoryPage * itemsPerPage
+	// ---- CREATIVE MODE ----
+	if currentGameMode == ModeCreative {
+		layout := inventoryLayout()
+		itemsPerPage := layout.Cols * layout.Rows
+		start := s.InventoryPage * itemsPerPage
+		slotX := func(col int) float32 { return layout.GridX + float32(col)*layout.Stride }
+		slotY := func(row int) float32 { return layout.GridY + float32(row)*layout.Stride }
 
-	if s.Dragging {
+		for row := 0; row < layout.Rows; row++ {
+			for col := 0; col < layout.Cols; col++ {
+				index := start + row*layout.Cols + col
+				if index >= len(allBlocks) {
+					continue
+				}
+				x := slotX(col)
+				y := slotY(row)
+				if mouse.X >= x && mouse.X <= x+layout.SlotSize &&
+					mouse.Y >= y && mouse.Y <= y+layout.SlotSize {
+					handleSlotInteraction(index, true)
+				}
+			}
+		}
+
 		for col := 0; col < layout.Cols; col++ {
 			x := layout.HotbarX + float32(col)*layout.Stride
 			y := layout.HotbarY
 			if mouse.X >= x && mouse.X <= x+layout.SlotSize &&
 				mouse.Y >= y && mouse.Y <= y+layout.SlotSize {
-				s.Hotbar[col] = s.DragBlock
-				s.SelectedSlot = col
-				s.CurrentBlock = s.Hotbar[s.SelectedSlot]
-				s.Dragging = false
-				return
+				handleSlotInteraction(col, false)
 			}
 		}
 
-		// Check if click is outside inventory window (Drop item)
-		scale := inventoryScale()
 		winW := float32(176) * scale
 		winH := float32(196) * scale
-		// OriginX/Y from layout
-		if !rl.CheckCollisionPointRec(mouse, rl.NewRectangle(layout.OriginX, layout.OriginY, winW, winH)) {
-			// Dropped outside
+		if (leftClick || rightClick) &&
+			!rl.CheckCollisionPointRec(mouse, rl.NewRectangle(layout.OriginX, layout.OriginY, winW, winH)) {
+			s.CursorItem = Item{} // Drop
 			if client != nil {
-				val := int32(1<<8) | int32(s.DragBlock)
-				client.Send(&PacketPlayerAction{0, val}) // Action 0 (Drop)
+				client.Send(&PacketInventoryUpdate{SlotID: -1, ItemID: 0, Count: 0})
 			}
-			s.Dragging = false
-			s.DragBlock = 0
 		}
-		return
-	}
 
-	for row := 0; row < layout.Rows; row++ {
-		for col := 0; col < layout.Cols; col++ {
-			index := start + row*layout.Cols + col
-			if index >= len(allBlocks) {
-				continue
-			}
-			x := slotX(col)
-			y := slotY(row)
-			if mouse.X >= x && mouse.X <= x+layout.SlotSize &&
-				mouse.Y >= y && mouse.Y <= y+layout.SlotSize {
-				s.Dragging = true
-				s.DragBlock = allBlocks[index]
-				return
-			}
+	} else {
+		// ---- SURVIVAL MODE ----
+		slotSize := 36 * scale / 2
+		if slotSize < 32 {
+			slotSize = 32
 		}
-	}
+		stride := slotSize + 4
+		cols := 9
+		rows := 3
 
-	for col := 0; col < layout.Cols; col++ {
-		x := layout.HotbarX + float32(col)*layout.Stride
-		y := layout.HotbarY
-		if mouse.X >= x && mouse.X <= x+layout.SlotSize &&
-			mouse.Y >= y && mouse.Y <= y+layout.SlotSize {
-			s.SelectedSlot = col
-			s.CurrentBlock = s.Hotbar[s.SelectedSlot]
-			return
+		invW := float32(cols)*stride + 20
+		invH := float32(rows+1)*stride + 60
+		startX := (w - invW) / 2
+		startY := (h - invH) / 2
+		hotbarY := startY + invH - stride - 10
+		mainY := startY + 40
+
+		checkAndHandle := func(slotIndex int, x, y float32) {
+			if mouse.X >= x && mouse.X <= x+slotSize &&
+				mouse.Y >= y && mouse.Y <= y+slotSize {
+				handleSlotInteraction(slotIndex, false)
+			}
+		}
+
+		for i := 0; i < 9; i++ {
+			x := startX + 10 + float32(i)*stride
+			checkAndHandle(i, x, hotbarY)
+		}
+		for i := 9; i < 36; i++ {
+			idx := i - 9
+			r := idx / 9
+			c := idx % 9
+			x := startX + 10 + float32(c)*stride
+			y := mainY + float32(r)*stride
+			checkAndHandle(i, x, y)
+		}
+
+		if (leftClick || rightClick) &&
+			!rl.CheckCollisionPointRec(mouse, rl.NewRectangle(startX, startY, invW, invH)) {
+			s.CursorItem = Item{}
+			if client != nil {
+				client.Send(&PacketInventoryUpdate{SlotID: -1, ItemID: 0, Count: 0})
+			}
 		}
 	}
+}
+
+func collidesWithBlock(pos rl.Vector3, bx, by, bz int) bool {
+	feetY := pos.Y - playerEyeY
+	minX := pos.X - playerRadius
+	maxX := pos.X + playerRadius
+	minZ := pos.Z - playerRadius
+	maxZ := pos.Z + playerRadius
+	minY := feetY
+	maxY := feetY + playerHeight
+
+	// Block AABB (Centered)
+	// Check intersection (A.min < B.max && A.max > B.min)
+	if maxX > float32(bx)-0.5 && minX < float32(bx)+0.5 &&
+		maxY > float32(by)-0.5 && minY < float32(by)+0.5 &&
+		maxZ > float32(bz)-0.5 && minZ < float32(bz)+0.5 {
+		return true
+	}
+	return false
 }

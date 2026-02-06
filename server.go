@@ -16,6 +16,7 @@ type Server struct {
 	ClientsMu sync.RWMutex
 	PacketCh  chan PacketWrapper
 	Shutdown  chan bool
+	Done      chan bool
 
 	// Initial player state (Loaded from save)
 	InitialPosX, InitialPosY, InitialPosZ float64
@@ -50,6 +51,9 @@ func NewServer(savePath string) *Server {
 	// Authoritative Load (MUST BE BEFORE STARTING WORKERS)
 	hasPos, px, py, pz, _ := LoadWorld(savePath, world)
 
+	// Set save path for chunk loading in background workers
+	world.SavePath = savePath
+
 	// Now we can start the workers with the correct seed
 	fmt.Printf("Server: Authoritative Seed Loaded: %d\n", world.seed)
 	world.StartBackend()
@@ -59,6 +63,7 @@ func NewServer(savePath string) *Server {
 		Clients:       make(map[string]*ClientConnection),
 		PacketCh:      make(chan PacketWrapper, 1024),
 		Shutdown:      make(chan bool),
+		Done:          make(chan bool),
 		InitialPosX:   px,
 		InitialPosY:   py,
 		InitialPosZ:   pz,
@@ -106,6 +111,7 @@ func (s *Server) Start() {
 		select {
 		case <-s.Shutdown:
 			s.Save()
+			close(s.Done)
 			return
 		case <-ticker.C:
 			s.Tick()
@@ -129,12 +135,36 @@ func (s *Server) Save() {
 	if err := SaveEntities(s.SavePath, s.World); err != nil {
 		fmt.Printf("Server Save Entities Error: %v\n", err)
 	}
-	// 3. Save Player (Authoritative local player if exists)
-	// In integrated server, we use the local client's position if possible
-	// For now, we rely on the last PacketPlayerMove update in s.InitialPos
-	// Actually we should capture the last known position of the local client
-	if err := SavePlayerState(s.SavePath, float32(s.InitialPosX), float32(s.InitialPosY), float32(s.InitialPosZ), 0, make([]byte, 9), s.World.seed); err != nil {
-		fmt.Printf("Server Save Player Error: %v\n", err)
+	// 3. Save Player (Authoritative)
+	// Find the player entity to save
+	s.World.entitiesMu.RLock()
+	var player *PlayerEntity
+	for _, e := range s.World.entities {
+		if p, ok := e.(*PlayerEntity); ok {
+			// For singleplayer/host, we pick the first player or specific one if we knew the name.
+			// Currently we save to 'player.bin' which implies single player.
+			player = p
+			break
+		}
+	}
+	s.World.entitiesMu.RUnlock()
+
+	if player != nil {
+		// Serialize Hotbar
+		hotbarBytes := make([]byte, 9)
+		for i := 0; i < 9; i++ {
+			hotbarBytes[i] = byte(player.Inventory.Slots[i].ID)
+		}
+
+		fmt.Printf("Saving Player: %s at %.2f, %.2f, %.2f (Seed: %d)\n", player.UUID, player.X, player.Y, player.Z, s.World.seed)
+		if err := SavePlayerState(s.SavePath, float32(player.X), float32(player.Y), float32(player.Z), player.SelectedSlot, hotbarBytes, s.World.seed); err != nil {
+			fmt.Printf("Server Save Player Error: %v\n", err)
+		}
+	} else {
+		// Fallback if no player entity found (e.g. just started server and quit)
+		if err := SavePlayerState(s.SavePath, float32(s.InitialPosX), float32(s.InitialPosY), float32(s.InitialPosZ), 0, make([]byte, 9), s.World.seed); err != nil {
+			fmt.Printf("Server Save Player Fallback Error: %v\n", err)
+		}
 	}
 	fmt.Println("Server: World saved successfully.")
 }
@@ -160,8 +190,16 @@ func (s *Server) Tick() {
 	if len(playerPositions) > 0 {
 		// Define unload callback to notify clients (Optional, but good for sync)
 		onUnload := func(cx, cz int) {
-			// s.Broadcast(&PacketUnloadChunk{CX: int32(cx), CZ: int32(cz)})
-			// Client manages own memory now, so suppression is fine.
+			s.Broadcast(&PacketUnloadChunk{CX: int32(cx), CZ: int32(cz)})
+			key := chunkKey{X: cx, Z: cz}
+
+			// Crucial: Tell server to forget that clients know this chunk.
+			// So next time they come close, we resend it.
+			s.ClientsMu.RLock()
+			for _, c := range s.Clients {
+				delete(c.KnownChunks, key)
+			}
+			s.ClientsMu.RUnlock()
 		}
 
 		// Custom Unload Logic for Multiplayer support
@@ -218,6 +256,14 @@ func (s *Server) Tick() {
 		// Delete chunks
 		for _, key := range toRemove {
 			chunk := s.World.chunks[key]
+
+			// SAVE BEFORE UNLOAD
+			if chunk.dirty {
+				if err := SaveChunk(s.SavePath, chunk, key.X, key.Z); err != nil {
+					fmt.Printf("Error saving chunk %d,%d during unload: %v\n", key.X, key.Z, err)
+				}
+			}
+
 			delete(s.World.chunks, key)
 
 			// Safe Free (using our new thread-safe freeChunk)
@@ -542,10 +588,16 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 			spawnX, spawnY, spawnZ = float64(sx), float64(s.World.HeightAt(sx, sz))+2.0, float64(sz)
 		}
 
-		s.Clients[p.Username].Send <- &PacketSpawnPoint{
-			X: spawnX,
-			Y: spawnY,
-			Z: spawnZ,
+		s.ClientsMu.RLock()
+		client, ok := s.Clients[p.Username]
+		s.ClientsMu.RUnlock()
+
+		if ok {
+			client.Send <- &PacketSpawnPoint{
+				X: spawnX,
+				Y: spawnY,
+				Z: spawnZ,
+			}
 		}
 
 		// 3. Send Existing Entities
@@ -562,15 +614,20 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 				meta = int32(item.ItemID) | (int32(item.Count) << 8)
 			}
 
-			s.Clients[p.Username].Send <- &PacketEntitySpawn{
-				EntityID: e.GetUUID(),
-				Type:     e.GetType(),
-				X:        ex,
-				Y:        ey,
-				Z:        ez,
-				Yaw:      eyaw,
-				Pitch:    epitch,
-				Metadata: meta,
+			s.ClientsMu.RLock()
+			client, ok := s.Clients[p.Username]
+			s.ClientsMu.RUnlock()
+			if ok {
+				client.Send <- &PacketEntitySpawn{
+					EntityID: e.GetUUID(),
+					Type:     e.GetType(),
+					X:        ex,
+					Y:        ey,
+					Z:        ez,
+					Yaw:      eyaw,
+					Pitch:    epitch,
+					Metadata: meta,
+				}
 			}
 		}
 		s.World.entitiesMu.RUnlock()
@@ -683,16 +740,28 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 		if p.BlockID != blockAir {
 			// Placement Logic
 			if player.GameMode == ModeSurvival {
-				// Try to consume 1 of this block
-				if !player.Inventory.Consume(int32(p.BlockID), 1) {
-					// Failed to consume (cheating? lag?), revert client block
-					// We need to send a BlockChange back to client with AIR (or whatever is actually there)
-					fmt.Printf("Player %s tried to place Block %d without item.\n", wrap.From, p.BlockID)
-					// In a real server, we'd resend the chunk section or specific block
-					// For now, let's just ignore the placement which causes a desync until chunk update,
-					// or we can explicitly set it back to air on client
-					s.BroadcastTo(wrap.From, &PacketBlockChange{X: p.X, Y: p.Y, Z: p.Z, BlockID: blockAir})
-					return
+				// 1. Try to consume from selected slot FIRST
+				consumed := false
+				slotIdx := player.SelectedSlot
+				if slotIdx >= 0 && slotIdx < 36 {
+					slot := &player.Inventory.Slots[slotIdx]
+					if slot.ID == int32(p.BlockID) && slot.Count > 0 {
+						slot.Count--
+						if slot.Count == 0 {
+							slot.ID = 0
+						}
+						consumed = true
+					}
+				}
+
+				// 2. Fallback to general consume if not found in hand
+				if !consumed {
+					if !player.Inventory.Consume(int32(p.BlockID), 1) {
+						// Failed to consume (cheating? lag?), revert client block
+						fmt.Printf("Player %s tried to place Block %d without item.\n", wrap.From, p.BlockID)
+						s.BroadcastTo(wrap.From, &PacketBlockChange{X: p.X, Y: p.Y, Z: p.Z, BlockID: blockAir})
+						return
+					}
 				}
 				// Sync Inventory
 				s.SendInventory(player)
@@ -715,6 +784,170 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 		if ok {
 			key := chunkKey{X: int(p.CX), Z: int(p.CZ)}
 			delete(client.KnownChunks, key)
+		}
+
+	case *PacketInventoryUpdate:
+		// Client synced inventory (Creative Pick or Sync)
+		s.World.entitiesMu.RLock()
+		var player *PlayerEntity
+		for _, e := range s.World.entities {
+			if e.GetUUID() == wrap.From {
+				player = e.(*PlayerEntity)
+				break
+			}
+		}
+		s.World.entitiesMu.RUnlock()
+
+		if player != nil {
+			// Handle Cursor Update (Slot -1)
+			if p.SlotID == -1 {
+				// Only allow arbitrary cursor setting in Creative Mode?
+				// For now let's allow it generally or check GameMode if strict.
+				// Since we use this for robust sync, let's allow it.
+				player.CursorItem = Item{ID: p.ItemID, Count: p.Count}
+			} else if p.SlotID >= 0 && p.SlotID < 36 {
+				player.Inventory.Slots[p.SlotID] = Item{ID: p.ItemID, Count: p.Count}
+				// fmt.Printf("Server: Updated slot %d for %s to %d:%d\n", p.SlotID, wrap.From, p.ItemID, p.Count)
+			}
+		}
+
+	case *PacketSlotChange:
+		s.World.entitiesMu.RLock()
+		var player *PlayerEntity
+		for _, e := range s.World.entities {
+			if e.GetUUID() == wrap.From {
+				player = e.(*PlayerEntity)
+				break
+			}
+		}
+		s.World.entitiesMu.RUnlock()
+
+		if player != nil {
+			if p.Slot >= 0 && p.Slot < 9 {
+				player.SelectedSlot = int(p.Slot)
+			}
+		}
+
+	case *PacketClickWindow:
+		s.World.entitiesMu.RLock()
+		var player *PlayerEntity
+		for _, e := range s.World.entities {
+			if e.GetUUID() == wrap.From {
+				player = e.(*PlayerEntity)
+				break
+			}
+		}
+		s.World.entitiesMu.RUnlock()
+
+		if player != nil {
+			if p.IsCreative {
+				// Creative Pick (Client authority for palette acts as "spawn item")
+				// We trust the client is picking a valid block from palette.
+				// Put it in Cursor? Or directly in Slot?
+				// Usually Creative Pick puts directly in Slot (handled by InventoryUpdate for legacy)
+				// But let's support "Pick to Cursor" -> "Place in Slot".
+				// For now, let's assume Creative Palette pickup sends specific slot update.
+				// If p.SlotID is -1 (outside), maybe it's dropping?
+				// Let's implement basic Creative Cursor Set:
+				// If clicking inside inventory with creative flag, maybe just Fill Stack?
+				// For simplicity, let's defer Creative logic to client sending SetSlot,
+				// OR if we want server authoritative, we need to know what they clicked in the palette.
+				// Since palette is static, we could validate.
+				// BUT, user's request is about Survival logic mostly.
+			} else {
+				// Survival Logic
+				// Slot -999 is usually "Drop Outside" in MC, but we can stick to 0-35 for now.
+				if p.SlotID >= 0 && p.SlotID < 36 {
+					slot := &player.Inventory.Slots[p.SlotID]
+					cursor := &player.CursorItem
+
+					// Logic mirroring input.go
+					if p.Button == 0 { // Left Click
+						if cursor.ID == 0 {
+							// Pickup / Swap
+							if slot.ID != 0 {
+								// Pickup
+								*cursor = *slot
+								*slot = Item{}
+							}
+						} else {
+							// Place / Swap / Stack
+							if slot.ID == 0 {
+								// Place All
+								*slot = *cursor
+								*cursor = Item{}
+							} else if slot.ID == cursor.ID {
+								// Stack
+								space := int32(64) - slot.Count
+								if space > 0 {
+									toAdd := cursor.Count
+									if toAdd > space {
+										toAdd = space
+									}
+									slot.Count += toAdd
+									cursor.Count -= toAdd
+									if cursor.Count == 0 {
+										cursor.ID = 0
+									}
+								}
+							} else {
+								// Swap
+								temp := *slot
+								*slot = *cursor
+								*cursor = temp
+							}
+						}
+					} else if p.Button == 1 { // Right Click
+						if cursor.ID == 0 {
+							if slot.ID != 0 {
+								// Split (Take Half)
+								half := slot.Count / 2
+								rem := slot.Count - half
+								if half > 0 {
+									cursor.ID = slot.ID
+									cursor.Count = half
+									slot.Count = rem
+									if slot.Count == 0 {
+										slot.ID = 0
+									}
+								}
+							}
+						} else {
+							// Place One
+							if slot.ID == 0 {
+								slot.ID = cursor.ID
+								slot.Count = 1
+								cursor.Count--
+							} else if slot.ID == cursor.ID {
+								if slot.Count < 64 {
+									slot.Count++
+									cursor.Count--
+								}
+							}
+							if cursor.Count == 0 {
+								cursor.ID = 0
+							}
+						}
+					}
+
+					// Send Updates
+					// 1. Update Clicked Slot
+					s.SendTo(wrap.From, &PacketInventoryUpdate{
+						SlotID: p.SlotID,
+						ItemID: slot.ID,
+						Count:  slot.Count,
+					})
+					// 2. Update Cursor (Slot -1? Or special packet?)
+					// MC uses SetSlot -1 for cursor.
+					// We need to support SlotID -1 in InventoryUpdate or add PacketSetCursor.
+					// Let's reuse InventoryUpdate with SlotID -1 for Cursor.
+					s.SendTo(wrap.From, &PacketInventoryUpdate{
+						SlotID: -1,
+						ItemID: cursor.ID,
+						Count:  cursor.Count,
+					})
+				}
+			}
 		}
 
 	case *PacketPlayerAction:
@@ -801,8 +1034,82 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 			Age:         0,
 		}
 		s.SpawnEntity(item)
-	}
-}
+
+	case *PacketChunkRequest:
+		// Client-Pull: Client requests a specific chunk
+		cx, cz := int(p.CX), int(p.CZ)
+
+		// Validate: Is the request within legal range?
+		s.ClientsMu.RLock()
+		client, ok := s.Clients[wrap.From]
+		s.ClientsMu.RUnlock()
+
+		if !ok {
+			return
+		}
+
+		// Check distance from player's last known position
+		dx := cx - client.LastChunkX
+		dz := cz - client.LastChunkZ
+		maxRange := 18 // Render distance + buffer
+
+		if dx*dx+dz*dz > maxRange*maxRange {
+			// Request is too far, ignore (anti-cheat)
+			return
+		}
+
+		// Get or create chunk
+		chunk := s.World.ensureChunk(cx, cz)
+		if chunk == nil {
+			return
+		}
+
+		// If chunk not generated, try loading from disk, then generate
+		if !chunk.generated {
+			chunk.mu.Lock()
+			// Double-check inside lock (another goroutine might have loaded it)
+			if !chunk.generated {
+				// Try loading from saved data first
+				if TryLoadChunk(s.SavePath, chunk, cx, cz) {
+					// Successfully loaded from disk
+					ensureChunkSections(chunk)
+					chunk.rebuildHeightMap()
+					chunk.rebuildTorchCount()
+				} else {
+					// No saved data, generate terrain
+					generateChunkData(s.World.seed, cx, cz, chunk)
+					ensureChunkSections(chunk)
+				}
+				chunk.generated = true
+			}
+			chunk.mu.Unlock()
+		}
+
+		// Serialize and send
+		data := make([]byte, chunkWidth*chunkHeight*chunkWidth)
+		light := make([]byte, chunkWidth*chunkHeight*chunkWidth)
+
+		chunk.mu.RLock()
+		idx := 0
+		for lx := 0; lx < chunkWidth; lx++ {
+			for y := 0; y < chunkHeight; y++ {
+				for lz := 0; lz < chunkWidth; lz++ {
+					data[idx] = chunk.blocks[lx][y][lz]
+					light[idx] = (chunk.skyLight[lx][y][lz] << 4) | (chunk.blockLight[lx][y][lz] & 0x0F)
+					idx++
+				}
+			}
+		}
+		chunk.mu.RUnlock()
+
+		client.Send <- &PacketChunkData{
+			CX:        int32(cx),
+			CZ:        int32(cz),
+			Data:      data,
+			LightData: light,
+		}
+	} // End of switch
+} // End of HandlePacket
 
 func (s *Server) SendChunksAround(username string, centerCX, centerCZ, radius int) {
 	s.ClientsMu.RLock()

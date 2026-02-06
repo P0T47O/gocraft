@@ -121,6 +121,11 @@ func (w *World) Draw(assets *RenderAssets, camera rl.Camera3D) {
 				continue
 			}
 
+			// Skip broken chunks
+			if chunk.meshRetries[sec] > 5 {
+				continue
+			}
+
 			rebuildWater := (chunk.sectionDirty[sec] || chunk.waterMeshes[sec] == nil) && !chunk.pendingWater[sec]
 			rebuildOpaque := (chunk.sectionDirty[sec] || chunk.opaqueMeshes[sec] == nil) && !chunk.pendingOpaque[sec]
 			rebuildCutout := (chunk.sectionDirty[sec] || chunk.cutoutMeshes[sec] == nil) && !chunk.pendingCutout[sec]

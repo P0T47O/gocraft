@@ -19,11 +19,12 @@ func (w *World) rayCast(ray rl.Ray, maxDist float32) hitInfo {
 	oy := ray.Position.Y
 	oz := ray.Position.Z
 
+	// Centered coordinates: Block 0 is [-0.5, 0.5]
 	x := int(math.Floor(float64(ox + 0.5)))
 	y := int(math.Floor(float64(oy + 0.5)))
 	z := int(math.Floor(float64(oz + 0.5)))
 
-	if w.BlockAt(x, y, z) != blockAir {
+	if w.BlockAt(x, y, z) != blockAir && w.BlockAt(x, y, z) != blockWater {
 		return hitInfo{x: x, y: y, z: z, hit: true}
 	}
 
@@ -71,7 +72,7 @@ func (w *World) rayCast(ray rl.Ray, maxDist float32) hitInfo {
 		if dist > maxDist {
 			break
 		}
-		if w.BlockAt(x, y, z) != blockAir {
+		if w.BlockAt(x, y, z) != blockAir && w.BlockAt(x, y, z) != blockWater {
 			return hitInfo{
 				x:        x,
 				y:        y,

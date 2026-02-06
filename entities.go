@@ -175,8 +175,10 @@ const (
 
 type PlayerEntity struct {
 	BaseEntity
-	GameMode  byte
-	Inventory Inventory
+	GameMode     byte
+	Inventory    Inventory
+	SelectedSlot int
+	CursorItem   Item // Held on mouse
 }
 
 func (p *PlayerEntity) Tick(world *World) {

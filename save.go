@@ -173,6 +173,20 @@ func SaveChunk(savePath string, chunk *Chunk, chunkX, chunkZ int) error {
 	return nil
 }
 
+// TryLoadChunk attempts to load a chunk from disk.
+// Returns true if loaded successfully, false if file doesn't exist.
+func TryLoadChunk(savePath string, chunk *Chunk, chunkX, chunkZ int) bool {
+	err := loadChunkFile(savePath, chunkX, 0, chunkZ, &chunk.blocks, &chunk.meta)
+	if err != nil {
+		// File doesn't exist or error - needs generation
+		return false
+	}
+	// Successfully loaded from disk
+	chunk.generated = true
+	chunk.dirty = false // Just loaded, not modified yet
+	return true
+}
+
 func LoadGame(savePath string, world *World, state *InputState, camera *rl.Camera3D) error {
 	if err := loadAllChunks(savePath, world); err != nil {
 		return err
@@ -180,7 +194,7 @@ func LoadGame(savePath string, world *World, state *InputState, camera *rl.Camer
 	if err := loadPlayerFile(savePath, state, camera, world); err != nil {
 		return err
 	}
-	state.Dragging = false
+
 	world.ClearDirty()
 	return nil
 }
@@ -333,7 +347,7 @@ func LoadGameIfExists(savePath string, world *World, state *InputState, camera *
 		if err := loadPlayerFile(savePath, state, camera, world); err != nil {
 			return false, false, err
 		}
-		state.Dragging = false
+
 	}
 	world.ClearDirty()
 	return chunkExists, playerExists, nil

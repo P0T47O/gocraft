@@ -10,9 +10,30 @@ func (a *RenderAssets) drawCrosshair() {
 	scale := uiScale()
 	cx := int32(rl.GetScreenWidth() / 2)
 	cy := int32(rl.GetScreenHeight() / 2)
-	half := int32(6 * scale)
-	rl.DrawLine(cx-half, cy, cx+half, cy, rl.Black)
-	rl.DrawLine(cx, cy-half, cx, cy+half, rl.Black)
+
+	// Settings for high visibility
+	length := int32(8 * scale)
+	thickness := int32(2 * scale)
+	if thickness < 2 {
+		thickness = 2
+	}
+	// Make sure thickness is even for perfect centering
+	if thickness%2 != 0 {
+		thickness++
+	}
+
+	// 1. Draw Black Outline (Outer Border)
+	border := int32(2)
+	// Horizontal Outline
+	rl.DrawRectangle(cx-length-border, cy-thickness/2-border, length*2+border*2, thickness+border*2, rl.Black)
+	// Vertical Outline
+	rl.DrawRectangle(cx-thickness/2-border, cy-length-border, thickness+border*2, length*2+border*2, rl.Black)
+
+	// 2. Draw White Inner Cross
+	// Horizontal
+	rl.DrawRectangle(cx-length, cy-thickness/2, length*2, thickness, rl.White)
+	// Vertical
+	rl.DrawRectangle(cx-thickness/2, cy-length, thickness, length*2, rl.White)
 }
 
 func (a *RenderAssets) drawHotbar(state *InputState) {
@@ -40,7 +61,12 @@ func (a *RenderAssets) drawHotbar(state *InputState) {
 
 	for i, b := range hotbarBlocks {
 		if currentGameMode == ModeSurvival {
-			item := localInventory.Slots[i]
+			var item Item
+			if client != nil {
+				item = client.Inventory.Slots[i]
+			} else {
+				item = localInventory.Slots[i]
+			}
 			if item.ID != 0 {
 				iconX := hbX + float32(i)*slotWidth*scale + (slotWidth*scale-slotSize)/2
 				iconY := hbY + (hotbarHeight-slotSize)/2
@@ -96,8 +122,12 @@ func (a *RenderAssets) drawInventory(state *InputState) {
 	drawFrames := a.inventoryTex.ID == 0
 	a.drawSlotGrid(layout, allBlocks[start:end], drawFrames)
 	a.drawHotbarSlots(layout, state, drawFrames)
-	if state.Dragging {
-		a.drawDraggedIcon(state.DragBlock, layout.SlotSize)
+	if state.CursorItem.ID != 0 {
+		a.drawDraggedIcon(byte(state.CursorItem.ID), layout.SlotSize)
+		if state.CursorItem.Count > 1 {
+			mouse := rl.GetMousePosition()
+			rl.DrawText(fmt.Sprintf("%d", state.CursorItem.Count), int32(mouse.X), int32(mouse.Y), 20, rl.White)
+		}
 	}
 }
 
@@ -142,7 +172,12 @@ func (a *RenderAssets) drawSurvivalInventory(state *InputState) {
 
 		a.drawSlot(x, y, slotSize)
 
-		item := localInventory.Slots[i]
+		var item Item
+		if client != nil {
+			item = client.Inventory.Slots[i]
+		} else {
+			item = localInventory.Slots[i]
+		}
 		if item.ID != 0 {
 			a.drawIcon(byte(item.ID), x, y, slotSize)
 			if item.Count > 1 {
@@ -157,12 +192,25 @@ func (a *RenderAssets) drawSurvivalInventory(state *InputState) {
 		x := startX + 10 + float32(i)*stride
 		a.drawSlot(x, hotbarY, slotSize)
 
-		item := localInventory.Slots[i]
+		var item Item
+		if client != nil {
+			item = client.Inventory.Slots[i]
+		} else {
+			item = localInventory.Slots[i]
+		}
 		if item.ID != 0 {
 			a.drawIcon(byte(item.ID), x, hotbarY, slotSize)
 			if item.Count > 1 {
 				rl.DrawText(fmt.Sprintf("%d", item.Count), int32(x+slotSize-30), int32(hotbarY+slotSize-25), 20, rl.White)
 			}
+		}
+	}
+
+	if state.CursorItem.ID != 0 {
+		a.drawDraggedIcon(byte(state.CursorItem.ID), slotSize)
+		if state.CursorItem.Count > 1 {
+			mouse := rl.GetMousePosition()
+			rl.DrawText(fmt.Sprintf("%d", state.CursorItem.Count), int32(mouse.X), int32(mouse.Y), 20, rl.White)
 		}
 	}
 }
