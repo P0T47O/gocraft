@@ -29,6 +29,8 @@ type RenderAssets struct {
 	cutoutShader    rl.Shader
 	fogShader       rl.Shader
 	atlas           *TextureAtlas
+	CrackTextures   [10]rl.Texture2D
+	crackModel      rl.Model
 }
 
 type AnimatedTexture struct {
@@ -87,6 +89,12 @@ func loadRenderAssets() *RenderAssets {
 	// Explicitly load grass side overlay for multi-pass rendering
 	assets.loadTexture("textures/block/grass_block_side_overlay.png")
 
+	// Load crack animation textures
+	for i := 0; i < 10; i++ {
+		path := fmt.Sprintf("textures/block/destroy_stage_%d.png", i)
+		assets.CrackTextures[i] = assets.loadTexture(path)
+	}
+
 	assets.generateAtlas()
 	assets.cutoutShader = loadCutoutShader()
 	assets.fogShader = assets.loadFogShader()
@@ -94,6 +102,10 @@ func loadRenderAssets() *RenderAssets {
 	assets.initFaceModels()
 	assets.initIcons()
 	assets.initCrossItemModels()
+
+	// Initialize crack model (unit cube)
+	cubeMesh := rl.GenMeshCube(1.0, 1.0, 1.0)
+	assets.crackModel = rl.LoadModelFromMesh(cubeMesh)
 
 	return assets
 }

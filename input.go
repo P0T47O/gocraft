@@ -10,6 +10,19 @@ const (
 	playerRadius = 0.3
 	playerHeight = 1.8
 	playerEyeY   = 1.62
+
+	// Movement speeds (blocks/sec)
+	walkSpeed = 4.3
+	runSpeed  = 6.45 // 1.5x walk speed
+	flySpeed  = 30.0
+
+	// Physics constants
+	gravity      = 32.0 // blocks/sec²
+	jumpVelocity = 8.5  // Initial jump velocity (~1.25 blocks high)
+	terminalVel  = 78.0 // Terminal falling velocity
+
+	// Double-tap detection
+	doubleTapTime = 0.3 // seconds
 )
 
 type InputState struct {
@@ -26,6 +39,34 @@ type InputState struct {
 	CursorItem    Item // Held item on mouse cursor
 	InventoryPage int
 	ShowDebug     bool
+
+	// Survival Mode Physics
+	VelocityY float32 // Vertical velocity
+	OnGround  bool    // Is player standing on solid ground
+	LastWTime float64 // Time of last W key press (for double-tap detection)
+	IsRunning bool    // Running state (activated by double-tap W)
+
+	// Mining System
+	MiningTarget   *hitInfo // Block currently being mined (can be nil)
+	MiningProgress float32  // 0.0 to 1.0
+	LastMiningTime float64  // Time of last frame's mining logic
+	LastBreakTime  float64  // Time of last block break (Creative delay)
+}
+
+// Block hardness values (seconds to break with hand/wrong tool)
+// We'll calculate speed based on tool later, for now this is base time
+var BlockHardness = map[byte]float32{
+	blockDirt:        0.75,
+	blockGrass:       0.9,
+	blockStone:       4.0, // Hard to break by hand
+	blockLog:         3.0,
+	blockLeaves:      0.3,
+	blockSand:        0.6,
+	blockGlass:       0.4,
+	blockPlank:       2.0,
+	blockCobblestone: 3.5,
+	blockTorch:       0.0, // Instabreak
+	blockCactus:      0.6,
 }
 
 func NewInputState() *InputState {
@@ -102,30 +143,127 @@ func (s *InputState) UpdateCamera(world *World, camera *rl.Camera3D) {
 	}
 
 	dt := rl.GetFrameTime()
-	move := rl.NewVector3(0, 0, 0)
-	if rl.IsKeyDown(rl.KeyW) {
-		move = rl.Vector3Add(move, flatForward)
-	}
-	if rl.IsKeyDown(rl.KeyS) {
-		move = rl.Vector3Subtract(move, flatForward)
-	}
-	if rl.IsKeyDown(rl.KeyD) {
-		move = rl.Vector3Add(move, right)
-	}
-	if rl.IsKeyDown(rl.KeyA) {
-		move = rl.Vector3Subtract(move, right)
-	}
-	if rl.IsKeyDown(rl.KeySpace) {
-		move.Y += 1
-	}
-	if rl.IsKeyDown(rl.KeyLeftShift) || rl.IsKeyDown(rl.KeyRightShift) {
-		move.Y -= 1
-	}
-	if rl.Vector3Length(move) > 0 {
-		move = rl.Vector3Normalize(move)
+
+	// Creative Mode: Free flying
+	if currentGameMode == ModeCreative {
+		move := rl.NewVector3(0, 0, 0)
+		if rl.IsKeyDown(rl.KeyW) {
+			move = rl.Vector3Add(move, flatForward)
+		}
+		if rl.IsKeyDown(rl.KeyS) {
+			move = rl.Vector3Subtract(move, flatForward)
+		}
+		if rl.IsKeyDown(rl.KeyD) {
+			move = rl.Vector3Add(move, right)
+		}
+		if rl.IsKeyDown(rl.KeyA) {
+			move = rl.Vector3Subtract(move, right)
+		}
+		if rl.IsKeyDown(rl.KeySpace) {
+			move.Y += 1
+		}
+		if rl.IsKeyDown(rl.KeyLeftShift) || rl.IsKeyDown(rl.KeyRightShift) {
+			move.Y -= 1
+		}
+		if rl.Vector3Length(move) > 0 {
+			move = rl.Vector3Normalize(move)
+		}
+		camera.Position = resolveCollision(world, camera.Position, rl.Vector3Scale(move, flySpeed*dt))
+	} else {
+		// Survival Mode: Gravity-based movement
+
+		// Double-tap W detection for running
+		currentTime := rl.GetTime()
+		if rl.IsKeyPressed(rl.KeyW) {
+			if currentTime-s.LastWTime < doubleTapTime {
+				s.IsRunning = true
+			}
+			s.LastWTime = currentTime
+		}
+		// Stop running when W is released
+		if !rl.IsKeyDown(rl.KeyW) {
+			s.IsRunning = false
+		}
+
+		// Horizontal movement
+		move := rl.NewVector3(0, 0, 0)
+		if rl.IsKeyDown(rl.KeyW) {
+			move = rl.Vector3Add(move, flatForward)
+		}
+		if rl.IsKeyDown(rl.KeyS) {
+			move = rl.Vector3Subtract(move, flatForward)
+		}
+		if rl.IsKeyDown(rl.KeyD) {
+			move = rl.Vector3Add(move, right)
+		}
+		if rl.IsKeyDown(rl.KeyA) {
+			move = rl.Vector3Subtract(move, right)
+		}
+		if rl.Vector3Length(move) > 0 {
+			move = rl.Vector3Normalize(move)
+		}
+
+		// Determine movement speed
+		speed := float32(walkSpeed)
+		if s.IsRunning {
+			speed = runSpeed
+		}
+
+		// Apply horizontal movement with collision
+		newPos := resolveCollision(world, camera.Position, rl.Vector3Scale(move, speed*dt))
+
+		// Apply gravity (always, unless jumping this frame)
+		s.VelocityY -= gravity * dt
+		if s.VelocityY < -terminalVel {
+			s.VelocityY = -terminalVel
+		}
+
+		// Jump input (must be before vertical collision so jump can happen)
+		if s.OnGround && rl.IsKeyPressed(rl.KeySpace) {
+			s.VelocityY = jumpVelocity
+		}
+
+		// Calculate vertical movement
+		verticalDelta := s.VelocityY * dt
+
+		// Apply vertical movement with collision
+		posBeforeVertical := newPos
+		newPos = resolveCollision(world, newPos, rl.NewVector3(0, verticalDelta, 0))
+
+		// Minecraft-style ground detection:
+		// If we tried to move down but couldn't (or moved less), we're on ground
+		actualVerticalMove := newPos.Y - posBeforeVertical.Y
+
+		if verticalDelta < 0 {
+			// Was trying to fall
+			if actualVerticalMove > verticalDelta+0.001 {
+				// Collision stopped us from falling as much as we wanted = on ground
+				s.OnGround = true
+				s.VelocityY = 0
+			} else {
+				s.OnGround = false
+			}
+		} else if verticalDelta > 0 {
+			// Was trying to jump/rise
+			if actualVerticalMove < verticalDelta-0.001 {
+				// Hit ceiling
+				s.VelocityY = 0
+			}
+			s.OnGround = false
+		} else {
+			// No vertical movement requested, check if we should start falling
+			// Try a tiny downward probe
+			probePos := resolveCollision(world, newPos, rl.NewVector3(0, -0.01, 0))
+			if probePos.Y < newPos.Y-0.005 {
+				// We can fall, so we're not on ground
+				s.OnGround = false
+			}
+			// If can't fall, stay at current OnGround state
+		}
+
+		camera.Position = newPos
 	}
 
-	camera.Position = resolveCollision(world, camera.Position, rl.Vector3Scale(move, s.MoveSpeed*dt))
 	camera.Target = rl.Vector3Add(camera.Position, forward)
 	camera.Up = up
 }
@@ -279,18 +417,80 @@ func HandleInput(world *World, camera *rl.Camera3D, state *InputState, client *C
 	}
 
 	ray := state.RayFromCenter(*camera)
-	hit := world.HitTest(ray)
 
-	if hit.hit && rl.IsMouseButtonPressed(rl.MouseLeftButton) {
-		world.RemoveBlock(hit.x, hit.y, hit.z)
-		if client != nil {
-			client.Send(&PacketBlockChange{
-				X:       int32(hit.x),
-				Y:       int32(hit.y),
-				Z:       int32(hit.z),
-				BlockID: blockAir,
-			})
+	// Reach distance depends on Gamemode
+	reachDist := float32(8.0) // Creative default
+	if currentGameMode == ModeSurvival {
+		reachDist = 3.0
+	}
+
+	hit := world.HitTest(ray, reachDist)
+
+	// Progressive Mining Logic
+	if hit.hit && rl.IsMouseButtonDown(rl.MouseLeftButton) {
+		// 1. Get Block Hardness
+		blockType := world.BlockAt(hit.x, hit.y, hit.z)
+		hardness := float32(1.0) // Default hardness
+		if h, ok := BlockHardness[blockType]; ok {
+			hardness = h
 		}
+
+		// Creative Mode Instabreak with delay
+		if currentGameMode == ModeCreative {
+			if rl.GetTime()-state.LastBreakTime < 0.15 {
+				hardness = 100000.0 // Prevent break
+			} else {
+				hardness = 0.0
+			}
+		}
+
+		// 2. Check tool speed
+		heldItem := state.Hotbar[state.SelectedSlot]
+		speedMultiplier := GetMiningSpeedMultiplier(heldItem, blockType)
+
+		// 3. Accumulate Progress
+		isNewTarget := state.MiningTarget == nil ||
+			state.MiningTarget.x != hit.x ||
+			state.MiningTarget.y != hit.y ||
+			state.MiningTarget.z != hit.z
+
+		if isNewTarget {
+			state.MiningTarget = &hit
+			state.MiningProgress = 0
+		}
+
+		// Add progress
+		if hardness <= 0 {
+			state.MiningProgress = 1.0 // Instabreak
+		} else {
+			// Effective hardness = Base Hardness / Speed Multiplier
+			state.MiningProgress += rl.GetFrameTime() * speedMultiplier / hardness
+		}
+
+		// 4. Break Block if Done
+		if state.MiningProgress >= 1.0 {
+			world.RemoveBlock(hit.x, hit.y, hit.z)
+			if client != nil {
+				client.Send(&PacketBlockChange{
+					X:       int32(hit.x),
+					Y:       int32(hit.y),
+					Z:       int32(hit.z),
+					BlockID: blockAir,
+				})
+			}
+			// Reset progress but keep target so we don't instantly break next block unless we click again
+			// Actually in MC you keep breaking if you hold.
+			// But for safety, let's reset progress to 0.
+			// If hardness is low, it will break next one fast too.
+			state.MiningProgress = 0
+			// Update target to nil so we re-acquire next frame if raycast hits something else
+			state.MiningTarget = nil
+			state.LastBreakTime = rl.GetTime()
+		}
+	} else {
+		// Not holding button or not hitting block
+		state.MiningTarget = nil
+		state.MiningProgress = 0
 	}
 
 	if hit.hit && rl.IsMouseButtonPressed(rl.MouseRightButton) {

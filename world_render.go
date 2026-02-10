@@ -331,3 +331,53 @@ func (w *World) Draw(assets *RenderAssets, camera rl.Camera3D) {
 	rl.EnableDepthMask()
 	platform.UseProgram(0) // Reset shader state to avoid interfering with Raylib
 }
+
+// DrawBlockCrack renders the mining progress crack overlay
+func (w *World) DrawBlockCrack(assets *RenderAssets, camera rl.Camera3D, input *InputState) {
+	if input.MiningTarget == nil || input.MiningProgress <= 0 {
+		return
+	}
+
+	// Calculate stage (0 to 9)
+	stage := int(input.MiningProgress * 10.0)
+	if stage < 0 {
+		stage = 0
+	}
+	if stage > 9 {
+		stage = 9
+	}
+
+	tex := assets.CrackTextures[stage]
+	if tex.ID == 0 {
+		return
+	}
+
+	hit := input.MiningTarget
+	pos := rl.NewVector3(float32(hit.x), float32(hit.y), float32(hit.z))
+
+	// Scale up slightly to avoid z-fighting
+	scale := float32(1.002)
+	// Block centers are at integer coordinates (e.g. 0,0,0 for block 0).
+	// So we draw centered at pos.
+	drawPos := pos
+
+	rl.BeginMode3D(camera)
+
+	// Use the pre-generated unit cube model
+	// We need to set the texture on the model's material
+	materials := assets.crackModel.GetMaterials()
+	if len(materials) > 0 {
+		rl.SetMaterialTexture(&materials[0], rl.MapDiffuse, tex)
+	}
+
+	platform.Enable(platform.GL_POLYGON_OFFSET_FILL)
+	platform.PolygonOffset(-2.0, -2.0)
+
+	// DrawModel handles texture binding correctly
+	// Tint with DarkGray to make cracks dark (if texture is white) or just opaque
+	rl.DrawModel(assets.crackModel, drawPos, scale, rl.Fade(rl.DarkGray, 0.8))
+
+	platform.Disable(platform.GL_POLYGON_OFFSET_FILL)
+
+	rl.EndMode3D()
+}

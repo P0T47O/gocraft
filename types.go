@@ -57,6 +57,27 @@ const (
 	blockTallGrass
 )
 
+const (
+	// Tools (Start at 100 to avoid block collision)
+	itemWoodPickaxe byte = 100 + iota
+	itemStonePickaxe
+	itemIronPickaxe
+	itemDiamondPickaxe
+	itemGoldPickaxe
+
+	itemWoodShovel
+	itemStoneShovel
+	itemIronShovel
+	itemDiamondShovel
+	itemGoldShovel
+
+	itemWoodAxe
+	itemStoneAxe
+	itemIronAxe
+	itemDiamondAxe
+	itemGoldAxe
+)
+
 type hitInfo struct {
 	x        int
 	y        int

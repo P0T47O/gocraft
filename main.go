@@ -790,6 +790,9 @@ func drawGame() {
 
 	rl.EndMode3D()
 
+	// Draw Mining Crack Overlay
+	world.DrawBlockCrack(assets, camera, input)
+
 	// 2D Overlay
 	if inWater {
 		overlay := rl.NewColor(40, 90, 160, 120)

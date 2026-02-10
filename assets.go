@@ -55,4 +55,23 @@ var allBlocks = []byte{
 	blockGoldBlock,
 	blockIronBlock,
 	blockCoalBlock,
+
+	// Tools
+	itemWoodPickaxe,
+	itemStonePickaxe,
+	itemIronPickaxe,
+	itemDiamondPickaxe,
+	itemGoldPickaxe,
+
+	itemWoodShovel,
+	itemStoneShovel,
+	itemIronShovel,
+	itemDiamondShovel,
+	itemGoldShovel,
+
+	itemWoodAxe,
+	itemStoneAxe,
+	itemIronAxe,
+	itemDiamondAxe,
+	itemGoldAxe,
 }

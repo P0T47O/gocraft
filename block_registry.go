@@ -388,4 +388,34 @@ func initBlockRegistry() {
 		IsTransparent: true,
 		IsCollidable:  false,
 	})
+
+	// Tools (Placeholder Textures)
+	registerTool := func(id byte, name string, tex string) {
+		RegisterBlock(&BlockDef{
+			ID:            id,
+			Name:          name,
+			Textures:      blockFaces{North: tex}, // Cross render uses North texture
+			RenderType:    RenderTypeCross,
+			IsTransparent: true,
+			IsCollidable:  false,
+		})
+	}
+
+	registerTool(itemWoodPickaxe, "Wooden Pickaxe", "textures/item/wooden_pickaxe.png")
+	registerTool(itemStonePickaxe, "Stone Pickaxe", "textures/item/stone_pickaxe.png")
+	registerTool(itemIronPickaxe, "Iron Pickaxe", "textures/item/iron_pickaxe.png")
+	registerTool(itemDiamondPickaxe, "Diamond Pickaxe", "textures/item/diamond_pickaxe.png")
+	registerTool(itemGoldPickaxe, "Gold Pickaxe", "textures/item/golden_pickaxe.png")
+
+	registerTool(itemWoodShovel, "Wooden Shovel", "textures/item/wooden_shovel.png")
+	registerTool(itemStoneShovel, "Stone Shovel", "textures/item/stone_shovel.png")
+	registerTool(itemIronShovel, "Iron Shovel", "textures/item/iron_shovel.png")
+	registerTool(itemDiamondShovel, "Diamond Shovel", "textures/item/diamond_shovel.png")
+	registerTool(itemGoldShovel, "Gold Shovel", "textures/item/golden_shovel.png")
+
+	registerTool(itemWoodAxe, "Wooden Axe", "textures/item/wooden_axe.png")
+	registerTool(itemStoneAxe, "Stone Axe", "textures/item/stone_axe.png")
+	registerTool(itemIronAxe, "Iron Axe", "textures/item/iron_axe.png")
+	registerTool(itemDiamondAxe, "Diamond Axe", "textures/item/diamond_axe.png")
+	registerTool(itemGoldAxe, "Gold Axe", "textures/item/golden_axe.png")
 }

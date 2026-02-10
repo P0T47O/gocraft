@@ -6,8 +6,8 @@ import (
 	rl "github.com/gen2brain/raylib-go/raylib"
 )
 
-func (w *World) HitTest(ray rl.Ray) hitInfo {
-	return w.rayCast(ray, 8.0)
+func (w *World) HitTest(ray rl.Ray, maxDist float32) hitInfo {
+	return w.rayCast(ray, maxDist)
 }
 
 func (w *World) rayCast(ray rl.Ray, maxDist float32) hitInfo {
