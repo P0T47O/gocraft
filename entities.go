@@ -111,15 +111,23 @@ func (i *ItemEntity) Tick(world *World) {
 	i.Vx *= 0.91
 	i.Vz *= 0.91
 
-	// Ground Collision (Simple)
-	bx, bz := int(math.Floor(i.X)), int(math.Floor(i.Z))
-	groundHeight := float64(world.HeightAt(bx, bz))
+	// Collision with Ground
+	radius := 0.2
+	feetY := i.Y - radius
+	bx, by, bz := int(math.Floor(i.X)), int(math.Floor(feetY)), int(math.Floor(i.Z))
 
-	if i.Y < groundHeight+0.2 { // 0.2 is item radius approx
-		i.Y = groundHeight + 0.2
-		i.Vy = 0
-		i.Vx *= 0.6 // Ground friction
-		i.Vz *= 0.6
+	blockID := world.BlockAt(bx, by, bz)
+	def := GetBlock(blockID)
+
+	if def.IsCollidable {
+		// Snap to top of block
+		groundHeight := float64(by) + 1.0
+		if feetY < groundHeight {
+			i.Y = groundHeight + radius
+			i.Vy = 0
+			i.Vx *= 0.6 // Ground friction
+			i.Vz *= 0.6
+		}
 	}
 
 	// Age & Pickup Delay
