@@ -76,6 +76,13 @@ const (
 	itemIronAxe
 	itemDiamondAxe
 	itemGoldAxe
+
+	// Resources
+	itemCoal
+	itemIronIngot
+	itemGoldIngot
+	itemDiamond
+	itemStick
 )
 
 type hitInfo struct {

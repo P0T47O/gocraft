@@ -25,6 +25,17 @@ type BlockDef struct {
 	IsOpaque      bool // Blocks light completely
 	LightLevel    byte // 0-15
 	IsCollidable  bool
+
+	// Mining / Drops
+	Hardness         float32
+	EffectiveTool    ToolType
+	RequiredMaterial ToolMaterial // Minimum tier required (e.g. Iron Pickaxe for Diamond Ore)
+	DropItem         byte         // 0 = Drops self (unless Air)
+	DropCount        int          // Defaults to 1 if DropItem != 0
+
+	// Item Properties (If this block is actually an item)
+	ToolType     ToolType
+	ToolMaterial ToolMaterial
 }
 
 var Blocks [256]*BlockDef
@@ -65,20 +76,29 @@ func GetBlock(id byte) *BlockDef {
 func initBlockRegistry() {
 	// Define and register all block types
 	RegisterBlock(&BlockDef{
-		ID:           blockGrass,
-		Name:         "Grass Block",
-		Textures:     blockFaces{Top: "textures/block/grass_block_top.png", Bottom: "textures/block/dirt.png", North: "textures/block/grass_block_side.png", South: "textures/block/grass_block_side.png", East: "textures/block/grass_block_side.png", West: "textures/block/grass_block_side.png"},
-		RenderType:   RenderTypeCube,
-		IsOpaque:     true,
-		IsCollidable: true,
+		ID:            blockGrass,
+		Name:          "Grass Block",
+		Textures:      blockFaces{Top: "textures/block/grass_block_top.png", Bottom: "textures/block/dirt.png", North: "textures/block/grass_block_side.png", South: "textures/block/grass_block_side.png", East: "textures/block/grass_block_side.png", West: "textures/block/grass_block_side.png"},
+		RenderType:    RenderTypeCube,
+		IsOpaque:      true,
+		IsCollidable:  true,
+		Hardness:      0.6,
+		EffectiveTool: ToolShovel,
+		DropItem:      blockDirt, // Grass drops Dirt
+		DropCount:     1,
 	})
 	RegisterBlock(&BlockDef{
-		ID:           blockStone,
-		Name:         "Stone",
-		Textures:     blockFaces{Top: "textures/block/stone.png", Bottom: "textures/block/stone.png", North: "textures/block/stone.png", South: "textures/block/stone.png", East: "textures/block/stone.png", West: "textures/block/stone.png"},
-		RenderType:   RenderTypeCube,
-		IsOpaque:     true,
-		IsCollidable: true,
+		ID:               blockStone,
+		Name:             "Stone",
+		Textures:         blockFaces{Top: "textures/block/stone.png", Bottom: "textures/block/stone.png", North: "textures/block/stone.png", South: "textures/block/stone.png", East: "textures/block/stone.png", West: "textures/block/stone.png"},
+		RenderType:       RenderTypeCube,
+		IsOpaque:         true,
+		IsCollidable:     true,
+		Hardness:         1.5,
+		EffectiveTool:    ToolPickaxe,
+		RequiredMaterial: MatWood,
+		DropItem:         blockCobblestone, // Stone drops Cobblestone
+		DropCount:        1,
 	})
 	RegisterBlock(&BlockDef{
 		ID:           blockDirt,
@@ -147,12 +167,17 @@ func initBlockRegistry() {
 		IsCollidable:  false,
 	})
 	RegisterBlock(&BlockDef{
-		ID:           blockCoalOre,
-		Name:         "Coal Ore",
-		Textures:     blockFaces{Top: "textures/block/coal_ore.png", Bottom: "textures/block/coal_ore.png", North: "textures/block/coal_ore.png", South: "textures/block/coal_ore.png", East: "textures/block/coal_ore.png", West: "textures/block/coal_ore.png"},
-		RenderType:   RenderTypeCube,
-		IsOpaque:     true,
-		IsCollidable: true,
+		ID:               blockCoalOre,
+		Name:             "Coal Ore",
+		Textures:         blockFaces{Top: "textures/block/coal_ore.png", Bottom: "textures/block/coal_ore.png", North: "textures/block/coal_ore.png", South: "textures/block/coal_ore.png", East: "textures/block/coal_ore.png", West: "textures/block/coal_ore.png"},
+		RenderType:       RenderTypeCube,
+		IsOpaque:         true,
+		IsCollidable:     true,
+		Hardness:         3.0,
+		EffectiveTool:    ToolPickaxe,
+		RequiredMaterial: MatWood,
+		DropItem:         itemCoal,
+		DropCount:        1,
 	})
 	RegisterBlock(&BlockDef{
 		ID:           blockIronOre,
@@ -171,12 +196,17 @@ func initBlockRegistry() {
 		IsCollidable: true,
 	})
 	RegisterBlock(&BlockDef{
-		ID:           blockDiamondOre,
-		Name:         "Diamond Ore",
-		Textures:     blockFaces{Top: "textures/block/diamond_ore.png", Bottom: "textures/block/diamond_ore.png", North: "textures/block/diamond_ore.png", South: "textures/block/diamond_ore.png", East: "textures/block/diamond_ore.png", West: "textures/block/diamond_ore.png"},
-		RenderType:   RenderTypeCube,
-		IsOpaque:     true,
-		IsCollidable: true,
+		ID:               blockDiamondOre,
+		Name:             "Diamond Ore",
+		Textures:         blockFaces{Top: "textures/block/diamond_ore.png", Bottom: "textures/block/diamond_ore.png", North: "textures/block/diamond_ore.png", South: "textures/block/diamond_ore.png", East: "textures/block/diamond_ore.png", West: "textures/block/diamond_ore.png"},
+		RenderType:       RenderTypeCube,
+		IsOpaque:         true,
+		IsCollidable:     true,
+		Hardness:         3.0,
+		EffectiveTool:    ToolPickaxe,
+		RequiredMaterial: MatIron,
+		DropItem:         itemDiamond,
+		DropCount:        1,
 	})
 	RegisterBlock(&BlockDef{
 		ID:           blockLapisOre,
@@ -402,20 +432,80 @@ func initBlockRegistry() {
 	}
 
 	registerTool(itemWoodPickaxe, "Wooden Pickaxe", "textures/item/wooden_pickaxe.png")
+	Blocks[itemWoodPickaxe].ToolType = ToolPickaxe
+	Blocks[itemWoodPickaxe].ToolMaterial = MatWood
+
 	registerTool(itemStonePickaxe, "Stone Pickaxe", "textures/item/stone_pickaxe.png")
+	Blocks[itemStonePickaxe].ToolType = ToolPickaxe
+	Blocks[itemStonePickaxe].ToolMaterial = MatStone
+
 	registerTool(itemIronPickaxe, "Iron Pickaxe", "textures/item/iron_pickaxe.png")
+	Blocks[itemIronPickaxe].ToolType = ToolPickaxe
+	Blocks[itemIronPickaxe].ToolMaterial = MatIron
+
 	registerTool(itemDiamondPickaxe, "Diamond Pickaxe", "textures/item/diamond_pickaxe.png")
+	Blocks[itemDiamondPickaxe].ToolType = ToolPickaxe
+	Blocks[itemDiamondPickaxe].ToolMaterial = MatDiamond
+
 	registerTool(itemGoldPickaxe, "Gold Pickaxe", "textures/item/golden_pickaxe.png")
+	Blocks[itemGoldPickaxe].ToolType = ToolPickaxe
+	Blocks[itemGoldPickaxe].ToolMaterial = MatGold
 
 	registerTool(itemWoodShovel, "Wooden Shovel", "textures/item/wooden_shovel.png")
+	Blocks[itemWoodShovel].ToolType = ToolShovel
+	Blocks[itemWoodShovel].ToolMaterial = MatWood
+
 	registerTool(itemStoneShovel, "Stone Shovel", "textures/item/stone_shovel.png")
+	Blocks[itemStoneShovel].ToolType = ToolShovel
+	Blocks[itemStoneShovel].ToolMaterial = MatStone
+
 	registerTool(itemIronShovel, "Iron Shovel", "textures/item/iron_shovel.png")
+	Blocks[itemIronShovel].ToolType = ToolShovel
+	Blocks[itemIronShovel].ToolMaterial = MatIron
+
 	registerTool(itemDiamondShovel, "Diamond Shovel", "textures/item/diamond_shovel.png")
+	Blocks[itemDiamondShovel].ToolType = ToolShovel
+	Blocks[itemDiamondShovel].ToolMaterial = MatDiamond
+
 	registerTool(itemGoldShovel, "Gold Shovel", "textures/item/golden_shovel.png")
+	Blocks[itemGoldShovel].ToolType = ToolShovel
+	Blocks[itemGoldShovel].ToolMaterial = MatGold
 
 	registerTool(itemWoodAxe, "Wooden Axe", "textures/item/wooden_axe.png")
+	Blocks[itemWoodAxe].ToolType = ToolAxe
+	Blocks[itemWoodAxe].ToolMaterial = MatWood
+
 	registerTool(itemStoneAxe, "Stone Axe", "textures/item/stone_axe.png")
+	Blocks[itemStoneAxe].ToolType = ToolAxe
+	Blocks[itemStoneAxe].ToolMaterial = MatStone
+
 	registerTool(itemIronAxe, "Iron Axe", "textures/item/iron_axe.png")
+	Blocks[itemIronAxe].ToolType = ToolAxe
+	Blocks[itemIronAxe].ToolMaterial = MatIron
+
 	registerTool(itemDiamondAxe, "Diamond Axe", "textures/item/diamond_axe.png")
+	Blocks[itemDiamondAxe].ToolType = ToolAxe
+	Blocks[itemDiamondAxe].ToolMaterial = MatDiamond
+
 	registerTool(itemGoldAxe, "Gold Axe", "textures/item/golden_axe.png")
+	Blocks[itemGoldAxe].ToolType = ToolAxe
+	Blocks[itemGoldAxe].ToolMaterial = MatGold
+
+	// Register Basic Items (as Blocks for now)
+	registerItem := func(id byte, name string, tex string) {
+		RegisterBlock(&BlockDef{
+			ID:            id,
+			Name:          name,
+			Textures:      blockFaces{North: tex},
+			RenderType:    RenderTypeCross, // Display as sprite
+			IsTransparent: true,
+			IsCollidable:  false,
+		})
+	}
+
+	registerItem(itemCoal, "Coal", "textures/item/coal.png")
+	registerItem(itemIronIngot, "Iron Ingot", "textures/item/iron_ingot.png")
+	registerItem(itemGoldIngot, "Gold Ingot", "textures/item/gold_ingot.png")
+	registerItem(itemDiamond, "Diamond", "textures/item/diamond.png")
+	registerItem(itemStick, "Stick", "textures/item/stick.png")
 }

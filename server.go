@@ -766,6 +766,90 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 				// Sync Inventory
 				s.SendInventory(player)
 			}
+		} else {
+			// Block Break Logic (Mining)
+			// Check drops BEFORE setting to Air
+			oldBlockID := s.World.BlockAt(int(p.X), int(p.Y), int(p.Z))
+			if oldBlockID != blockAir {
+				blockDef := GetBlock(oldBlockID)
+
+				// 1. Determine Held Tool
+				var toolDef *BlockDef
+				slotIdx := player.SelectedSlot
+				if slotIdx >= 0 && slotIdx < 36 {
+					itemID := player.Inventory.Slots[slotIdx].ID
+					if itemID != 0 {
+						toolDef = GetBlock(byte(itemID))
+					}
+				}
+
+				// 2. Check Compatibility
+				canHarvest := true
+				if blockDef.RequiredMaterial > MatNone {
+					// Requires specific tier
+					hasCorrectTool := false
+					hasCorrectTier := false
+
+					if toolDef != nil {
+						if toolDef.ToolType == blockDef.EffectiveTool {
+							hasCorrectTool = true
+						}
+						if toolDef.ToolMaterial >= blockDef.RequiredMaterial {
+							hasCorrectTier = true
+						}
+					}
+
+					if !hasCorrectTool || !hasCorrectTier {
+						canHarvest = false
+					}
+				} else if blockDef.EffectiveTool != ToolNone {
+					// "Soft" requirement?
+					// In MC, if effective tool is defined but material is None, usually means "Faster with tool, but drops by hand (Wood/Dirt)".
+					// But some blocks (Snow?) require shovel to drop?
+					// For now, if RequiredMaterial is None, we assume "Always Drop" unless explicitly restricted.
+					// Let's stick to "RequiredMaterial > MatNone" means "Strict"
+				}
+
+				// 3. Drop Item
+				if canHarvest && player.GameMode == ModeSurvival {
+					dropID := blockDef.DropItem
+					if dropID == 0 {
+						dropID = blockDef.ID // Drop self by default
+					}
+
+					count := blockDef.DropCount
+					if count <= 0 {
+						count = 1
+					}
+
+					if dropID != 0 {
+						// Spawn Item Entity
+						// Random velocity
+						rng := rand.New(rand.NewSource(time.Now().UnixNano()))
+						vx := (rng.Float64() - 0.5) * 0.1
+						vz := (rng.Float64() - 0.5) * 0.1
+						vy := 0.2 // Slight pop up
+
+						item := &ItemEntity{
+							BaseEntity: BaseEntity{
+								UUID: fmt.Sprintf("drop-%d-%d", time.Now().UnixNano(), rand.Int()),
+								Type: EntityItem,
+								X:    float64(p.X) + 0.5,
+								Y:    float64(p.Y) + 0.3,
+								Z:    float64(p.Z) + 0.5,
+							},
+							ItemID:      dropID,
+							Count:       count,
+							Vx:          vx,
+							Vy:          vy,
+							Vz:          vz,
+							PickupDelay: 0.5, // Reduced delay for mined items
+							Age:         0,
+						}
+						s.SpawnEntity(item)
+					}
+				}
+			}
 		}
 
 		// Apply block change to World

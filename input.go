@@ -430,9 +430,10 @@ func HandleInput(world *World, camera *rl.Camera3D, state *InputState, client *C
 	if hit.hit && rl.IsMouseButtonDown(rl.MouseLeftButton) {
 		// 1. Get Block Hardness
 		blockType := world.BlockAt(hit.x, hit.y, hit.z)
-		hardness := float32(1.0) // Default hardness
-		if h, ok := BlockHardness[blockType]; ok {
-			hardness = h
+		def := GetBlock(blockType)
+		hardness := def.Hardness
+		if hardness <= 0 {
+			hardness = 0.05 // Minimum hardness to prevent div/0 or instant break if not intended
 		}
 
 		// Creative Mode Instabreak with delay
