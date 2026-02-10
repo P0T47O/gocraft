@@ -449,7 +449,16 @@ func HandleInput(world *World, camera *rl.Camera3D, state *InputState, client *C
 		heldItem := state.Hotbar[state.SelectedSlot]
 		speedMultiplier := GetMiningSpeedMultiplier(heldItem, blockType)
 
-		// 3. Accumulate Progress
+		// 3. Determine Effectiveness Factor (MC Logic)
+		// Correct Tool: Time = Hardness * 1.5 / Speed => Progress += Speed / (Hardness * 1.5)
+		// Incorrect Tool: Time = Hardness * 5.0 / Speed => Progress += Speed / (Hardness * 5.0)
+		isCorrect := IsCorrectTool(heldItem, blockType)
+		factor := float32(5.0)
+		if isCorrect {
+			factor = 1.5
+		}
+
+		// 4. Accumulate Progress
 		isNewTarget := state.MiningTarget == nil ||
 			state.MiningTarget.x != hit.x ||
 			state.MiningTarget.y != hit.y ||
@@ -464,11 +473,13 @@ func HandleInput(world *World, camera *rl.Camera3D, state *InputState, client *C
 		if hardness <= 0 {
 			state.MiningProgress = 1.0 // Instabreak
 		} else {
-			// Effective hardness = Base Hardness / Speed Multiplier
-			state.MiningProgress += rl.GetFrameTime() * speedMultiplier / hardness
+			// Effective hardness = Base Hardness * Factor
+			// Progress per second = Speed / Effective Hardness
+			damagePerSecond := speedMultiplier / (hardness * factor)
+			state.MiningProgress += rl.GetFrameTime() * damagePerSecond
 		}
 
-		// 4. Break Block if Done
+		// 5. Break Block if Done
 		if state.MiningProgress >= 1.0 {
 			world.RemoveBlock(hit.x, hit.y, hit.z)
 			if client != nil {

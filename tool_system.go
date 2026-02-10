@@ -77,67 +77,50 @@ var BlockToolReq = map[byte]ToolType{
 	blockPlankSpruce: ToolAxe,
 }
 
-// GetMiningSpeedMultiplier returns the speed multiplier for the given tool and block
+// GetMiningSpeedMultiplier calculates the mining speed based on tool and block properties
 func GetMiningSpeedMultiplier(toolID byte, blockID byte) float32 {
-	tool, isTool := ToolRegistry[toolID]
-	reqTool, needsTool := BlockToolReq[blockID]
-
-	// 1. Check if tool matches block requirement
-	isBestTool := false
-	if needsTool {
-		if isTool && tool.Type == reqTool {
-			isBestTool = true
-		}
-	} else {
-		// If block doesn't require a tool (e.g. leaves, glass), check if tool helps
-		// For now simple logic: usually no tool helps unless specific cases (shears for leaves)
-		// But in MC, Axes help with wood-based things even if not strictly required
-		// For simplicity, let's say NO multiplier unless mapped.
+	if toolID == 0 {
+		return 1.0
 	}
 
-	// 2. Determine Material Multiplier
-	multiplier := float32(1.0) // Hand speed
+	toolDef, ok := ToolRegistry[toolID]
+	if !ok {
+		return 1.0
+	}
 
-	if isBestTool {
-		switch tool.Material {
+	blockDef := GetBlock(blockID)
+	// If effective tool matches, use tool material speed
+	if blockDef.EffectiveTool != ToolNone && blockDef.EffectiveTool == toolDef.Type {
+		switch toolDef.Material {
 		case MatWood:
-			multiplier = 2.0
+			return 2.0
 		case MatStone:
-			multiplier = 4.0
+			return 4.0
 		case MatIron:
-			multiplier = 6.0
+			return 6.0
 		case MatDiamond:
-			multiplier = 8.0
+			return 8.0
 		case MatGold:
-			multiplier = 12.0
+			return 12.0
 		}
 	}
 
-	return multiplier
+	return 1.0
 }
 
 // CanHarvest returns true if the tool can harvest the block (drop item)
-// For now we always drop items in this engine, but this affects speed calculation in MC physics
-func CanHarvest(toolID byte, blockID byte) bool {
-	// Simple logic for now: all tools can harvest everything
-	// In real MC, you need Iron Pickaxe for Diamond Ore, etc.
-	// Implementing Tier check:
-
-	tool, isTool := ToolRegistry[toolID]
-
-	if blockID == blockObsidian {
-		return isTool && tool.Type == ToolPickaxe && tool.Material == MatDiamond
-	}
-	if blockID == blockDiamondOre || blockID == blockGoldOre {
-		return isTool && tool.Type == ToolPickaxe && (tool.Material == MatIron || tool.Material == MatDiamond)
-	}
-	if blockID == blockIronOre || blockID == blockLapisOre {
-		return isTool && tool.Type == ToolPickaxe && (tool.Material == MatStone || tool.Material == MatIron || tool.Material == MatDiamond)
-	}
-	if blockID == blockStone || blockID == blockCobblestone || blockID == blockCoalOre {
-		return isTool && tool.Type == ToolPickaxe // Wooden or better
+// In MC this is separate from speed (e.g. Glass breaks fast by hand but drops nothing)
+// But for "Effective Tool" check (1.5x vs 5x factor), we usually check if it's the "Correct Tool".
+func IsCorrectTool(toolID byte, blockID byte) bool {
+	blockDef := GetBlock(blockID)
+	// If no tool required/effective, then Hand is "correct" (factor 1.5)
+	if blockDef.EffectiveTool == ToolNone {
+		return true
 	}
 
-	// Most other blocks can be harvested by hand
-	return true
+	toolDef, ok := ToolRegistry[toolID]
+	if !ok {
+		return false
+	}
+	return toolDef.Type == blockDef.EffectiveTool
 }
