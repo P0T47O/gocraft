@@ -104,6 +104,7 @@ func main() {
 
 	// Initialize block definitions (CRITICAL: must be called before any world/rendering)
 	initBlockRegistry()
+	InitRecipes()
 
 	// Resources
 	ui = NewUIComponents()

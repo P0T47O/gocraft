@@ -56,7 +56,9 @@ func NewServer(savePath string) *Server {
 
 	// Now we can start the workers with the correct seed
 	fmt.Printf("Server: Authoritative Seed Loaded: %d\n", world.seed)
+	fmt.Printf("Server: Authoritative Seed Loaded: %d\n", world.seed)
 	world.StartBackend()
+	InitRecipes()
 
 	s := &Server{
 		World:         world,
@@ -704,6 +706,71 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 				client.LastChunkX = cx
 				client.LastChunkZ = cz
 				s.SendChunksAround(client.Name, cx, cz, 16)
+			}
+		}
+
+	case *PacketBlockInteract:
+		// Check for specific block interactions (e.g. Workbench)
+		blockID := s.World.BlockAt(int(p.X), int(p.Y), int(p.Z))
+
+		// If Workbench, send OpenWindow
+		if blockID == blockCraftingTable {
+			// Send OpenWindow packet
+			s.ClientsMu.RLock()
+			client, ok := s.Clients[wrap.From]
+			s.ClientsMu.RUnlock()
+			if ok {
+				// WindowID 1, Type 1 (Workbench) - Type 0 is Inventory/Hand
+				// Wait, let's use Type=1 for Workbench as per plan
+				client.Send <- &PacketOpenWindow{
+					WindowID:   1,
+					WindowType: 1, // 1 = Workbench
+				}
+			}
+		}
+
+	case *PacketCraft:
+		// Handle Crafting Request
+		s.World.entitiesMu.RLock()
+		var player *PlayerEntity
+		for _, e := range s.World.entities {
+			if e.GetUUID() == wrap.From {
+				player = e.(*PlayerEntity)
+				break
+			}
+		}
+		s.World.entitiesMu.RUnlock()
+
+		if player != nil {
+			// 1. Get Recipe
+			if p.RecipeID < 0 || int(p.RecipeID) >= len(RecipeRegistry) {
+				return
+			}
+			recipe := RecipeRegistry[p.RecipeID]
+
+			// 2. Check Ingredients
+			if player.Inventory.ConsumeItems(recipe.Ingredients) {
+				// 3. Add Result
+				rem := player.Inventory.Add(recipe.Result.ID, recipe.Result.Count)
+				if rem > 0 {
+					// Drop remaining if full
+					// Handle overflow (drop item entity)
+					drop := &ItemEntity{
+						BaseEntity: BaseEntity{
+							Type: EntityItem,
+							X:    player.X,
+							Y:    player.Y + 1.5,
+							Z:    player.Z,
+						},
+						ItemID: byte(recipe.Result.ID),
+						Count:  int(rem),
+					}
+					// Random velocity?
+					s.SpawnEntity(drop)
+				}
+
+				// 4. Sync Inventory
+				s.SendInventory(player)
 			}
 		}
 

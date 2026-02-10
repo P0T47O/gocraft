@@ -87,3 +87,45 @@ func (inv *Inventory) Consume(id int32, count int32) bool {
 
 	return true
 }
+
+// HasItems checks if the inventory contains the required items.
+// It handles duplicate ingredients correctly (e.g. 2 stacks of 64 logs needed).
+func (inv *Inventory) HasItems(items []Item) bool {
+	// Create a map of required counts
+	required := make(map[int32]int32)
+	for _, item := range items {
+		required[item.ID] += item.Count
+	}
+
+	// Iterate inventory to count available
+	// We operate on a copy or just count
+	available := make(map[int32]int32)
+	for i := 0; i < 36; i++ {
+		slot := inv.Slots[i]
+		if slot.ID != 0 {
+			available[slot.ID] += slot.Count
+		}
+	}
+
+	// Check sufficiency
+	for id, count := range required {
+		if available[id] < count {
+			return false
+		}
+	}
+	return true
+}
+
+// ConsumeItems consumes a list of items from the inventory.
+// Returns true if successful (all items consumed), false if not enough items (state unchanged not guaranteed if check skipped).
+// It relies on HasItems being called first or implicitly checks.
+// To be safe, we check HasItems first.
+func (inv *Inventory) ConsumeItems(items []Item) bool {
+	if !inv.HasItems(items) {
+		return false
+	}
+	for _, item := range items {
+		inv.Consume(item.ID, item.Count)
+	}
+	return true
+}

@@ -36,6 +36,7 @@ var allBlocks = []byte{
 	blockGlass,
 	blockTorch,
 	blockBedrock,
+	blockCraftingTable,
 
 	// Liquids
 	blockWater,

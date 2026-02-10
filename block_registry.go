@@ -258,6 +258,19 @@ func initBlockRegistry() {
 		IsCollidable: true,
 	})
 	RegisterBlock(&BlockDef{
+		ID:               blockCraftingTable,
+		Name:             "Crafting Table",
+		Textures:         blockFaces{Top: "textures/block/crafting_table_top.png", Bottom: "textures/block/oak_planks.png", North: "textures/block/crafting_table_front.png", South: "textures/block/crafting_table_side.png", East: "textures/block/crafting_table_side.png", West: "textures/block/crafting_table_side.png"},
+		RenderType:       RenderTypeCube,
+		IsOpaque:         true,
+		IsCollidable:     true,
+		Hardness:         2.5,
+		EffectiveTool:    ToolAxe,
+		RequiredMaterial: MatNone,
+		DropItem:         blockCraftingTable,
+		DropCount:        1,
+	})
+	RegisterBlock(&BlockDef{
 		ID:           blockObsidian,
 		Name:         "Obsidian",
 		Textures:     blockFaces{Top: "textures/block/obsidian.png", Bottom: "textures/block/obsidian.png", North: "textures/block/obsidian.png", South: "textures/block/obsidian.png", East: "textures/block/obsidian.png", West: "textures/block/obsidian.png"},

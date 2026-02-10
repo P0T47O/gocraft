@@ -55,6 +55,7 @@ const (
 	blockRose
 	blockDandelion
 	blockTallGrass
+	blockCraftingTable
 )
 
 const (

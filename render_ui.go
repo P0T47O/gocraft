@@ -213,6 +213,123 @@ func (a *RenderAssets) drawSurvivalInventory(state *InputState) {
 			rl.DrawText(fmt.Sprintf("%d", state.CursorItem.Count), int32(mouse.X), int32(mouse.Y), 20, rl.White)
 		}
 	}
+
+	a.drawCraftingList(state, startX, startY, invW, invH)
+}
+
+func (a *RenderAssets) drawCraftingList(state *InputState, invX, invY, invW, invH float32) {
+	// 1. Get Recipes
+	nearby := []byte{}
+	if state.CraftingStation != 0 {
+		nearby = append(nearby, state.CraftingStation)
+	}
+
+	var inv *Inventory
+	if client != nil {
+		inv = &client.Inventory
+	} else {
+		inv = &localInventory
+	}
+
+	recipes := GetCraftableRecipes(inv, nearby)
+
+	// 2. Layout
+	scale := inventoryScale()
+
+	// Card Layout Config
+	cardHeight := 48 * scale
+	cardPadding := 4 * scale
+
+	// List width - User said 200 was too wide, reducing to 170
+	listW := float32(170) * scale
+	listH := invH
+
+	// Default to Left side
+	listX := invX - listW - 10
+
+	// If it doesn't fit on the left, try the right
+	if listX < 0 {
+		listX = invX + invW + 10
+	}
+
+	listY := invY
+
+	// Background
+	bgRect := rl.NewRectangle(listX, listY, listW, listH)
+	rl.DrawRectangleRec(bgRect, rl.NewColor(220, 220, 220, 255)) // Lighter BG
+	rl.DrawRectangleLinesEx(bgRect, 2, rl.White)
+	rl.DrawRectangleLinesEx(rl.NewRectangle(listX-2, listY-2, listW+4, listH+4), 2, rl.NewColor(85, 85, 85, 255))
+
+	rl.DrawText("Crafting", int32(listX+10), int32(listY+10), 20, rl.DarkGray)
+
+	// 3. Render Items
+	y := listY + 40
+	mouse := rl.GetMousePosition()
+
+	// Icon sizes
+	resultSize := 32 * scale
+	ingSize := 24 * scale
+
+	for _, r := range recipes {
+		if y+cardHeight > listY+listH {
+			break
+		}
+
+		// Card Background
+		cardRect := rl.NewRectangle(listX+5, y, listW-10, cardHeight)
+
+		// Interaction
+		isHover := rl.CheckCollisionPointRec(mouse, cardRect)
+		bgColor := rl.NewColor(180, 180, 180, 255)
+		if isHover {
+			bgColor = rl.NewColor(200, 200, 200, 255)
+
+			// Click to Craft
+			if rl.IsMouseButtonPressed(rl.MouseLeftButton) {
+				if client != nil {
+					client.Send(&PacketCraft{RecipeID: int32(r.ID)})
+				}
+			}
+
+			// Tooltip
+			resultDef := GetBlock(byte(r.Result.ID))
+			rl.DrawText(resultDef.Name, int32(mouse.X+15), int32(mouse.Y), 20, rl.Black)
+		}
+		rl.DrawRectangleRec(cardRect, bgColor)
+		// Card Border
+		rl.DrawRectangleLinesEx(cardRect, 1, rl.Gray)
+
+		// Layout within Card
+		currX := listX + 10
+
+		// 1. Result Icon (Left)
+		a.drawIcon(byte(r.Result.ID), currX, y+(cardHeight-resultSize)/2, resultSize)
+		if r.Result.Count > 1 {
+			rl.DrawText(fmt.Sprintf("%d", r.Result.Count), int32(currX+resultSize-15), int32(y+cardHeight-20), 20, rl.White)
+		}
+		currX += resultSize + 5
+
+		// 2. Arrow (Middle)
+		rl.DrawText("->", int32(currX), int32(y+cardHeight/2-10), 20, rl.DarkGray)
+		currX += 25
+
+		// 3. Ingredients (Right)
+		for _, ing := range r.Ingredients {
+			if currX+ingSize > listX+listW-5 {
+				break
+			}
+			a.drawIcon(byte(ing.ID), currX, y+(cardHeight-ingSize)/2, ingSize)
+
+			// Count (Larger text: 20px)
+			if ing.Count > 1 {
+				rl.DrawText(fmt.Sprintf("%d", ing.Count), int32(currX+ingSize-12), int32(y+cardHeight-18), 20, rl.White)
+			}
+
+			currX += ingSize + 2
+		}
+
+		y += cardHeight + cardPadding
+	}
 }
 
 func (a *RenderAssets) drawSlotGrid(layout InventoryLayout, items []byte, drawFrames bool) {

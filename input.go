@@ -26,19 +26,20 @@ const (
 )
 
 type InputState struct {
-	CurrentIndex  int
-	CurrentBlock  byte
-	InventoryOpen bool
-	SelectedSlot  int
-	Hotbar        [9]byte
-	SkipCamera    bool
-	Yaw           float32
-	Pitch         float32
-	Sensitivity   float32
-	MoveSpeed     float32
-	CursorItem    Item // Held item on mouse cursor
-	InventoryPage int
-	ShowDebug     bool
+	CurrentIndex    int
+	CurrentBlock    byte
+	InventoryOpen   bool
+	SelectedSlot    int
+	Hotbar          [9]byte
+	SkipCamera      bool
+	Yaw             float32
+	Pitch           float32
+	Sensitivity     float32
+	MoveSpeed       float32
+	CursorItem      Item // Held item on mouse cursor
+	InventoryPage   int
+	ShowDebug       bool
+	CraftingStation byte // 0: None, 1: Workbench
 
 	// Survival Mode Physics
 	VelocityY float32 // Vertical velocity
@@ -506,6 +507,21 @@ func HandleInput(world *World, camera *rl.Camera3D, state *InputState, client *C
 	}
 
 	if hit.hit && rl.IsMouseButtonPressed(rl.MouseRightButton) {
+		// 1. Check for Block Interaction (Server Authoritative)
+		blockID := world.BlockAt(hit.x, hit.y, hit.z)
+		if blockID == blockCraftingTable {
+			if client != nil {
+				client.Send(&PacketBlockInteract{
+					X:      int32(hit.x),
+					Y:      int32(hit.y),
+					Z:      int32(hit.z),
+					Action: 0,
+				})
+			}
+			return hit // Consume interaction
+		}
+
+		// 2. Block Placement Logic
 		nx := hit.x + int(math.Round(float64(hit.normal.X)))
 		ny := hit.y + int(math.Round(float64(hit.normal.Y)))
 		nz := hit.z + int(math.Round(float64(hit.normal.Z)))

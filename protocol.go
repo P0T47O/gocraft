@@ -26,6 +26,9 @@ const (
 	IDSlotChange      = 0x13
 	IDClickWindow     = 0x14
 	IDChunkRequest    = 0x15
+	IDOpenWindow      = 0x16
+	IDCraft           = 0x17
+	IDBlockInteract   = 0x18
 )
 
 type PacketClickWindow struct {
@@ -35,6 +38,7 @@ type PacketClickWindow struct {
 	// Mode? 0: Click, 1: ShiftClick, 2: Drop, etc. For now just Button.
 }
 
+// ... existing PacketClickWindow methods ...
 func (p *PacketClickWindow) ID() int32 { return IDClickWindow }
 func (p *PacketClickWindow) Encode(w *bytes.Buffer) error {
 	WriteVarInt(w, p.SlotID)
@@ -59,6 +63,71 @@ func (p *PacketClickWindow) Decode(r *bytes.Buffer) error {
 	b, _ := r.ReadByte()
 	p.IsCreative = (b == 1)
 	return nil
+}
+
+type PacketBlockInteract struct {
+	X, Y, Z int32
+	Action  int32 // 0: Interact
+}
+
+func (p *PacketBlockInteract) ID() int32 { return IDBlockInteract }
+func (p *PacketBlockInteract) Encode(w *bytes.Buffer) error {
+	WriteVarInt(w, p.X)
+	WriteVarInt(w, p.Y)
+	WriteVarInt(w, p.Z)
+	return WriteVarInt(w, p.Action)
+}
+func (p *PacketBlockInteract) Decode(r *bytes.Buffer) error {
+	var err error
+	p.X, err = ReadVarInt(r)
+	if err != nil {
+		return err
+	}
+	p.Y, err = ReadVarInt(r)
+	if err != nil {
+		return err
+	}
+	p.Z, err = ReadVarInt(r)
+	if err != nil {
+		return err
+	}
+	p.Action, err = ReadVarInt(r)
+	return err
+}
+
+type PacketOpenWindow struct {
+	WindowID   byte
+	WindowType byte // 0: Inventory, 1: Chest, 2: Workbench
+}
+
+func (p *PacketOpenWindow) ID() int32 { return IDOpenWindow }
+func (p *PacketOpenWindow) Encode(w *bytes.Buffer) error {
+	w.WriteByte(p.WindowID)
+	w.WriteByte(p.WindowType)
+	return nil
+}
+func (p *PacketOpenWindow) Decode(r *bytes.Buffer) error {
+	var err error
+	p.WindowID, err = r.ReadByte()
+	if err != nil {
+		return err
+	}
+	p.WindowType, err = r.ReadByte()
+	return err
+}
+
+type PacketCraft struct {
+	RecipeID int32
+}
+
+func (p *PacketCraft) ID() int32 { return IDCraft }
+func (p *PacketCraft) Encode(w *bytes.Buffer) error {
+	return WriteVarInt(w, p.RecipeID)
+}
+func (p *PacketCraft) Decode(r *bytes.Buffer) error {
+	var err error
+	p.RecipeID, err = ReadVarInt(r)
+	return err
 }
 
 type PacketSlotChange struct {
@@ -212,6 +281,12 @@ func ReadPacket(conn io.Reader) (Packet, error) {
 		p = &PacketSlotChange{}
 	case IDClickWindow:
 		p = &PacketClickWindow{}
+	case IDOpenWindow:
+		p = &PacketOpenWindow{}
+	case IDCraft:
+		p = &PacketCraft{}
+	case IDBlockInteract:
+		p = &PacketBlockInteract{}
 	case IDChat:
 		p = &PacketChat{}
 	case IDChunkRequest:
