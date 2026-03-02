@@ -21,6 +21,9 @@ func RegisterRecipe(r *Recipe) {
 
 // InitRecipes initializes all game recipes
 func InitRecipes() {
+	if len(RecipeRegistry) > 0 {
+		return
+	}
 	fmt.Println("Initializing Recipes...")
 
 	// 1. Logs -> Planks (Specific)

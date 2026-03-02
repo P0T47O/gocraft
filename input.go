@@ -52,6 +52,9 @@ type InputState struct {
 	MiningProgress float32  // 0.0 to 1.0
 	LastMiningTime float64  // Time of last frame's mining logic
 	LastBreakTime  float64  // Time of last block break (Creative delay)
+
+	// Crafting UI State
+	CraftingScroll int // Number of recipe rows scrolled down
 }
 
 // Block hardness values (seconds to break with hand/wrong tool)
@@ -103,6 +106,7 @@ func (s *InputState) ToggleInventory() {
 			rl.EnableCursor()
 			rl.SetMousePosition(int32(rl.GetScreenWidth()/2), int32(rl.GetScreenHeight()/2))
 		} else {
+			s.CraftingStation = 0 // Clear crafting state
 			rl.SetMousePosition(int32(rl.GetScreenWidth()/2), int32(rl.GetScreenHeight()/2))
 			rl.DisableCursor()
 		}
@@ -110,6 +114,7 @@ func (s *InputState) ToggleInventory() {
 	if s.InventoryOpen && rl.IsKeyPressed(rl.KeyEscape) {
 		s.InventoryOpen = false
 		s.SkipCamera = true
+		s.CraftingStation = 0
 
 		rl.SetMousePosition(int32(rl.GetScreenWidth()/2), int32(rl.GetScreenHeight()/2))
 		rl.DisableCursor()

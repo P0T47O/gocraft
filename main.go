@@ -630,6 +630,17 @@ func requestMissingChunks() {
 
 func handlePacket(pkt Packet) {
 	switch p := pkt.(type) {
+	case *PacketOpenWindow:
+		if p.WindowType == 1 { // Workbench
+			input.InventoryOpen = true
+			input.CraftingStation = blockCraftingTable
+			input.SkipCamera = true
+			rl.EnableCursor()
+
+			// Center the mouse so it feels natural when UI opens
+			rl.SetMousePosition(int32(rl.GetScreenWidth()/2), int32(rl.GetScreenHeight()/2))
+		}
+
 	case *PacketChunkData:
 		cx, cz := int(p.CX), int(p.CZ)
 		// Clear pending request

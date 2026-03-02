@@ -151,7 +151,18 @@ func (a *RenderAssets) drawSurvivalInventory(state *InputState) {
 	invW := float32(cols)*stride + 20
 	invH := float32(rows+1)*stride + 60 // +1 for hotbar, +padding
 
-	startX := (w - invW) / 2
+	// Calculate approximate crafting list width to center both
+	maxIngCount := float32(4)
+	iconSize := slotSize
+	arrowWidth := 16 * scale
+	listW := float32(10) + maxIngCount*(iconSize+4*scale) + arrowWidth + float32(10) + iconSize + float32(10)
+
+	totalW := invW + 10 + listW
+
+	startX := (w - totalW) / 2
+	if startX < 10 {
+		startX = 10
+	}
 	startY := (h - invH) / 2
 
 	// Window BG
@@ -235,101 +246,178 @@ func (a *RenderAssets) drawCraftingList(state *InputState, invX, invY, invW, inv
 
 	// 2. Layout
 	scale := inventoryScale()
+	screenW := float32(rl.GetScreenWidth())
 
-	// Card Layout Config
-	cardHeight := 48 * scale
-	cardPadding := 4 * scale
+	// Tighter Card Layout
+	slotSize := 36 * scale / 2
+	if slotSize < 32 {
+		slotSize = 32
+	}
 
-	// List width - User said 200 was too wide, reducing to 170
-	listW := float32(170) * scale
+	cardHeight := slotSize + 4*scale // Narrower border
+	cardPadding := 2 * scale         // Tighter spacing
+
+	// Dynamic list width based on max ingredients (assuming max 4 for now)
+	maxIngCount := float32(4)
+	iconSize := slotSize // Same size as inventory
+	arrowWidth := 16 * scale
+	scrollBarW := 8 * scale
+
+	// N * (ingredient icon + padding) + arrow + result icon + scrollbar + card padding
+	listW := float32(10) + maxIngCount*(iconSize+2*scale) + arrowWidth + float32(8) + iconSize + scrollBarW + float32(10)
 	listH := invH
 
-	// Default to Left side
-	listX := invX - listW - 10
-
-	// If it doesn't fit on the left, try the right
-	if listX < 0 {
-		listX = invX + invW + 10
+	// Smart Positioning
+	// We centered the total width in drawSurvivalInventory, so just append to the right
+	listX := invX + invW + 10
+	if listX+listW > screenW-10 {
+		listX = screenW - listW - 10
 	}
 
 	listY := invY
 
-	// Background
+	// Panel Background
 	bgRect := rl.NewRectangle(listX, listY, listW, listH)
-	rl.DrawRectangleRec(bgRect, rl.NewColor(220, 220, 220, 255)) // Lighter BG
+	rl.DrawRectangleRec(bgRect, rl.NewColor(210, 210, 210, 240))
 	rl.DrawRectangleLinesEx(bgRect, 2, rl.White)
-	rl.DrawRectangleLinesEx(rl.NewRectangle(listX-2, listY-2, listW+4, listH+4), 2, rl.NewColor(85, 85, 85, 255))
+	rl.DrawRectangleLinesEx(rl.NewRectangle(listX-2, listY-2, listW+4, listH+4), 2, rl.NewColor(50, 50, 50, 255))
 
 	rl.DrawText("Crafting", int32(listX+10), int32(listY+10), 20, rl.DarkGray)
 
-	// 3. Render Items
-	y := listY + 40
 	mouse := rl.GetMousePosition()
 
-	// Icon sizes
-	resultSize := 32 * scale
-	ingSize := 24 * scale
+	yStart := listY + 36
+	visibleH := listH - 36
+	visibleCount := int(visibleH / (cardHeight + cardPadding))
 
-	for _, r := range recipes {
-		if y+cardHeight > listY+listH {
-			break
+	maxScroll := len(recipes) - visibleCount
+	if maxScroll < 0 {
+		maxScroll = 0
+	}
+
+	// Handle Scrolling
+	if rl.CheckCollisionPointRec(mouse, bgRect) {
+		wheel := rl.GetMouseWheelMove()
+		if wheel > 0 {
+			state.CraftingScroll--
+		} else if wheel < 0 {
+			state.CraftingScroll++
 		}
 
-		// Card Background
-		cardRect := rl.NewRectangle(listX+5, y, listW-10, cardHeight)
+		// Clamp scrolling
+		if state.CraftingScroll > maxScroll {
+			state.CraftingScroll = maxScroll
+		}
+		if state.CraftingScroll < 0 {
+			state.CraftingScroll = 0
+		}
+	}
 
-		// Interaction
+	// 3. Render Items
+	y := yStart
+
+	for i, r := range recipes {
+		if i < state.CraftingScroll {
+			continue // Skip items scrolled out of view at the top
+		}
+		if y+cardHeight > listY+listH {
+			break // Skip items that overflow the bottom
+		}
+
+		cardRect := rl.NewRectangle(listX+5, y, listW-10-scrollBarW, cardHeight)
 		isHover := rl.CheckCollisionPointRec(mouse, cardRect)
-		bgColor := rl.NewColor(180, 180, 180, 255)
-		if isHover {
-			bgColor = rl.NewColor(200, 200, 200, 255)
 
-			// Click to Craft
+		bgColor := rl.NewColor(160, 160, 160, 255)
+		if isHover {
+			bgColor = rl.NewColor(190, 190, 190, 255)
 			if rl.IsMouseButtonPressed(rl.MouseLeftButton) {
 				if client != nil {
 					client.Send(&PacketCraft{RecipeID: int32(r.ID)})
 				}
 			}
-
-			// Tooltip
-			resultDef := GetBlock(byte(r.Result.ID))
-			rl.DrawText(resultDef.Name, int32(mouse.X+15), int32(mouse.Y), 20, rl.Black)
+			// Lightweight tooltip
+			def := GetBlock(byte(r.Result.ID))
+			rl.DrawText(def.Name, int32(mouse.X+10), int32(mouse.Y-20), 20, rl.Black)
 		}
+
 		rl.DrawRectangleRec(cardRect, bgColor)
-		// Card Border
-		rl.DrawRectangleLinesEx(cardRect, 1, rl.Gray)
+		rl.DrawRectangleLinesEx(cardRect, 1, rl.NewColor(100, 100, 100, 255))
 
-		// Layout within Card
-		currX := listX + 10
-
-		// 1. Result Icon (Left)
-		a.drawIcon(byte(r.Result.ID), currX, y+(cardHeight-resultSize)/2, resultSize)
-		if r.Result.Count > 1 {
-			rl.DrawText(fmt.Sprintf("%d", r.Result.Count), int32(currX+resultSize-15), int32(y+cardHeight-20), 20, rl.White)
-		}
-		currX += resultSize + 5
-
-		// 2. Arrow (Middle)
-		rl.DrawText("->", int32(currX), int32(y+cardHeight/2-10), 20, rl.DarkGray)
-		currX += 25
-
-		// 3. Ingredients (Right)
+		// Draw Ingredients (Left)
+		currX := listX + 8
 		for _, ing := range r.Ingredients {
-			if currX+ingSize > listX+listW-5 {
+			if currX+iconSize > listX+listW-scrollBarW-5 {
 				break
 			}
-			a.drawIcon(byte(ing.ID), currX, y+(cardHeight-ingSize)/2, ingSize)
+			iy := y + (cardHeight-iconSize)/2
 
-			// Count (Larger text: 20px)
+			a.drawSlot(currX, iy, iconSize)
+			a.drawIcon(byte(ing.ID), currX, iy, iconSize)
 			if ing.Count > 1 {
-				rl.DrawText(fmt.Sprintf("%d", ing.Count), int32(currX+ingSize-12), int32(y+cardHeight-18), 20, rl.White)
+				txt := fmt.Sprintf("%d", ing.Count)
+				// Use 18 for font size, adjust text position relative to right and bottom edges to avoid clipping
+				textW := rl.MeasureText(txt, 18)
+				rl.DrawText(txt, int32(currX+iconSize-float32(textW)-6), int32(iy+iconSize-18), 18, rl.White)
 			}
+			currX += iconSize + 2*scale // Tighter spacing
+		}
 
-			currX += ingSize + 2
+		// Draw Graphical Arrow
+		// We center the arrow dynamically based on ingredients used so it adjusts properly
+		arrowX := currX + 2*scale
+		arrowY := y + cardHeight/2
+		a.drawUIArrow(arrowX, arrowY, 12*scale)
+
+		// Draw Result (Right)
+		resX := arrowX + arrowWidth + 6*scale
+		resY := y + (cardHeight-iconSize)/2
+
+		// Draw a slot-like background for the result
+		a.drawSlot(resX, resY, iconSize)
+		a.drawIcon(byte(r.Result.ID), resX, resY, iconSize)
+		if r.Result.Count > 1 {
+			txt := fmt.Sprintf("%d", r.Result.Count)
+			textW := rl.MeasureText(txt, 18)
+			rl.DrawText(txt, int32(resX+iconSize-float32(textW)-6), int32(resY+iconSize-18), 18, rl.White)
 		}
 
 		y += cardHeight + cardPadding
 	}
+
+	// Draw Scrollbar (if needed)
+	if maxScroll > 0 {
+		trackW := scrollBarW - 2*scale
+		if trackW < 4 {
+			trackW = 4
+		}
+		trackX := listX + listW - trackW - 4*scale
+		trackY := yStart
+		trackH := visibleH - 4*scale
+
+		// Scroll track
+		rl.DrawRectangle(int32(trackX), int32(trackY), int32(trackW), int32(trackH), rl.NewColor(120, 120, 120, 150))
+
+		// Scroll thumb
+		thumbH := trackH * float32(visibleCount) / float32(len(recipes))
+		if thumbH < 15*scale {
+			thumbH = 15 * scale
+		}
+
+		scrollFraction := float32(state.CraftingScroll) / float32(maxScroll)
+		thumbY := trackY + scrollFraction*(trackH-thumbH)
+
+		rl.DrawRectangle(int32(trackX+1), int32(thumbY+1), int32(trackW-2), int32(thumbH-2), rl.NewColor(220, 220, 220, 255))
+	}
+}
+
+func (a *RenderAssets) drawUIArrow(x, y, length float32) {
+	thickness := length / 3
+	rl.DrawRectangleV(rl.NewVector2(x, y-thickness/2), rl.NewVector2(length*0.6, thickness), rl.DarkGray)
+
+	p1 := rl.NewVector2(x+length*0.5, y-thickness)
+	p2 := rl.NewVector2(x+length*0.5, y+thickness)
+	p3 := rl.NewVector2(x+length, y)
+	rl.DrawTriangle(p1, p2, p3, rl.DarkGray)
 }
 
 func (a *RenderAssets) drawSlotGrid(layout InventoryLayout, items []byte, drawFrames bool) {
