@@ -34,6 +34,7 @@ func ConnectTCP(addr string, name string) (*Client, error) {
 
 	// Reader Loop
 	go func() {
+		defer close(c.Incoming)
 		for {
 			p, err := ReadPacket(conn)
 			if err != nil {

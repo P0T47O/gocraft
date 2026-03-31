@@ -542,7 +542,7 @@ Loop:
 		}
 	}
 
-	world.ProcessMeshResults(assets, 512)
+	world.ProcessMeshResults(assets, 64)
 
 	HandleInput(world, &camera, input, client)
 	world.ProcessImmediateMeshes(assets, 16)

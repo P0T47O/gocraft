@@ -167,14 +167,30 @@ func (w *World) rebuildLightingForChunk(cx, cz int) {
 				continue
 			}
 			lx, lz := modFloor(nx, chunkWidth), modFloor(nz, chunkWidth)
+			// Lock neighbor chunk if it differs from source chunk
+			isNeighbor := ncx != cx || ncz != cz
+			if isNeighbor {
+				nChunk.mu.Lock()
+			}
 			if isOpaqueBlock(nChunk.blocks[lx][nb.y][lz]) {
+				if isNeighbor {
+					nChunk.mu.Unlock()
+				}
 				continue
 			}
 			if next > nChunk.skyLight[lx][nb.y][lz] {
 				nChunk.skyLight[lx][nb.y][lz] = next
+				ensureChunkSections(nChunk)
 				nChunk.sectionDirty[sectionIndexForY(nb.y)] = true
 				nChunk.meshVersion[sectionIndexForY(nb.y)]++
+				if isNeighbor {
+					nChunk.mu.Unlock()
+				}
 				skyQueue = append(skyQueue, nb)
+			} else {
+				if isNeighbor {
+					nChunk.mu.Unlock()
+				}
 			}
 		}
 	}
@@ -215,14 +231,29 @@ func (w *World) rebuildLightingForChunk(cx, cz int) {
 				continue
 			}
 			lx, lz := modFloor(nx, chunkWidth), modFloor(nz, chunkWidth)
+			isNeighbor := ncx != cx || ncz != cz
+			if isNeighbor {
+				nChunk.mu.Lock()
+			}
 			if isOpaqueBlock(nChunk.blocks[lx][nb.y][lz]) {
+				if isNeighbor {
+					nChunk.mu.Unlock()
+				}
 				continue
 			}
 			if next > nChunk.blockLight[lx][nb.y][lz] {
 				nChunk.blockLight[lx][nb.y][lz] = next
+				ensureChunkSections(nChunk)
 				nChunk.sectionDirty[sectionIndexForY(nb.y)] = true
 				nChunk.meshVersion[sectionIndexForY(nb.y)]++
+				if isNeighbor {
+					nChunk.mu.Unlock()
+				}
 				blockQueue = append(blockQueue, nb)
+			} else {
+				if isNeighbor {
+					nChunk.mu.Unlock()
+				}
 			}
 		}
 	}

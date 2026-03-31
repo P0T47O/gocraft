@@ -51,7 +51,7 @@ func (p *PigEntity) Tick(world *World) {
 	// Simple random movement logic
 	p.moveTimer -= 0.05
 	if p.moveTimer <= 0 {
-		p.moveTimer = 2.0 + float32(p.X*7+p.Z*13)  // Deterministic pseudo-random based on position
+		p.moveTimer = 2.0 + float32(p.X*7+p.Z*13) // Deterministic pseudo-random based on position
 		if p.moveTimer < 2.0 {
 			p.moveTimer = 2.0
 		} else if p.moveTimer > 4.0 {

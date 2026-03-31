@@ -10,6 +10,14 @@ import (
 	"time"
 )
 
+// chunkDataBufPool reuses large byte slices for chunk serialization to avoid
+// allocating 2 × 64KB per chunk per tick in processPendingChunks.
+var chunkDataBufPool = sync.Pool{
+	New: func() interface{} {
+		return make([]byte, chunkWidth*chunkHeight*chunkWidth)
+	},
+}
+
 type Server struct {
 	World     *World // The authoritative world
 	Clients   map[string]*ClientConnection
@@ -500,8 +508,12 @@ func (s *Server) handleNewConnection(conn net.Conn) {
 	}
 
 	s.ClientsMu.Lock()
+	cc = s.Clients[name]
 	delete(s.Clients, name)
 	s.ClientsMu.Unlock()
+	if cc != nil {
+		close(cc.Send) // Terminates the writer goroutine
+	}
 }
 
 func (s *Server) Broadcast(p Packet) {
@@ -550,6 +562,19 @@ func (s *Server) SpawnEntity(e Entity) {
 		Pitch:    pitch,
 		Metadata: meta,
 	})
+}
+
+// findPlayerEntity finds a PlayerEntity by UUID. Caller must hold entitiesMu (RLock or Lock).
+func (s *Server) findPlayerEntity(uuid string) *PlayerEntity {
+	for _, e := range s.World.entities {
+		if e.GetUUID() == uuid {
+			if p, ok := e.(*PlayerEntity); ok {
+				return p
+			}
+			return nil
+		}
+	}
+	return nil
 }
 
 func (s *Server) HandlePacket(wrap PacketWrapper) {
@@ -684,15 +709,12 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 		s.HasSavedPos = true
 
 		// Update Player Entity in world for broadcasting
-		s.World.entitiesMu.RLock()
-		for _, e := range s.World.entities {
-			if e.GetUUID() == wrap.From {
-				e.SetPosition(p.X, p.Y, p.Z)
-				e.SetRotation(p.Yaw, p.Pitch)
-				break
-			}
+		s.World.entitiesMu.Lock()
+		if player := s.findPlayerEntity(wrap.From); player != nil {
+			player.SetPosition(p.X, p.Y, p.Z)
+			player.SetRotation(p.Yaw, p.Pitch)
 		}
-		s.World.entitiesMu.RUnlock()
+		s.World.entitiesMu.Unlock()
 
 		cx := int(math.Floor(p.X / 16.0))
 		cz := int(math.Floor(p.Z / 16.0))
@@ -731,13 +753,7 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 	case *PacketCraft:
 		// Handle Crafting Request
 		s.World.entitiesMu.RLock()
-		var player *PlayerEntity
-		for _, e := range s.World.entities {
-			if e.GetUUID() == wrap.From {
-				player = e.(*PlayerEntity)
-				break
-			}
-		}
+		player := s.findPlayerEntity(wrap.From)
 		s.World.entitiesMu.RUnlock()
 
 		if player != nil {
@@ -790,13 +806,7 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 	case *PacketBlockChange:
 		// Attempt to place/break block
 		s.World.entitiesMu.RLock()
-		var player *PlayerEntity
-		for _, e := range s.World.entities {
-			if e.GetUUID() == wrap.From {
-				player = e.(*PlayerEntity)
-				break
-			}
-		}
+		player := s.findPlayerEntity(wrap.From)
 		s.World.entitiesMu.RUnlock()
 
 		if player == nil {
@@ -939,13 +949,7 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 	case *PacketInventoryUpdate:
 		// Client synced inventory (Creative Pick or Sync)
 		s.World.entitiesMu.RLock()
-		var player *PlayerEntity
-		for _, e := range s.World.entities {
-			if e.GetUUID() == wrap.From {
-				player = e.(*PlayerEntity)
-				break
-			}
-		}
+		player := s.findPlayerEntity(wrap.From)
 		s.World.entitiesMu.RUnlock()
 
 		if player != nil {
@@ -963,13 +967,7 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 
 	case *PacketSlotChange:
 		s.World.entitiesMu.RLock()
-		var player *PlayerEntity
-		for _, e := range s.World.entities {
-			if e.GetUUID() == wrap.From {
-				player = e.(*PlayerEntity)
-				break
-			}
-		}
+		player := s.findPlayerEntity(wrap.From)
 		s.World.entitiesMu.RUnlock()
 
 		if player != nil {
@@ -980,13 +978,7 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 
 	case *PacketClickWindow:
 		s.World.entitiesMu.RLock()
-		var player *PlayerEntity
-		for _, e := range s.World.entities {
-			if e.GetUUID() == wrap.From {
-				player = e.(*PlayerEntity)
-				break
-			}
-		}
+		player := s.findPlayerEntity(wrap.From)
 		s.World.entitiesMu.RUnlock()
 
 		if player != nil {
@@ -1103,22 +1095,14 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 	case *PacketPlayerAction:
 		// 1. Find player pos/rot
 		s.World.entitiesMu.RLock()
-		var px, py, pz float64
-		var yaw, pitch float32
-		found := false
-		for _, e := range s.World.entities {
-			if e.GetUUID() == wrap.From {
-				px, py, pz = e.GetPosition()
-				yaw, pitch = e.GetRotation()
-				found = true
-				break
-			}
-		}
+		player := s.findPlayerEntity(wrap.From)
 		s.World.entitiesMu.RUnlock()
 
-		if !found {
+		if player == nil {
 			return
 		}
+		px, py, pz := player.GetPosition()
+		yaw, pitch := player.GetRotation()
 
 		// 2. Spawn Item
 		itemID := byte(p.Value & 0xFF)
@@ -1126,19 +1110,6 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 		if count <= 0 {
 			count = 1
 		}
-
-		s.World.entitiesMu.RLock()
-		// Re-fetch player safely (reuse finding logic or just grab from loop above which we already did)
-		// We found 'player' in s.World.entities earlier but didn't cast/store it as *PlayerEntity cleanly.
-		// Let's optimize: reuse the 'found' logic to get the PlayerEntity object properly.
-		var player *PlayerEntity
-		for _, e := range s.World.entities {
-			if e.GetUUID() == wrap.From {
-				player = e.(*PlayerEntity)
-				break
-			}
-		}
-		s.World.entitiesMu.RUnlock()
 
 		if player != nil && player.GameMode == ModeSurvival {
 			if !player.Inventory.Consume(int32(itemID), int32(count)) {

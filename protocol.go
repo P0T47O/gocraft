@@ -229,11 +229,16 @@ func WritePacket(conn io.Writer, p Packet) (err error) {
 	return err
 }
 
+const maxPacketSize = 4 * 1024 * 1024 // 4 MB limit per packet
+
 func ReadPacket(conn io.Reader) (Packet, error) {
 	// 1. Read Frame Length
 	length, err := ReadVarIntFromReader(conn)
 	if err != nil {
 		return nil, err
+	}
+	if length <= 0 || length > maxPacketSize {
+		return nil, fmt.Errorf("packet length out of range: %d", length)
 	}
 
 	// 2. Read full payload into buffer
@@ -433,10 +438,18 @@ func (p *PacketPlayerMove) Encode(w *bytes.Buffer) error {
 	return binary.Write(w, binary.BigEndian, p.Pitch)
 }
 func (p *PacketPlayerMove) Decode(r *bytes.Buffer) error {
-	binary.Read(r, binary.BigEndian, &p.X)
-	binary.Read(r, binary.BigEndian, &p.Y)
-	binary.Read(r, binary.BigEndian, &p.Z)
-	binary.Read(r, binary.BigEndian, &p.Yaw)
+	if err := binary.Read(r, binary.BigEndian, &p.X); err != nil {
+		return err
+	}
+	if err := binary.Read(r, binary.BigEndian, &p.Y); err != nil {
+		return err
+	}
+	if err := binary.Read(r, binary.BigEndian, &p.Z); err != nil {
+		return err
+	}
+	if err := binary.Read(r, binary.BigEndian, &p.Yaw); err != nil {
+		return err
+	}
 	return binary.Read(r, binary.BigEndian, &p.Pitch)
 }
 
@@ -451,8 +464,12 @@ func (p *PacketSpawnPoint) Encode(w *bytes.Buffer) error {
 	return binary.Write(w, binary.BigEndian, p.Z)
 }
 func (p *PacketSpawnPoint) Decode(r *bytes.Buffer) error {
-	binary.Read(r, binary.BigEndian, &p.X)
-	binary.Read(r, binary.BigEndian, &p.Y)
+	if err := binary.Read(r, binary.BigEndian, &p.X); err != nil {
+		return err
+	}
+	if err := binary.Read(r, binary.BigEndian, &p.Y); err != nil {
+		return err
+	}
 	return binary.Read(r, binary.BigEndian, &p.Z)
 }
 
@@ -500,13 +517,26 @@ func (p *PacketEntitySpawn) Decode(r *bytes.Buffer) error {
 	if err != nil {
 		return err
 	}
-	t, _ := r.ReadByte()
+	t, err := r.ReadByte()
+	if err != nil {
+		return err
+	}
 	p.Type = EntityType(t)
-	binary.Read(r, binary.BigEndian, &p.X)
-	binary.Read(r, binary.BigEndian, &p.Y)
-	binary.Read(r, binary.BigEndian, &p.Z)
-	binary.Read(r, binary.BigEndian, &p.Yaw)
-	binary.Read(r, binary.BigEndian, &p.Pitch)
+	if err := binary.Read(r, binary.BigEndian, &p.X); err != nil {
+		return err
+	}
+	if err := binary.Read(r, binary.BigEndian, &p.Y); err != nil {
+		return err
+	}
+	if err := binary.Read(r, binary.BigEndian, &p.Z); err != nil {
+		return err
+	}
+	if err := binary.Read(r, binary.BigEndian, &p.Yaw); err != nil {
+		return err
+	}
+	if err := binary.Read(r, binary.BigEndian, &p.Pitch); err != nil {
+		return err
+	}
 	return binary.Read(r, binary.BigEndian, &p.Metadata)
 }
 
@@ -564,10 +594,18 @@ func (p *PacketEntityMove) Decode(r *bytes.Buffer) error {
 	if err != nil {
 		return err
 	}
-	binary.Read(r, binary.BigEndian, &p.X)
-	binary.Read(r, binary.BigEndian, &p.Y)
-	binary.Read(r, binary.BigEndian, &p.Z)
-	binary.Read(r, binary.BigEndian, &p.Yaw)
+	if err := binary.Read(r, binary.BigEndian, &p.X); err != nil {
+		return err
+	}
+	if err := binary.Read(r, binary.BigEndian, &p.Y); err != nil {
+		return err
+	}
+	if err := binary.Read(r, binary.BigEndian, &p.Z); err != nil {
+		return err
+	}
+	if err := binary.Read(r, binary.BigEndian, &p.Yaw); err != nil {
+		return err
+	}
 	return binary.Read(r, binary.BigEndian, &p.Pitch)
 }
 
@@ -611,10 +649,15 @@ func WriteString(w *bytes.Buffer, s string) error {
 	return err
 }
 
+const maxStringLength = 32768 // 32 KB max string length
+
 func ReadString(r *bytes.Buffer) (string, error) {
 	length, err := ReadVarInt(r)
 	if err != nil {
 		return "", err
+	}
+	if length < 0 || length > maxStringLength {
+		return "", fmt.Errorf("string length out of range: %d", length)
 	}
 	b := make([]byte, length)
 	_, err = r.Read(b)

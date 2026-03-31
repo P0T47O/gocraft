@@ -250,16 +250,19 @@ func (w *World) markChunkSectionDirty(cx, cz, section int) {
 	if chunk == nil {
 		return
 	}
+	chunk.mu.Lock()
 	ensureChunkSections(chunk)
 	if section < 0 || section >= sectionCount {
 		for i := range chunk.sectionDirty {
 			chunk.sectionDirty[i] = true
 			chunk.meshVersion[i]++
 		}
+		chunk.mu.Unlock()
 		return
 	}
 	chunk.sectionDirty[section] = true
 	chunk.meshVersion[section]++
+	chunk.mu.Unlock()
 }
 
 func (w *World) markNeighborsDirty(cx, cz int) {
