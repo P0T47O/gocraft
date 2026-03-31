@@ -111,7 +111,7 @@ func main() {
 	perfMon = NewPerformanceMonitor()
 	defer perfMon.Close()
 
-	if *username == "" || (*username)[:6] == "Player" { // Heuristic: If default or generic, use settings
+	if *username == "" || (len(*username) >= 6 && (*username)[:6] == "Player") { // Heuristic: If default or generic, use settings
 		if settings.PlayerName != "" {
 			*username = settings.PlayerName
 		} else {
@@ -590,39 +590,47 @@ func requestMissingChunks() {
 	maxRequestsPerFrame := 32 // Increased for faster loading
 
 	requestCount := 0
+	radiusSq := renderRadius * renderRadius
 
-	// Check chunks in render distance (spiral out from center)
-	for r := 0; r <= renderRadius && requestCount < maxRequestsPerFrame; r++ {
-		for dz := -r; dz <= r && requestCount < maxRequestsPerFrame; dz++ {
+	requestChunk := func(dx, dz int) bool {
+		if dx*dx+dz*dz > radiusSq {
+			return true // continue, not counted
+		}
+		chunkX, chunkZ := cx+dx, cz+dz
+		key := chunkKey{X: chunkX, Z: chunkZ}
+		chunk := world.getChunkIfGenerated(chunkX, chunkZ)
+		if chunk != nil && chunk.generated {
+			return true
+		}
+		if pendingChunkRequests[key] {
+			return true
+		}
+		pendingChunkRequests[key] = true
+		client.Send(&PacketChunkRequest{CX: int32(chunkX), CZ: int32(chunkZ)})
+		requestCount++
+		return requestCount < maxRequestsPerFrame
+	}
+
+	// Spiral out from center — only iterate ring edges
+	if requestChunk(0, 0) {
+		for r := 1; r <= renderRadius && requestCount < maxRequestsPerFrame; r++ {
+			// Top and bottom edges
 			for dx := -r; dx <= r && requestCount < maxRequestsPerFrame; dx++ {
-				// Only check edge of current ring (optimization)
-				if r > 0 && dx > -r && dx < r && dz > -r && dz < r {
-					continue
+				if !requestChunk(dx, -r) {
+					break
 				}
-
-				// Match render distance: use circular (not square) range
-				if dx*dx+dz*dz > renderRadius*renderRadius {
-					continue
+				if !requestChunk(dx, r) {
+					break
 				}
-
-				chunkX, chunkZ := cx+dx, cz+dz
-				key := chunkKey{X: chunkX, Z: chunkZ}
-
-				// Skip if already have this chunk
-				chunk := world.getChunkIfGenerated(chunkX, chunkZ)
-				if chunk != nil && chunk.generated {
-					continue
+			}
+			// Left and right edges (excluding corners already done)
+			for dz := -r + 1; dz <= r-1 && requestCount < maxRequestsPerFrame; dz++ {
+				if !requestChunk(-r, dz) {
+					break
 				}
-
-				// Skip if already requested (but don't skip forever - re-request if too long)
-				if pendingChunkRequests[key] {
-					continue
+				if !requestChunk(r, dz) {
+					break
 				}
-
-				// Request the chunk from server
-				pendingChunkRequests[key] = true
-				client.Send(&PacketChunkRequest{CX: int32(chunkX), CZ: int32(chunkZ)})
-				requestCount++
 			}
 		}
 	}

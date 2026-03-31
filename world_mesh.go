@@ -13,18 +13,22 @@ type meshSnapshot struct {
 	light  []byte
 	meta   []byte
 	sizeX  int
+	sizeY  int
 	sizeZ  int
 	baseX  int
 	baseZ  int
+	yMin   int // inclusive lower Y bound of copied range
+	yMax   int // exclusive upper Y bound of copied range
 }
 
 func (s *meshSnapshot) index(wx, wy, wz int) int {
 	ix := wx - (s.baseX - 1)
 	iz := wz - (s.baseZ - 1)
-	if ix < 0 || ix >= s.sizeX || iz < 0 || iz >= s.sizeZ || wy < 0 || wy >= chunkHeight {
+	iy := wy - s.yMin
+	if ix < 0 || ix >= s.sizeX || iz < 0 || iz >= s.sizeZ || iy < 0 || iy >= s.sizeY {
 		return -1
 	}
-	return (ix*chunkHeight+wy)*s.sizeZ + iz
+	return (ix*s.sizeY+iy)*s.sizeZ + iz
 }
 
 func (s *meshSnapshot) blockAt(wx, wy, wz int) byte {
@@ -72,23 +76,30 @@ type meshResult struct {
 	version uint32
 }
 
-var meshBufferPool = sync.Pool{
+// meshSectionBufferPool provides reusable buffers sized for a single section + 1-block border in Y.
+// sizeY = sectionHeight + 2 (1 block above and below the section).
+var meshSectionBufferPool = sync.Pool{
 	New: func() interface{} {
 		sizeX := chunkWidth + 2
 		sizeZ := chunkWidth + 2
-		total := sizeX * sizeZ * chunkHeight
+		sizeY := sectionHeight + 2
+		total := sizeX * sizeY * sizeZ
 		return make([]byte, total)
 	},
 }
 
 func (s *meshSnapshot) Release() {
 	if s.blocks != nil {
-		meshBufferPool.Put(s.blocks)
+		meshSectionBufferPool.Put(s.blocks)
 		s.blocks = nil
 	}
 	if s.light != nil {
-		meshBufferPool.Put(s.light)
+		meshSectionBufferPool.Put(s.light)
 		s.light = nil
+	}
+	if s.meta != nil {
+		meshSectionBufferPool.Put(s.meta)
+		s.meta = nil
 	}
 }
 
@@ -133,21 +144,38 @@ func (w *World) StartMeshWorkers(assets *RenderAssets, workers int) {
 func buildMeshSnapshotFromNeighbors(job meshJob) *meshSnapshot {
 	sizeX := chunkWidth + 2
 	sizeZ := chunkWidth + 2
+	// Only copy the Y range needed for this section, plus 1-block border above and below
+	snapYMin := job.yMin - 1
+	if snapYMin < 0 {
+		snapYMin = 0
+	}
+	snapYMax := job.yMax + 1
+	if snapYMax > chunkHeight {
+		snapYMax = chunkHeight
+	}
+	sizeY := snapYMax - snapYMin
 
 	// Allocate from pool
-	blocks := meshBufferPool.Get().([]byte)
-	light := meshBufferPool.Get().([]byte)
-	meta := meshBufferPool.Get().([]byte)
+	blocks := meshSectionBufferPool.Get().([]byte)
+	light := meshSectionBufferPool.Get().([]byte)
+	meta := meshSectionBufferPool.Get().([]byte)
 
-	// Initialize light to 15 (Skylight) so unloaded chunks don't cause black chunk borders
-	for i := range light {
+	total := sizeX * sizeY * sizeZ
+	// Ensure pool buffers are large enough (they should be, but guard against edge cases)
+	if len(blocks) < total {
+		blocks = make([]byte, total)
+	}
+	if len(light) < total {
+		light = make([]byte, total)
+	}
+	if len(meta) < total {
+		meta = make([]byte, total)
+	}
+
+	// Initialize: light to 15 (skylight default), blocks and meta to 0
+	for i := 0; i < total; i++ {
 		light[i] = 15
-	}
-	// Zero blocks and meta
-	for i := range blocks {
-		blocks[i] = 0 // Air
-	}
-	for i := range meta {
+		blocks[i] = 0
 		meta[i] = 0
 	}
 
@@ -168,25 +196,26 @@ func buildMeshSnapshotFromNeighbors(job meshJob) *meshSnapshot {
 			wz := baseZ + iz
 			cx := divFloor(wx, chunkWidth)
 			cz := divFloor(wz, chunkWidth)
-			dx := cx - job.centerCX
-			dz := cz - job.centerCZ
-			if dx < -1 || dx > 1 || dz < -1 || dz > 1 {
+			ddx := cx - job.centerCX
+			ddz := cz - job.centerCZ
+			if ddx < -1 || ddx > 1 || ddz < -1 || ddz > 1 {
 				continue
 			}
-			chunk := job.neighbors[dx+1][dz+1]
+			chunk := job.neighbors[ddx+1][ddz+1]
 			if chunk == nil {
 				continue
 			}
 			lx := modFloor(wx, chunkWidth)
 			lz := modFloor(wz, chunkWidth)
-			for y := 0; y < chunkHeight; y++ {
-				idx := ((ix+1)*chunkHeight+y)*sizeZ + (iz + 1)
+			for y := snapYMin; y < snapYMax; y++ {
+				iy := y - snapYMin
+				idx := ((ix+1)*sizeY+iy)*sizeZ + (iz + 1)
 				blocks[idx] = chunk.blocks[lx][y][lz]
 				meta[idx] = chunk.meta[lx][y][lz]
 				sky := chunk.skyLight[lx][y][lz]
-				block := chunk.blockLight[lx][y][lz]
-				if block > sky {
-					light[idx] = block
+				blk := chunk.blockLight[lx][y][lz]
+				if blk > sky {
+					light[idx] = blk
 				} else {
 					light[idx] = sky
 				}
@@ -207,9 +236,12 @@ func buildMeshSnapshotFromNeighbors(job meshJob) *meshSnapshot {
 		light:  light,
 		meta:   meta,
 		sizeX:  sizeX,
+		sizeY:  sizeY,
 		sizeZ:  sizeZ,
 		baseX:  baseX,
 		baseZ:  baseZ,
+		yMin:   snapYMin,
+		yMax:   snapYMax,
 	}
 }
 

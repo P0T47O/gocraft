@@ -9,11 +9,44 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	rl "github.com/gen2brain/raylib-go/raylib"
 	"github.com/klauspost/compress/zstd"
 )
+
+// Reusable zstd encoder/decoder to avoid repeated allocation
+var (
+	zstdEncoder     *zstd.Encoder
+	zstdDecoder     *zstd.Decoder
+	zstdEncoderOnce sync.Once
+	zstdDecoderOnce sync.Once
+	zstdEncoderMu   sync.Mutex
+	zstdDecoderMu   sync.Mutex
+)
+
+func getZstdEncoder() *zstd.Encoder {
+	zstdEncoderOnce.Do(func() {
+		var err error
+		zstdEncoder, err = zstd.NewWriter(nil)
+		if err != nil {
+			panic("failed to create zstd encoder: " + err.Error())
+		}
+	})
+	return zstdEncoder
+}
+
+func getZstdDecoder() *zstd.Decoder {
+	zstdDecoderOnce.Do(func() {
+		var err error
+		zstdDecoder, err = zstd.NewReader(nil)
+		if err != nil {
+			panic("failed to create zstd decoder: " + err.Error())
+		}
+	})
+	return zstdDecoder
+}
 
 const (
 	RootSaveDir = "saves"
@@ -148,8 +181,18 @@ func SaveWorldChunks(savePath string, world *World) error {
 	}
 	// Note: We don't ClearDirty here yet because we might want multiple clients to save.
 	// But in singleplayer, server clears it.
-	for key, chunk := range world.chunks {
-		if !chunk.dirty {
+	world.chunksMu.RLock()
+	keys := make([]chunkKey, 0, len(world.chunks))
+	for key := range world.chunks {
+		keys = append(keys, key)
+	}
+	world.chunksMu.RUnlock()
+
+	for _, key := range keys {
+		world.chunksMu.RLock()
+		chunk := world.chunks[key]
+		world.chunksMu.RUnlock()
+		if chunk == nil || !chunk.dirty {
 			continue
 		}
 		if err := saveChunkFile(savePath, key.X, 0, key.Z, &chunk.blocks, &chunk.meta); err != nil {
@@ -363,12 +406,10 @@ func saveChunkFile(root string, x, y, z int, blocks *[chunkWidth][chunkHeight][c
 	payload = appendUint32(payload, uint32(len(rleMeta)))
 	payload = append(payload, rleMeta...)
 
-	enc, err := zstd.NewWriter(nil)
-	if err != nil {
-		return err
-	}
+	zstdEncoderMu.Lock()
+	enc := getZstdEncoder()
 	compressed := enc.EncodeAll(payload, nil)
-	enc.Close()
+	zstdEncoderMu.Unlock()
 
 	var header bytes.Buffer
 	header.WriteString(chunkMagic)
@@ -429,12 +470,10 @@ func loadChunkFile(root string, x, y, z int, blocks *[chunkWidth][chunkHeight][c
 	uncompressedLen := binary.LittleEndian.Uint32(data[offset:])
 	offset += 4
 
-	dec, err := zstd.NewReader(nil)
-	if err != nil {
-		return err
-	}
+	zstdDecoderMu.Lock()
+	dec := getZstdDecoder()
 	payload, err := dec.DecodeAll(data[offset:], nil)
-	dec.Close()
+	zstdDecoderMu.Unlock()
 	if err != nil {
 		return err
 	}

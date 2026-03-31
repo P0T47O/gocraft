@@ -337,7 +337,7 @@ func resolveCollision(world *World, pos rl.Vector3, delta rl.Vector3) rl.Vector3
 func collides(world *World, pos rl.Vector3) bool {
 	feetY := pos.Y - playerEyeY
 	minX := pos.X - playerRadius - 0.001
-	maxX := pos.X + playerRadius - 0.001
+	maxX := pos.X + playerRadius + 0.001
 	minZ := pos.Z - playerRadius - 0.001
 	maxZ := pos.Z + playerRadius + 0.001
 	minY := feetY

@@ -56,13 +56,15 @@ func (w *World) ProcessGenResults() {
 			perfMon.IncrementChunkLoad()
 
 			// Notify neighbors to re-mesh now that we exist (fixes water walls and boundary occlusion)
+			// Only mark dirty — don't request immediate mesh for all sections.
+			// The render loop will submit mesh jobs for dirty sections as needed.
+			// This avoids flooding the mesh job channel during initial world loading.
 			for dx := -1; dx <= 1; dx++ {
 				for dz := -1; dz <= 1; dz++ {
 					if dx == 0 && dz == 0 {
 						continue
 					}
 					w.markChunkAllSectionsDirty(res.key.X+dx, res.key.Z+dz)
-					w.requestImmediateAllSections(res.key.X+dx, res.key.Z+dz)
 				}
 			}
 		default:
@@ -104,17 +106,68 @@ func generateChunkData(seed uint32, cx, cz int, chunk *Chunk) {
 	seaLevel := 62
 	baseX := cx * chunkWidth
 	baseZ := cz * chunkWidth
+
+	// Pre-compute per-column noise values to avoid redundant fbm2 calls.
+	// terrainHeight, getBiome, and getContinentalness all share several noise channels.
+	type columnCache struct {
+		height  int
+		biomeID int
+		cont    float32
+	}
+	var colCache [chunkWidth][chunkWidth]columnCache
+
 	for x := 0; x < chunkWidth; x++ {
 		for z := 0; z < chunkWidth; z++ {
 			worldX := baseX + x
 			worldZ := baseZ + z
-			height := terrainHeight(seed, worldX, worldZ)
+			xf := float32(worldX)
+			zf := float32(worldZ)
 
-			// 1. Get Biome ID
-			biomeID := getBiome(seed, worldX, worldZ)
+			// Domain warp (shared by terrainHeight)
+			qX := fbm2(seed, xf*warpFreq, zf*warpFreq)
+			qZ := fbm2(seed+1, xf*warpFreq, zf*warpFreq)
+			warpX := xf + qX*warpAmp
+			warpZ := zf + qZ*warpAmp
 
-			// 2. Determine Ocean/Beach (Based on Cont or Biome)
-			cont := getContinentalness(seed, worldX, worldZ)
+			// Continentalness - used by terrainHeight, getBiome, and ocean logic
+			cont := fbm2(seed+2, warpX*continentalBaseFreq, warpZ*continentalBaseFreq)
+			// Erosion
+			erosion := fbm2(seed+3, warpX*erosionBaseFreq, warpZ*erosionBaseFreq)
+			// Weirdness / PV
+			pv := fbm2(seed+4, warpX*weirdnessBaseFreq, warpZ*weirdnessBaseFreq)
+			// Detail
+			detail := fbm2(seed+5, xf*0.03, zf*0.03) * 3.0
+
+			// Height calculation (inlined from terrainHeight)
+			targetHeight := calculateSplineHeight(cont, erosion, pv)
+			finalHeight := targetHeight + detail
+			if cont > 0.3 {
+				if finalHeight < float32(seaLevel) {
+					finalHeight = float32(seaLevel)
+				}
+			}
+			height := int(finalHeight)
+
+			// Temperature and humidity (shared by getBiome)
+			temp := fbm2(seed+10, xf*tempFreq, zf*tempFreq)
+			hum := fbm2(seed+11, xf*humFreq, zf*humFreq)
+
+			// Biome calculation (inlined from getBiome, reusing cont)
+			// Use un-warped continentalness for biome since getBiome uses raw coords
+			contBiome := fbm2(seed+2, xf*continentalBaseFreq, zf*continentalBaseFreq)
+			biomeID := classifyBiomeFromNoise(contBiome, temp, hum)
+
+			colCache[x][z] = columnCache{height: height, biomeID: biomeID, cont: cont}
+		}
+	}
+
+	for x := 0; x < chunkWidth; x++ {
+		for z := 0; z < chunkWidth; z++ {
+			worldX := baseX + x
+			worldZ := baseZ + z
+			height := colCache[x][z].height
+			biomeID := colCache[x][z].biomeID
+			cont := colCache[x][z].cont
 
 			dither := noise2(seed+99, float32(worldX)*0.1, float32(worldZ)*0.1) * 0.15
 
@@ -344,8 +397,8 @@ func generateChunkData(seed uint32, cx, cz int, chunk *Chunk) {
 			worldX := cx*chunkWidth + x
 			worldZ := cz*chunkWidth + z
 
-			// Check Biome
-			biomeID := getBiome(seed, worldX, worldZ)
+			// Check Biome (use cached value)
+			biomeID := colCache[x][z].biomeID
 			if isOceanBiome(biomeID) {
 				continue // No trees in ocean
 			}
@@ -512,7 +565,7 @@ func generateChunkData(seed uint32, cx, cz int, chunk *Chunk) {
 			worldX := cx*chunkWidth + x
 			worldZ := cz*chunkWidth + z
 			randVal := (hash2(seed+4, worldX, worldZ) + 1.0) * 0.5
-			biomeID := getBiome(seed, worldX, worldZ)
+			biomeID := colCache[x][z].biomeID
 
 			if ground == blockSand && biomeID == BiomeDesert {
 				// Cactus & Dead Bush
@@ -792,6 +845,42 @@ func getBiome(seed uint32, x, z int) int {
 			return BiomePlains
 		} else if hum > 0.6 {
 			// Prefer Birch in slightly wetter temperate, Oak in mid
+			return BiomeBirchForest
+		}
+		return BiomeForest
+	}
+}
+
+// classifyBiomeFromNoise determines biome from pre-computed noise values,
+// avoiding redundant fbm2 calls when noise is already available.
+func classifyBiomeFromNoise(cont, temp, hum float32) int {
+	if cont < -0.25 {
+		if cont < -0.6 {
+			return BiomeDeepOcean
+		}
+		if temp < -0.5 {
+			return BiomeFrozenOcean
+		}
+		return BiomeOcean
+	}
+	if temp < -0.4 {
+		if hum < -0.4 {
+			return BiomeIceSpikes
+		} else if hum > 0.4 {
+			return BiomeTaiga
+		}
+		return BiomeSnowyTundra
+	} else if temp > 0.4 {
+		if hum < -0.4 {
+			return BiomeDesert
+		} else if hum > 0.4 {
+			return BiomeDeepForest
+		}
+		return BiomeSavanna
+	} else {
+		if hum < -0.3 {
+			return BiomePlains
+		} else if hum > 0.6 {
 			return BiomeBirchForest
 		}
 		return BiomeForest

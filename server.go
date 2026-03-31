@@ -56,7 +56,6 @@ func NewServer(savePath string) *Server {
 
 	// Now we can start the workers with the correct seed
 	fmt.Printf("Server: Authoritative Seed Loaded: %d\n", world.seed)
-	fmt.Printf("Server: Authoritative Seed Loaded: %d\n", world.seed)
 	world.StartBackend()
 	InitRecipes()
 
@@ -197,11 +196,11 @@ func (s *Server) Tick() {
 
 			// Crucial: Tell server to forget that clients know this chunk.
 			// So next time they come close, we resend it.
-			s.ClientsMu.RLock()
+			s.ClientsMu.Lock()
 			for _, c := range s.Clients {
 				delete(c.KnownChunks, key)
 			}
-			s.ClientsMu.RUnlock()
+			s.ClientsMu.Unlock()
 		}
 
 		// Custom Unload Logic for Multiplayer support
@@ -1109,7 +1108,6 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 		found := false
 		for _, e := range s.World.entities {
 			if e.GetUUID() == wrap.From {
-				px, py, pz = e.GetPosition()
 				px, py, pz = e.GetPosition()
 				yaw, pitch = e.GetRotation()
 				found = true

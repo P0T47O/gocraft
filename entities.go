@@ -2,7 +2,6 @@ package main
 
 import (
 	"math"
-	"time"
 )
 
 type EntityType int
@@ -52,10 +51,14 @@ func (p *PigEntity) Tick(world *World) {
 	// Simple random movement logic
 	p.moveTimer -= 0.05
 	if p.moveTimer <= 0 {
-		// OPTIMIZE: System call in hot path (time.Now). Use tick count or global time.
-		p.moveTimer = 2.0 + (float32(time.Now().UnixNano()%100) / 50.0)
-		// Change rotation randomly
-		p.Yaw += (float32(time.Now().UnixNano()%360) - 180.0)
+		p.moveTimer = 2.0 + float32(p.X*7+p.Z*13)  // Deterministic pseudo-random based on position
+		if p.moveTimer < 2.0 {
+			p.moveTimer = 2.0
+		} else if p.moveTimer > 4.0 {
+			p.moveTimer = 4.0
+		}
+		// Change rotation using a simple hash of position instead of time.Now()
+		p.Yaw += float32(int(p.X*31+p.Z*17)%360) - 180.0
 		p.Dirty = true
 	}
 

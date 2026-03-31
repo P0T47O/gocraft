@@ -352,12 +352,22 @@ func (p *PacketChunkData) Decode(r *bytes.Buffer) error {
 	if err != nil {
 		return err
 	}
-	len1, _ := ReadVarInt(r)
+	len1, err := ReadVarInt(r)
+	if err != nil {
+		return err
+	}
 	p.Data = make([]byte, len1)
-	r.Read(p.Data)
-	len2, _ := ReadVarInt(r)
+	if _, err := io.ReadFull(r, p.Data); err != nil {
+		return err
+	}
+	len2, err := ReadVarInt(r)
+	if err != nil {
+		return err
+	}
 	p.LightData = make([]byte, len2)
-	r.Read(p.LightData)
+	if _, err := io.ReadFull(r, p.LightData); err != nil {
+		return err
+	}
 	return nil
 }
 

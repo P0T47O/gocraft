@@ -24,9 +24,18 @@ type World struct {
 	IsClient         bool   // True if this is a client-side world (rendering only)
 	SavePath         string // Path to save directory (for loading saved chunks)
 
+	// Render frame-cached slices (avoid per-frame allocation)
+	drawItems   []chunkItem
+	drawBacklog []chunkItem
+
 	// Entity System
 	entities   []Entity
 	entitiesMu sync.RWMutex
+}
+
+type chunkItem struct {
+	dx, dz int
+	dist   float64
 }
 
 func (w *World) TickEntities() {
@@ -227,7 +236,13 @@ func (w *World) BlockAt(x, y, z int) byte {
 	cz := divFloor(z, chunkWidth)
 	lx := modFloor(x, chunkWidth)
 	lz := modFloor(z, chunkWidth)
-	chunk := w.requestChunk(cx, cz)
+	// Prefer reading from already-generated chunks to avoid triggering generation on read paths
+	chunk := w.getChunkIfGenerated(cx, cz)
+	if chunk != nil {
+		return chunk.blocks[lx][y][lz]
+	}
+	// Fallback: request chunk (may trigger generation) and use procedural if not ready
+	chunk = w.requestChunk(cx, cz)
 	if chunk.generated {
 		return chunk.blocks[lx][y][lz]
 	}
@@ -575,18 +590,24 @@ func (w *World) UnloadChunks(playerX, playerZ, radius int, onUnload func(int, in
 		distSq := dx*dx + dz*dz
 
 		if distSq > radiusSq {
-			if onUnload != nil {
-				onUnload(key.X, key.Z)
-			}
 			toRemove = append(toRemove, key)
 		}
 	}
 	w.chunksMu.RUnlock()
 
 	if len(toRemove) > 0 {
+		// Call onUnload callbacks before taking the write lock
+		if onUnload != nil {
+			for _, key := range toRemove {
+				onUnload(key.X, key.Z)
+			}
+		}
 		w.chunksMu.Lock()
 		for _, key := range toRemove {
 			chunk := w.chunks[key]
+			if chunk == nil {
+				continue
+			}
 			delete(w.chunks, key)
 			w.freeChunk(chunk)
 			perfMon.IncrementChunkUnload()

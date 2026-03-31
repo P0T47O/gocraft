@@ -64,12 +64,8 @@ func (w *World) Draw(assets *RenderAssets, camera rl.Camera3D) {
 
 	// Sorting logic
 	renderRadius := 16
-	type chunkItem struct {
-		dx, dz int
-		dist   float64
-	}
-	var items []chunkItem
-	var backlog []chunkItem
+	items := w.drawItems[:0]
+	backlog := w.drawBacklog[:0]
 
 	for dz := -renderRadius; dz <= renderRadius; dz++ {
 		for dx := -renderRadius; dx <= renderRadius; dx++ {
@@ -91,6 +87,8 @@ func (w *World) Draw(assets *RenderAssets, camera rl.Camera3D) {
 	sort.Slice(items, func(i, j int) bool {
 		return items[i].dist < items[j].dist
 	})
+	w.drawItems = items
+	w.drawBacklog = backlog
 
 	// meshBuildsUsed := 0
 	// maxMeshBuildsPerFrame := 10
@@ -201,8 +199,8 @@ func (w *World) Draw(assets *RenderAssets, camera rl.Camera3D) {
 	for _, item := range items {
 		dx := item.dx
 		dz := item.dz
-		chunk := w.requestChunk(cx+dx, cz+dz)
-		if !chunk.generated {
+		chunk := w.getChunkIfGenerated(cx+dx, cz+dz)
+		if chunk == nil || !chunk.generated {
 			continue
 		}
 		if chunk.torchCount == 0 {
@@ -235,8 +233,8 @@ func (w *World) Draw(assets *RenderAssets, camera rl.Camera3D) {
 	for _, item := range items {
 		dx := item.dx
 		dz := item.dz
-		chunk := w.requestChunk(cx+dx, cz+dz)
-		if !chunk.generated {
+		chunk := w.getChunkIfGenerated(cx+dx, cz+dz)
+		if chunk == nil || !chunk.generated {
 			continue
 		}
 		ensureChunkSections(chunk)
