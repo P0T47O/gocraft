@@ -3,12 +3,16 @@ package main
 import (
 	"fmt"
 	"net"
+	"sync"
 
 	rl "github.com/gen2brain/raylib-go/raylib"
 )
 
 // Client represents the diverse state needed to communicate with the server.
 type Client struct {
+	done          chan struct{}
+	closeOnce     sync.Once
+	reader        sync.WaitGroup
 	Conn          net.Conn
 	Name          string
 	Incoming      chan Packet // Channel to receive packets from server
@@ -30,10 +34,13 @@ func ConnectTCP(addr string, name string) (*Client, error) {
 		Conn:     conn,
 		Name:     name,
 		Incoming: make(chan Packet, 4096),
+		done:     make(chan struct{}),
 	}
 
 	// Reader Loop
+	c.reader.Add(1)
 	go func() {
+		defer c.reader.Done()
 		defer close(c.Incoming)
 		for {
 			p, err := ReadPacket(conn)
@@ -41,7 +48,11 @@ func ConnectTCP(addr string, name string) (*Client, error) {
 				fmt.Printf("Disconnected from server: %v\n", err)
 				break
 			}
-			c.Incoming <- p
+			select {
+			case c.Incoming <- p:
+			case <-c.done:
+				return
+			}
 		}
 	}()
 
@@ -53,6 +64,13 @@ func ConnectTCP(addr string, name string) (*Client, error) {
 	c.Send(login)
 
 	return c, nil
+}
+
+func (c *Client) Close() {
+	if c == nil {
+		return
+	}
+	c.closeOnce.Do(func() { close(c.done); c.Conn.Close(); c.reader.Wait() })
 }
 
 func (c *Client) Send(p Packet) {

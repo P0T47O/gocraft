@@ -2,7 +2,9 @@ package main
 
 import (
 	"fmt"
+	"sort"
 	"sync"
+	"time"
 )
 
 // meshKind is deprecated but kept for minimal changes elsewhere if needed
@@ -56,24 +58,28 @@ func (s *meshSnapshot) metaAt(wx, wy, wz int) byte {
 }
 
 type meshJob struct {
-	key       chunkKey
-	baseX     int
-	baseZ     int
-	heightMap [chunkWidth][chunkWidth]int16
-	centerCX  int
-	centerCZ  int
-	neighbors [3][3]*Chunk
-	section   int
-	yMin      int
-	yMax      int
-	version   uint32
+	snapshot          *meshSnapshot
+	tints             *meshTintCache
+	instance, request uint64
+	key               chunkKey
+	baseX             int
+	baseZ             int
+	heightMap         [chunkWidth][chunkWidth]int16
+	centerCX          int
+	centerCZ          int
+	neighbors         [3][3]*Chunk
+	section           int
+	yMin              int
+	yMax              int
+	version           uint32
 }
 
 type meshResult struct {
-	key     chunkKey
-	results map[string]map[string][]*MeshBuildData
-	section int
-	version uint32
+	instance, request uint64
+	key               chunkKey
+	results           map[string]map[string][]*MeshBuildData
+	section           int
+	version           uint32
 }
 
 // meshSectionBufferPool provides reusable buffers sized for a single section + 1-block border in Y.
@@ -103,39 +109,53 @@ func (s *meshSnapshot) Release() {
 	}
 }
 
+func releaseMeshResults(results map[string]map[string][]*MeshBuildData) {
+	for _, pass := range results {
+		for _, list := range pass {
+			for _, d := range list {
+				d.Reset()
+				meshBuilderPool.Put(d)
+			}
+		}
+	}
+}
+
 func (w *World) StartMeshWorkers(assets *RenderAssets, workers int) {
 	if workers < 1 {
 		workers = 1
 	}
 	for i := 0; i < workers; i++ {
+		w.workers.Add(1)
 		go func() {
-			for job := range w.meshJobs {
+			defer w.workers.Done()
+			for {
+				var job meshJob
+				select {
+				case <-w.done:
+					return
+				case job = <-w.meshJobs:
+				}
+				res := meshResult{key: job.key, section: job.section, version: job.version, instance: job.instance, request: job.request}
 				func() {
+					defer job.snapshot.Release()
 					defer func() {
 						if r := recover(); r != nil {
-							fmt.Printf("MeshWorker Panic on Chunk %d,%d Section %d: %v\n", job.key.X, job.key.Z, job.section, r)
-							// Send empty result to clear pending flags and prevent deadlock
-							w.meshResults <- meshResult{
-								key:     job.key,
-								results: nil, // Partial/Nil result
-								section: job.section,
-								version: job.version,
-							}
+							fmt.Printf("Mesh %v section %d: %v\n", job.key, job.section, r)
 						}
 					}()
-
-					// Debug logging
-					// fmt.Printf("Starting mesh job: %v\n", job.key)
-					snapshot := buildMeshSnapshotFromNeighbors(job)
-					results := assets.buildAllMeshData(&job.heightMap, job.baseX, job.baseZ, job.yMin, job.yMax, snapshot.blockAt, snapshot.lightAt, snapshot.metaAt, w.seed)
-					snapshot.Release() // Return buffers to pool
-					w.meshResults <- meshResult{
-						key:     job.key,
-						results: results,
-						section: job.section,
-						version: job.version,
+					select {
+					case <-w.done:
+						return
+					default:
 					}
+					res.results = assets.buildAllMeshData(&job.heightMap, job.baseX, job.baseZ, job.yMin, job.yMax, job.snapshot.blockAt, job.snapshot.lightAt, job.snapshot.metaAt, w.seed, job.tints)
 				}()
+				select {
+				case w.meshResults <- res:
+				case <-w.done:
+					releaseMeshResults(res.results)
+					return
+				}
 			}
 		}()
 	}
@@ -289,195 +309,162 @@ func (w *World) requestImmediateAllSections(cx, cz int) {
 	}
 }
 
-func (w *World) ProcessImmediateMeshes(assets *RenderAssets, max int) {
-	if max < 1 {
-		return
+func unloadMeshPass(meshes map[string][]*ChunkMesh) {
+	for _, list := range meshes {
+		for _, m := range list {
+			m.unload()
+		}
 	}
-	count := 0
-	// We iterate the map directly. To allow safe modification (re-adding if full),
-	// we use the safe deletion pattern, but re-adding in loop is tricky.
-	// Since immediate updates are critical, we can try to process them all.
-	// But let's pull keys first to be safe and deterministic.
+}
+func clearSectionMeshes(c *Chunk, sec int) {
+	unloadMeshPass(c.opaqueMeshes[sec])
+	unloadMeshPass(c.waterMeshes[sec])
+	unloadMeshPass(c.cutoutMeshes[sec])
+	unloadMeshPass(c.glassMeshes[sec])
+	c.opaqueMeshes[sec] = nil
+	c.waterMeshes[sec] = nil
+	c.cutoutMeshes[sec] = nil
+	c.glassMeshes[sec] = nil
+}
+func setMeshPending(c *Chunk, sec int, pending bool) {
+	c.pendingOpaque[sec] = pending
+	c.pendingWater[sec] = pending
+	c.pendingCutout[sec] = pending
+	c.pendingGlass[sec] = pending
+}
 
-	// Optimization: Reuse a static buffer for keys if possible?
-	// For now, simple slice is fine.
+// Capture mutable voxel data on the owner thread; workers never retain live chunks.
+func (w *World) submitMesh(cx, cz, sec int, assets *RenderAssets) bool {
+	c := w.getChunkIfGenerated(cx, cz)
+	if c == nil || sec < 0 || sec >= sectionCount {
+		return false
+	}
+	ensureChunkSections(c)
+	if !c.sectionDirty[sec] || c.pendingOpaque[sec] || c.meshRetries[sec] > 5 {
+		return false
+	}
+	if c.sectionBlocks[sec] == 0 {
+		clearSectionMeshes(c, sec)
+		c.sectionDirty[sec] = false
+		return false
+	}
+	if len(w.meshJobs) == cap(w.meshJobs) {
+		return false
+	}
+	select {
+	case <-w.done:
+		return false
+	default:
+	}
+	if c.tints == nil {
+		c.tints = assets.buildMeshTintCache(w.seed, cx*chunkWidth, cz*chunkWidth)
+	}
+	job := meshJob{key: chunkKey{cx, cz}, baseX: cx * chunkWidth, baseZ: cz * chunkWidth, heightMap: c.heightMap, centerCX: cx, centerCZ: cz,
+		section: sec, yMin: sec * sectionHeight, yMax: (sec + 1) * sectionHeight, version: c.meshVersion[sec], instance: c.instance, tints: c.tints}
+	for dx := -1; dx <= 1; dx++ {
+		for dz := -1; dz <= 1; dz++ {
+			job.neighbors[dx+1][dz+1] = w.getChunkIfGenerated(cx+dx, cz+dz)
+		}
+	}
+	job.snapshot = buildMeshSnapshotFromNeighbors(job)
+	job.neighbors = [3][3]*Chunk{}
+	w.nextMeshID++
+	job.request = w.nextMeshID
+	select {
+	case w.meshJobs <- job:
+		c.meshRequest[sec] = job.request
+		setMeshPending(c, sec, true)
+		return true
+	default:
+		job.snapshot.Release()
+		return false
+	}
+}
+
+func (w *World) ProcessImmediateMeshes(assets *RenderAssets, max int) {
 	keys := make([]sectionKey, 0, len(w.immediate))
 	for key := range w.immediate {
 		keys = append(keys, key)
 	}
-
+	sort.Slice(keys, func(i, j int) bool {
+		if keys[i].X != keys[j].X {
+			return keys[i].X < keys[j].X
+		}
+		if keys[i].Z != keys[j].Z {
+			return keys[i].Z < keys[j].Z
+		}
+		return keys[i].Section < keys[j].Section
+	})
+	deadline := time.Now().Add(time.Millisecond)
+	count := 0
 	for _, key := range keys {
-		if count >= max {
-			break
-		}
-		// We process it, so remove from queue.
-		// If we fail to send, we re-add it.
-		delete(w.immediate, key)
-
-		chunk := w.getChunkIfGenerated(key.X, key.Z)
-		if chunk == nil {
-			continue
-		}
-		ensureChunkSections(chunk)
-		if key.Section < 0 || key.Section >= sectionCount {
-			continue
-		}
-
-		// Check what needs rebuilding
-		sec := key.Section
-		dirty := chunk.sectionDirty[sec]
-
-		// If perfectly clean and meshes exist, skip
-		if !dirty && chunk.opaqueMeshes[sec] != nil && chunk.waterMeshes[sec] != nil &&
-			chunk.cutoutMeshes[sec] != nil && chunk.glassMeshes[sec] != nil {
-			continue
-		}
-
-		// Prepare Neighbors
-		var neighbors [3][3]*Chunk
-		for dx := -1; dx <= 1; dx++ {
-			for dz := -1; dz <= 1; dz++ {
-				neighbors[dx+1][dz+1] = w.getChunkIfGenerated(key.X+dx, key.Z+dz)
-			}
-		}
-
-		baseX := key.X * chunkWidth
-		baseZ := key.Z * chunkWidth
-		yMin := key.Section * sectionHeight
-		yMax := yMin + sectionHeight
-
-		// Construct Job
-		job := meshJob{
-			key:       chunkKey{X: key.X, Z: key.Z},
-			baseX:     baseX,
-			baseZ:     baseZ,
-			heightMap: chunk.heightMap,
-			centerCX:  key.X,
-			centerCZ:  key.Z,
-			neighbors: neighbors,
-			section:   key.Section,
-			yMin:      yMin,
-			yMax:      yMax,
-			version:   chunk.meshVersion[key.Section],
-		}
-
-		// Set Pending Flags (so we know a result is coming)
-		chunk.pendingOpaque[sec] = true
-		chunk.pendingWater[sec] = true
-		chunk.pendingCutout[sec] = true
-		chunk.pendingGlass[sec] = true
-
-		// Attempt to Send
-		select {
-		case w.meshJobs <- job:
-			// Success
-			count++
-		default:
-			// Channel Full!
-			// Re-queue this job for next frame
-			w.immediate[key] = true
-			// We can stop processing to prevent thrashing
+		if count >= max || time.Now().After(deadline) {
 			return
+		}
+		c := w.getChunkIfGenerated(key.X, key.Z)
+		if c == nil || key.Section < 0 || key.Section >= sectionCount || !c.sectionDirty[key.Section] {
+			delete(w.immediate, key)
+			continue
+		}
+		if w.submitMesh(key.X, key.Z, key.Section, assets) {
+			count++
+			delete(w.immediate, key)
 		}
 	}
 }
 
+func (w *World) acceptsMesh(res meshResult) *Chunk {
+	c := w.getChunkIfGenerated(res.key.X, res.key.Z)
+	if c == nil || c.instance != res.instance || res.section < 0 || res.section >= sectionCount {
+		return nil
+	}
+	if c.meshRequest[res.section] != res.request {
+		return nil
+	}
+	setMeshPending(c, res.section, false)
+	if c.meshVersion[res.section] != res.version {
+		return nil
+	}
+	return c
+}
+
+// Budget includes stale results, packing and GPU upload. One result is indivisible.
 func (w *World) ProcessMeshResults(assets *RenderAssets, maxPerFrame int) {
-	processed := 0
-	for {
-		if processed >= maxPerFrame {
+	deadline := time.Now().Add(2 * time.Millisecond)
+	bytes := 0
+	for processed := 0; processed < maxPerFrame; processed++ {
+		if processed > 0 && (time.Now().After(deadline) || bytes >= 4<<20) {
 			return
 		}
 		select {
 		case res := <-w.meshResults:
-			chunk := w.getChunkIfGenerated(res.key.X, res.key.Z)
-			if chunk == nil {
+			c := w.acceptsMesh(res)
+			if c == nil {
+				releaseMeshResults(res.results)
 				continue
 			}
-			ensureChunkSections(chunk)
-			if res.section < 0 || res.section >= sectionCount {
-				continue
-			}
-			if chunk.meshVersion[res.section] != res.version {
-				chunk.pendingOpaque[res.section] = false
-				chunk.pendingWater[res.section] = false
-				chunk.pendingCutout[res.section] = false
-				chunk.pendingGlass[res.section] = false
-				continue
-			}
-
 			if res.results == nil {
-				// Job failed/panicked
-				chunk.meshRetries[res.section]++
-				if chunk.meshRetries[res.section] > 5 {
-					// Stop trying to mesh this section
-					chunk.sectionDirty[res.section] = false // Mark clean so we don't retry
-
-					// Clear pending implies we are done (failed)
-					chunk.pendingOpaque[res.section] = false
-					chunk.pendingWater[res.section] = false
-					chunk.pendingCutout[res.section] = false
-					chunk.pendingGlass[res.section] = false
-					fmt.Printf("Disabled corrupted Chunk Section %d,%d Sec %d after 5 retries\n", res.key.X, res.key.Z, res.section)
-				} else {
-					// Retry next frame
-					chunk.pendingOpaque[res.section] = false
-					chunk.pendingWater[res.section] = false
-					chunk.pendingCutout[res.section] = false
-					chunk.pendingGlass[res.section] = false
-				}
+				c.meshRetries[res.section]++
 				continue
 			}
-
-			// Success - Reset retries
-			chunk.meshRetries[res.section] = 0
-
-			// Clean up old meshes
-			passCleanup := func(meshes map[string][]*ChunkMesh) {
-				for _, list := range meshes {
-					for _, m := range list {
-						m.unload()
+			for _, pass := range res.results {
+				for _, list := range pass {
+					for _, d := range list {
+						bytes += d.vertCount*36 + len(d.indices)*4
 					}
 				}
 			}
-
-			// Apply all passes
-			passCleanup(chunk.opaqueMeshes[res.section])
-			chunk.opaqueMeshes[res.section] = assets.applyMeshData(res.results["opaque"])
-			chunk.pendingOpaque[res.section] = false
-
-			passCleanup(chunk.waterMeshes[res.section])
-			chunk.waterMeshes[res.section] = assets.applyMeshData(res.results["water"])
-			chunk.pendingWater[res.section] = false
-
-			passCleanup(chunk.cutoutMeshes[res.section])
-			chunk.cutoutMeshes[res.section] = assets.applyMeshData(res.results["cutout"])
-			chunk.pendingCutout[res.section] = false
-
-			passCleanup(chunk.glassMeshes[res.section])
-			chunk.glassMeshes[res.section] = assets.applyMeshData(res.results["glass"])
-			chunk.pendingGlass[res.section] = false
-
-			clearSectionDirtyIfReady(chunk, res.section)
-			processed++
+			sec := res.section
+			clearSectionMeshes(c, sec)
+			c.opaqueMeshes[sec] = assets.applyMeshData(res.results["opaque"])
+			c.waterMeshes[sec] = assets.applyMeshData(res.results["water"])
+			c.cutoutMeshes[sec] = assets.applyMeshData(res.results["cutout"])
+			c.glassMeshes[sec] = assets.applyMeshData(res.results["glass"])
+			c.meshRetries[sec] = 0
+			c.sectionDirty[sec] = false
+			perfMon.IncrementMeshBuild()
 		default:
 			return
 		}
 	}
-}
-
-func clearSectionDirtyIfReady(chunk *Chunk, section int) {
-	if section < 0 || section >= sectionCount {
-		return
-	}
-	if !chunk.sectionDirty[section] {
-		return
-	}
-	if chunk.pendingOpaque[section] || chunk.pendingWater[section] || chunk.pendingCutout[section] || chunk.pendingGlass[section] {
-		return
-	}
-	if chunk.opaqueMeshes[section] == nil || chunk.waterMeshes[section] == nil || chunk.cutoutMeshes[section] == nil || chunk.glassMeshes[section] == nil {
-		return
-	}
-	chunk.sectionDirty[section] = false
 }

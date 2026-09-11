@@ -58,7 +58,7 @@ var meshBuilderPool = sync.Pool{
 
 var interleaveBufferPool = sync.Pool{
 	New: func() interface{} {
-		return make([]float32, 0, 16384)
+		return make([]platform.Vertex, 0, 4096)
 	},
 }
 
@@ -91,26 +91,19 @@ func (a *RenderAssets) applyMeshData(data map[string][]*MeshBuildData) map[strin
 			// Indices are already uint32
 			indices := d.indices
 
-			// Interleave data: Pos(3), Tex(2), Color(4), Normal(3) -> 12 floats per vertex
-			totalFloats := d.vertCount * 12
-
-			// Get buffer from pool
-			buffer := interleaveBufferPool.Get().([]float32)
-			if cap(buffer) < totalFloats {
-				buffer = make([]float32, 0, totalFloats)
+			buffer := interleaveBufferPool.Get().([]platform.Vertex)
+			if cap(buffer) < d.vertCount {
+				buffer = make([]platform.Vertex, d.vertCount)
 			} else {
-				buffer = buffer[:0]
+				buffer = buffer[:d.vertCount]
 			}
-
 			for i := 0; i < d.vertCount; i++ {
-				// Pos
-				buffer = append(buffer, d.vertices[i*3], d.vertices[i*3+1], d.vertices[i*3+2])
-				// Tex
-				buffer = append(buffer, d.texcoords[i*2], d.texcoords[i*2+1])
-				// Color (uint8 -> float32)
-				buffer = append(buffer, float32(d.colors[i*4])/255.0, float32(d.colors[i*4+1])/255.0, float32(d.colors[i*4+2])/255.0, float32(d.colors[i*4+3])/255.0)
-				// Normal
-				buffer = append(buffer, d.normals[i*3], d.normals[i*3+1], d.normals[i*3+2])
+				buffer[i] = platform.Vertex{
+					Position: [3]float32{d.vertices[i*3], d.vertices[i*3+1], d.vertices[i*3+2]},
+					Texcoord: [2]float32{d.texcoords[i*2], d.texcoords[i*2+1]},
+					Color:    [4]uint8{d.colors[i*4], d.colors[i*4+1], d.colors[i*4+2], d.colors[i*4+3]},
+					Normal:   [3]float32{d.normals[i*3], d.normals[i*3+1], d.normals[i*3+2]},
+				}
 			}
 
 			// Upload to PureGL (Manual Memory Management)
@@ -326,7 +319,7 @@ func (a *RenderAssets) applyAOSmooth(block byte, col rl.Color, aos []float32, us
 	return res
 }
 
-func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16, baseX, baseZ int, yMin, yMax int, getBlock BlockGetter, getLight LightGetter, getMeta MetaGetter, seed uint32) map[string]map[string][]*MeshBuildData {
+func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16, baseX, baseZ int, yMin, yMax int, getBlock BlockGetter, getLight LightGetter, getMeta MetaGetter, seed uint32, cachedTints ...*meshTintCache) map[string]map[string][]*MeshBuildData {
 	white := rl.NewColor(255, 255, 255, 255)
 	northTint := rl.NewColor(210, 210, 210, 255)
 	southTint := rl.NewColor(225, 225, 225, 255)
@@ -380,51 +373,20 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 		return oc
 	}
 
-	// Biome Cache (18x18) to support 3x3 smoothing
-	// Map -1..16 -> 0..17
-	var biomeCache [18][18]int
-	for cx := -1; cx <= chunkWidth; cx++ {
-		for cz := -1; cz <= chunkWidth; cz++ {
-			biomeCache[cx+1][cz+1] = getBiome(seed, baseX+cx, baseZ+cz)
-		}
+	var tintCache *meshTintCache
+	if len(cachedTints) > 0 {
+		tintCache = cachedTints[0]
+	}
+	if tintCache == nil {
+		tintCache = a.buildMeshTintCache(seed, baseX, baseZ)
 	}
 
 	// OPTIMIZE: This is the hottest loop in the game. Changes here have massive impact.
 	// Consider SIMD optimization or moving to Compute Shaders in the future.
 	for x := 0; x < chunkWidth; x++ {
 		for z := 0; z < chunkWidth; z++ {
-			// Pre-calculate Smoothed Tint for this column
-			// Sample 3x3
-			var sumR, sumG, sumB float32
-			count := float32(0)
-
-			// Foliage
-			for dx := -1; dx <= 1; dx++ {
-				for dz := -1; dz <= 1; dz++ {
-					bID := biomeCache[x+1+dx][z+1+dz]
-					r, g, b := a.getBiomeBaseColor(bID, false)
-					sumR += r
-					sumG += g
-					sumB += b
-					count++
-				}
-			}
-			smoothFoliage := rl.NewColor(uint8(sumR/count), uint8(sumG/count), uint8(sumB/count), 255)
-
-			// Water
-			sumR, sumG, sumB = 0, 0, 0
-			count = 0
-			for dx := -1; dx <= 1; dx++ {
-				for dz := -1; dz <= 1; dz++ {
-					bID := biomeCache[x+1+dx][z+1+dz]
-					r, g, b := a.getBiomeBaseColor(bID, true)
-					sumR += r
-					sumG += g
-					sumB += b
-					count++
-				}
-			}
-			smoothWater := rl.NewColor(uint8(sumR/count), uint8(sumG/count), uint8(sumB/count), 255)
+			smoothFoliage := tintCache.foliage[x][z]
+			smoothWater := tintCache.water[x][z]
 
 			// Fixed Tints
 			birchColor := rl.NewColor(128, 167, 85, 255)
@@ -907,7 +869,7 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 							rs, gs, bs := float32(0), float32(0), float32(0)
 							// Helper to add
 							add := func(dx, dz int) {
-								c := a.getClimateColor(seed, wx+dx, wz+dz)
+								c := tintCache.climate[x+dx+1][z+dz+1]
 								rs += float32(c.R)
 								gs += float32(c.G)
 								bs += float32(c.B)

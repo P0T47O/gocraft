@@ -3,6 +3,7 @@ package main
 import (
 	"math"
 	"math/rand"
+	"time"
 )
 
 const trigTableSize = 1024
@@ -18,55 +19,66 @@ func init() {
 	}
 }
 
+type chunkGenJob struct {
+	key      chunkKey
+	instance uint64
+}
+
 type chunkGenResult struct {
-	key   chunkKey
-	chunk *Chunk
+	key      chunkKey
+	chunk    *Chunk
+	instance uint64
 }
 
 func (w *World) queueChunkGen(key chunkKey) {
+	if w.IsClient {
+		return
+	}
+	select {
+	case <-w.done:
+		return
+	default:
+	}
 	w.chunksMu.Lock()
-	if w.pending[key] {
+	chunk := w.chunks[key]
+	if chunk == nil || chunk.generated || w.pending[key] {
 		w.chunksMu.Unlock()
 		return
 	}
-	w.pending[key] = true
-	w.chunksMu.Unlock()
-
+	job := chunkGenJob{key: key, instance: chunk.instance}
 	select {
-	case w.genQueue <- key:
+	case w.genQueue <- job:
+		w.pending[key] = true
 	default:
-		w.chunksMu.Lock()
-		w.pending[key] = false
-		w.chunksMu.Unlock()
 	}
+	w.chunksMu.Unlock()
 }
 
 func (w *World) ProcessGenResults() {
-	for {
+	deadline := time.Now().Add(3 * time.Millisecond)
+	for count := 0; count < 4; count++ {
+		if count > 0 && time.Now().After(deadline) {
+			return
+		}
 		select {
 		case res := <-w.genResults:
 			w.chunksMu.Lock()
+			old := w.chunks[res.key]
+			if old == nil || old.instance != res.instance || old.generated {
+				w.chunksMu.Unlock()
+				w.chunkPool.Put(res.chunk)
+				continue
+			}
+			res.chunk.instance = res.instance
 			w.chunks[res.key] = res.chunk
 			delete(w.pending, res.key)
 			w.chunksMu.Unlock()
-
-			w.rebuildLightingForChunk(res.key.X, res.key.Z)
+			w.freeChunk(old)
+			w.stitchChunkLighting(res.key.X, res.key.Z)
 			w.markChunkAllSectionsDirty(res.key.X, res.key.Z)
-
+			w.markNeighborsDirty(res.key.X, res.key.Z)
+			w.applyPendingEdits(res.key)
 			perfMon.IncrementChunkLoad()
-
-			// Notify neighbors to re-mesh now that we exist (fixes water walls and boundary occlusion)
-			// Only mark dirty — don't request immediate mesh for all sections.
-			// The render loop will submit mesh jobs for dirty sections as needed.
-			// This avoids flooding the mesh job channel during initial world loading.
-			for dx := -1; dx <= 1; dx++ {
-				for dz := -1; dz <= 1; dz++ {
-					if dx == 0 && dz == 0 {
-						continue
-					}
-					w.markChunkAllSectionsDirty(res.key.X+dx, res.key.Z+dz)
-				}
-			}
 		default:
 			return
 		}
@@ -74,209 +86,57 @@ func (w *World) ProcessGenResults() {
 }
 
 func (w *World) genWorker() {
-	for key := range w.genQueue {
-		// Use a chunk from the pool to avoid 64KB allocation per chunk
-		chunk := w.allocChunk()
-
-		// Try loading from saved data first (if SavePath is set)
-		if w.SavePath != "" && TryLoadChunk(w.SavePath, chunk, key.X, key.Z) {
-			// Successfully loaded from disk
-			chunk.generated = true
-			ensureChunkSections(chunk)
-			chunk.rebuildHeightMap()
-			chunk.rebuildTorchCount()
-		} else {
-			// No saved data or no save path, generate terrain
-			chunk.generated = true
-			generateChunkData(w.seed, key.X, key.Z, chunk)
+	defer w.workers.Done()
+	for {
+		var job chunkGenJob
+		select {
+		case <-w.done:
+			return
+		case job = <-w.genQueue:
 		}
-
-		w.genResults <- chunkGenResult{
-			key:   key,
-			chunk: chunk,
+		select {
+		case <-w.done:
+			return
+		default:
+		}
+		chunk := w.chunkPool.Get()
+		if w.SavePath == "" || !TryLoadChunk(w.SavePath, chunk, job.key.X, job.key.Z) {
+			generateChunkData(w.seed, job.key.X, job.key.Z, chunk)
+		}
+		chunk.rebuildHeightMap()
+		chunk.rebuildTorchCount()
+		ensureChunkSections(chunk)
+		initializeChunkLighting(chunk)
+		chunk.generated = true
+		select {
+		case w.genResults <- chunkGenResult{key: job.key, chunk: chunk, instance: job.instance}:
+		case <-w.done:
+			w.chunkPool.Put(chunk)
+			return
 		}
 	}
 }
 
 func generateChunkData(seed uint32, cx, cz int, chunk *Chunk) {
-	// Direct write to chunk memory
 	blocks := &chunk.blocks
 	heightMap := &chunk.heightMap
-
-	seaLevel := 62
-	baseX := cx * chunkWidth
-	baseZ := cz * chunkWidth
-
-	// Pre-compute per-column noise values to avoid redundant fbm2 calls.
-	// terrainHeight, getBiome, and getContinentalness all share several noise channels.
-	type columnCache struct {
-		height  int
-		biomeID int
-		cont    float32
-	}
-	var colCache [chunkWidth][chunkWidth]columnCache
-
+	// Pool reuse must not retain air-space blocks from previous coordinates.
+	*blocks = [chunkWidth][chunkHeight][chunkWidth]byte{}
+	var columns [chunkWidth][chunkWidth]terrainColumn
 	for x := 0; x < chunkWidth; x++ {
 		for z := 0; z < chunkWidth; z++ {
-			worldX := baseX + x
-			worldZ := baseZ + z
-			xf := float32(worldX)
-			zf := float32(worldZ)
-
-			// Domain warp (shared by terrainHeight)
-			qX := fbm2(seed, xf*warpFreq, zf*warpFreq)
-			qZ := fbm2(seed+1, xf*warpFreq, zf*warpFreq)
-			warpX := xf + qX*warpAmp
-			warpZ := zf + qZ*warpAmp
-
-			// Continentalness - used by terrainHeight, getBiome, and ocean logic
-			cont := fbm2(seed+2, warpX*continentalBaseFreq, warpZ*continentalBaseFreq)
-			// Erosion
-			erosion := fbm2(seed+3, warpX*erosionBaseFreq, warpZ*erosionBaseFreq)
-			// Weirdness / PV
-			pv := fbm2(seed+4, warpX*weirdnessBaseFreq, warpZ*weirdnessBaseFreq)
-			// Detail
-			detail := fbm2(seed+5, xf*0.03, zf*0.03) * 3.0
-
-			// Height calculation (inlined from terrainHeight)
-			targetHeight := calculateSplineHeight(cont, erosion, pv)
-			finalHeight := targetHeight + detail
-			if cont > 0.3 {
-				if finalHeight < float32(seaLevel) {
-					finalHeight = float32(seaLevel)
-				}
+			wx, wz := cx*chunkWidth+x, cz*chunkWidth+z
+			col := sampleTerrainColumn(seed, wx, wz)
+			columns[x][z] = col
+			for y := 0; y < col.topY(); y++ {
+				blocks[x][y][z] = col.blockAt(seed, wx, y, wz)
 			}
-			height := int(finalHeight)
-
-			// Temperature and humidity (shared by getBiome)
-			temp := fbm2(seed+10, xf*tempFreq, zf*tempFreq)
-			hum := fbm2(seed+11, xf*humFreq, zf*humFreq)
-
-			// Biome calculation (inlined from getBiome, reusing cont)
-			// Use un-warped continentalness for biome since getBiome uses raw coords
-			contBiome := fbm2(seed+2, xf*continentalBaseFreq, zf*continentalBaseFreq)
-			biomeID := classifyBiomeFromNoise(contBiome, temp, hum)
-
-			colCache[x][z] = columnCache{height: height, biomeID: biomeID, cont: cont}
+			heightMap[x][z] = int16(col.topY())
 		}
 	}
-
-	for x := 0; x < chunkWidth; x++ {
-		for z := 0; z < chunkWidth; z++ {
-			worldX := baseX + x
-			worldZ := baseZ + z
-			height := colCache[x][z].height
-			biomeID := colCache[x][z].biomeID
-			cont := colCache[x][z].cont
-
-			dither := noise2(seed+99, float32(worldX)*0.1, float32(worldZ)*0.1) * 0.15
-
-			// Use Continentalness + Dither for Ocean determination
-			contWithDither := cont + dither
-			isOcean := contWithDither < -0.25
-
-			if height < 1 {
-				height = 1
-			}
-			if height >= chunkHeight {
-				height = chunkHeight - 1
-			}
-			blocks[x][0][z] = blockBedrock
-			for y := 1; y < height-4; y++ {
-				blocks[x][y][z] = blockStone
-			}
-
-			top := blockGrass
-
-			// Biome Specific Surface Blocks
-			switch biomeID {
-			case BiomeDesert:
-				top = blockSand
-			case BiomeTaiga, BiomeSnowyTundra, BiomeIceSpikes:
-				// Snowy biomes might use Grass with snow? Or Snow Block?
-				// Vanilla: Grass Block, but covered in snow.
-				// For now: Grass Block. Snow layer logic handles the cover.
-				top = blockGrass
-				if biomeID == BiomeIceSpikes {
-					top = blockSnow
-				}
-			}
-
-			// Beach Logic - Transition (height-based)
-			// If not strict ocean but near sea level
-			if height <= seaLevel+2 && height >= seaLevel-2 {
-				// Add beach if near water
-				if biomeID == BiomeBeach || biomeID == BiomeStoneBeach || biomeID == BiomeSnowyBeach {
-					top = blockSand
-					if biomeID == BiomeTaiga || biomeID == BiomeSnowyTundra {
-						top = blockGravel // Cold beach
-					}
-				} else {
-					// Fallback beach logic using contWithDither
-					if !isOcean && contWithDither < -0.1 { // Near twisted coast
-						top = blockSand
-					}
-				}
-			}
-
-			// Ocean Floor
-			if isOcean {
-				depth := seaLevel - height
-				if depth > 6 {
-					top = blockGravel
-				} else {
-					top = blockSand
-				}
-			}
-
-			// Fix Underwater Grass
-			if top == blockGrass && height < seaLevel {
-				top = blockDirt
-			}
-
-			for y := height - 4; y < height-1; y++ {
-				if y >= 1 {
-					if isOcean {
-						if top == blockGravel {
-							blocks[x][y][z] = blockGravel
-						} else {
-							blocks[x][y][z] = blockSand
-						}
-					} else if top == blockSand {
-						blocks[x][y][z] = blockSandstone
-					} else {
-						blocks[x][y][z] = blockDirt
-					}
-				}
-			}
-			blocks[x][height-1][z] = top
-			topY := height
-			if height < seaLevel {
-				// Water or Ice?
-				liquid := blockWater
-				if biomeID == BiomeFrozenOcean || (biomeID == BiomeIceSpikes || biomeID == BiomeSnowyTundra) {
-					// Surface ice
-					liquid = blockIce
-				}
-
-				for y := height; y < seaLevel; y++ {
-					if y == seaLevel-1 && liquid == blockIce {
-						blocks[x][y][z] = blockIce
-					} else {
-						blocks[x][y][z] = blockWater
-					}
-				}
-				topY = seaLevel
-			}
-			heightMap[x][z] = int16(topY)
-		}
-	}
-
 	randForChunk := func(salt int64) *rand.Rand {
-		seed64 := (int64(seed) << 32) ^ (int64(cx) << 16) ^ int64(cz) ^ salt
-		return rand.New(rand.NewSource(seed64))
+		return rand.New(rand.NewSource(int64(generationHash(seed, cx, 0, cz, uint64(salt)))))
 	}
-
 	placeOreVeins := func(rng *rand.Rand, ore byte, tries, size, minY, maxY int, triangular bool) {
 		if tries <= 0 || size <= 0 {
 			return
@@ -373,233 +233,24 @@ func generateChunkData(seed uint32, cx, cz int, chunk *Chunk) {
 	placeOreVeins(randForChunk(0x1003), blockGoldOre, 2, 8, 1, 32, false)
 	placeOreVeins(randForChunk(0x1004), blockDiamondOre, 1, 7, 1, 16, false)
 	placeOreVeins(randForChunk(0x1005), blockLapisOre, 1, 6, 1, 32, true)
-	setBlock := func(x, y, z int, block byte) {
-		if x < 0 || x >= chunkWidth || z < 0 || z >= chunkWidth || y < 0 || y >= chunkHeight {
-			return
-		}
-		blocks[x][y][z] = block
-		if y+1 > int(heightMap[x][z]) {
-			heightMap[x][z] = int16(y + 1)
-		}
-	}
 
-	canPlace := func(x, y, z int) bool {
-		if x < 0 || x >= chunkWidth || z < 0 || z >= chunkWidth || y < 0 || y >= chunkHeight {
-			return false
-		}
-		b := blocks[x][y][z]
-		return b == blockAir || b == blockLeaves || b == blockLeavesBirch || b == blockLeavesSpruce || b == blockTallGrass || b == blockSnow
-	}
-
-	// Trees and Vegetation
-	for x := 2; x < chunkWidth-2; x++ {
-		for z := 2; z < chunkWidth-2; z++ {
-			worldX := cx*chunkWidth + x
-			worldZ := cz*chunkWidth + z
-
-			// Check Biome (use cached value)
-			biomeID := colCache[x][z].biomeID
-			if isOceanBiome(biomeID) {
-				continue // No trees in ocean
-			}
-
-			surfaceY := int(heightMap[x][z]) - 1
-			if surfaceY < 1 || surfaceY >= chunkHeight-20 {
-				continue
-			}
-			ground := blocks[x][surfaceY][z]
-
-			// --- Tree Generation ---
-			// Tree probability depends on biome
-			treeChance := float32(0.005) // Default
-			switch biomeID {
-			case BiomeForest:
-				treeChance = 0.010
-			case BiomeDeepForest:
-				treeChance = 0.04
-			case BiomeBirchForest:
-				treeChance = 0.012
-			case BiomeTaiga:
-				treeChance = 0.015
-			case BiomePlains, BiomeSavanna:
-				treeChance = 0.0005
-			case BiomeDesert, BiomeIceSpikes, BiomeSnowyTundra:
-				treeChance = 0.0 // No trees primarily (dead bushes handled later)
-			}
-
-			// Density Noise (Patchy Forests)
-			// Frequency 0.02 means features are ~50 blocks wide
-			densityVal := fbm2(seed+99, float32(worldX)*0.02, float32(worldZ)*0.02)
-			if densityVal < -0.1 {
-				// Clearing / Meadow
-				treeChance = 0
-			} else if densityVal > 0.4 {
-				// Dense Core
-				treeChance *= 1.5
-			}
-
-			if ground == blockGrass || ground == blockDirt || ground == blockSnow {
-				// Roll for Tree
-				randVal := (hash2(seed+1, worldX, worldZ) + 1.0) * 0.5
-				if randVal < treeChance {
-					// 1. Determine Tree Type
-					logType := blockLog
-					leafType := blockLeaves
-					isSpruce := false
-
-					switch biomeID {
-					case BiomeBirchForest:
-						logType = blockLogBirch
-						leafType = blockLeavesBirch
-					case BiomeTaiga:
-						logType = blockLogSpruce
-						leafType = blockLeavesSpruce
-						isSpruce = true
-					case BiomeForest:
-						if randVal < treeChance*0.05 { // 5% Birch in Oak Forest
-							logType = blockLogBirch
-							leafType = blockLeavesBirch
-						}
-					}
-
-					// 2. Generate Tree Structure
-					// Re-using the manual loop logic but adapted
-					heightRand := (hash2(seed+2, worldX, worldZ) + 1.0) * 0.5
-
-					if isSpruce {
-						// Spruce Logic: Taller, Conical
-						// Simple Spruce: Core trunk, leaves in cone
-						trunkH := 6 + int(heightRand*4)
-
-						// Trunk (Force place)
-						for y := 0; y < trunkH; y++ {
-							setBlock(x, surfaceY+1+y, z, logType)
-						}
-						// Leaves (Conical)
-						// Top: 2 layers small, then wider
-						leafStart := surfaceY + 1 + 3 // Start leaves 3 blocks up
-						for y := leafStart; y <= surfaceY+1+trunkH+1; y++ {
-							// Determine radius based on height from top
-							topDist := (surfaceY + 1 + trunkH + 1) - y
-
-							rad := 1
-							if topDist > 2 && topDist%2 != 0 {
-								rad = 2
-							}
-							if topDist == 0 {
-								rad = 0 // Very top tip
-							}
-
-							for dx := -rad; dx <= rad; dx++ {
-								for dz := -rad; dz <= rad; dz++ {
-									if absInt(dx)+absInt(dz) > rad+1 { // Diamond/Star shape approx
-										// continue
-									}
-									// Only place if valid
-									if dx == 0 && dz == 0 && y < surfaceY+1+trunkH {
-										continue // trunk exists here
-									}
-									if canPlace(x+dx, y, z+dz) {
-										setBlock(x+dx, y, z+dz, leafType)
-									}
-								}
-							}
-						}
-						// Top leaf block
-						if canPlace(x, surfaceY+1+trunkH+1, z) {
-							setBlock(x, surfaceY+1+trunkH+1, z, leafType)
-						}
-
-					} else {
-						// Oak/Birch Logic (Balloon shape)
-						trunkH := 4 + int(heightRand*3)
-
-						trunkTop := surfaceY + trunkH - 1
-						// Trunk
-						for y := surfaceY + 1; y <= trunkTop-1; y++ {
-							setBlock(x, y, z, logType)
-						}
-						// Leaves
-						for y := trunkTop - 1; y <= trunkTop+1; y++ {
-							radius := 2
-							if y == trunkTop+1 {
-								radius = 1
-							}
-							for dx := -radius; dx <= radius; dx++ {
-								for dz := -radius; dz <= radius; dz++ {
-									if dx*dx+dz*dz > radius*radius+1 {
-										continue
-									}
-									if dx == 0 && dz == 0 && y == trunkTop+1 {
-										continue
-									}
-									corner := (absInt(dx) == radius && absInt(dz) == radius)
-									if corner {
-										if (hash2(seed+3, worldX+dx, worldZ+dz)+1.0)*0.5 < 0.35 {
-											continue
-										}
-									}
-									if canPlace(x+dx, y, z+dz) {
-										setBlock(x+dx, y, z+dz, leafType)
-									}
-								}
-							}
-						}
-					}
-				}
-			}
-		}
-	}
-
-	// Vegetation Pass
+	placeGeneratedTrees(seed, cx, cz, chunk)
 	for x := 0; x < chunkWidth; x++ {
 		for z := 0; z < chunkWidth; z++ {
-			surfaceY := int(heightMap[x][z]) - 1
-			if surfaceY < 1 || surfaceY >= chunkHeight-2 {
+			col := columns[x][z]
+			y := col.height
+			if y >= chunkHeight-2 || col.top != blockGrass && col.top != blockSand || blocks[x][y][z] != blockAir || y < seaLevel {
 				continue
 			}
-			ground := blocks[x][surfaceY][z]
-			if blocks[x][surfaceY+1][z] != blockAir {
-				continue
-			}
-			worldX := cx*chunkWidth + x
-			worldZ := cz*chunkWidth + z
-			randVal := (hash2(seed+4, worldX, worldZ) + 1.0) * 0.5
-			biomeID := colCache[x][z].biomeID
-
-			if ground == blockSand && biomeID == BiomeDesert {
-				// Cactus & Dead Bush
-				if randVal > 0.995 {
-					// Cactus
-					h := 1
-					if hash2(seed+5, worldX, worldZ) > 0.5 {
-						h++
-					}
-					for i := 1; i <= h; i++ {
-						setBlock(x, surfaceY+i, z, blockCactus)
-					}
-				} else if randVal < 0.01 {
-					setBlock(x, surfaceY+1, z, blockDeadBush)
-				}
-			} else if ground == blockGrass {
-				// Flowers / Tall Grass
-				// Use Biome logic
-				switch biomeID {
-				case BiomePlains, BiomeForest, BiomeBirchForest:
-					if randVal > 0.9 {
-						setBlock(x, surfaceY+1, z, blockTallGrass)
-					} else if randVal > 0.98 { // Flowers
-						if randVal > 0.99 {
-							setBlock(x, surfaceY+1, z, blockRose)
-						} else {
-							setBlock(x, surfaceY+1, z, blockDandelion)
-						}
-					}
-				case BiomeTaiga:
-					// Ferns (Tall Grass for now)
-					if randVal > 0.95 {
-						setBlock(x, surfaceY+1, z, blockTallGrass)
-					}
+			wx, wz := cx*chunkWidth+x, cz*chunkWidth+z
+			r := (hash2(seed+4, wx, wz) + 1) * 0.5
+			b := vegetationBlock(col.biomeID, col.top, r)
+			if b != blockAir {
+				blocks[x][y][z] = b
+				heightMap[x][z] = max(heightMap[x][z], int16(y+1))
+				if b == blockCactus && hash2(seed+5, wx, wz) > 0.5 && blocks[x][y+1][z] == blockAir {
+					blocks[x][y+1][z] = b
+					heightMap[x][z] = max(heightMap[x][z], int16(y+2))
 				}
 			}
 		}
@@ -607,29 +258,16 @@ func generateChunkData(seed uint32, cx, cz int, chunk *Chunk) {
 }
 
 func terrainTopY(seed uint32, x, z int) int {
-	height := terrainHeight(seed, x, z)
-	seaLevel := 62
-	cont := getContinentalness(seed, x, z)
-	// Ocean Weight logic repurposed:
-	// If deep ocean, adhere to height. If Cont < -0.3, it's water.
-	if height < seaLevel && cont < -0.2 { // was oceanWeight > 0.25
-		return seaLevel
-	}
-	return height
+	return sampleTerrainColumn(seed, x, z).topY()
 }
 
+// Unloaded-column fallback includes terrain, water/ice and caves. Ores and
+// decorations are intentionally materialized only when a chunk is generated.
 func blockAtProcedural(seed uint32, x, y, z int) byte {
-	height := terrainHeight(seed, x, z)
-	// Check biome/ocean for block type
-	// Simplified procedural for raycasting/physics without generating chunk
-	// Just return Stone/Dirt/Water for now to be safe
-	if y > height {
-		if y < 62 {
-			return blockWater
-		}
+	if y < 0 || y >= chunkHeight {
 		return blockAir
 	}
-	return blockStone
+	return sampleTerrainColumn(seed, x, z).blockAt(seed, x, y, z)
 }
 
 // Terrain Parameters
@@ -710,6 +348,15 @@ func calculateSplineHeight(c, e, pv float32) float32 {
 }
 
 func terrainHeight(seed uint32, x, z int) int {
+	return sampleTerrainColumn(seed, x, z).height
+}
+
+func rawTerrainHeight(seed uint32, x, z int) int {
+	height, _ := terrainShapeSample(seed, x, z)
+	return height
+}
+
+func terrainShapeSample(seed uint32, x, z int) (int, float32) {
 	xf := float32(x)
 	zf := float32(z)
 
@@ -746,7 +393,7 @@ func terrainHeight(seed uint32, x, z int) int {
 		}
 	}
 
-	return int(finalHeight)
+	return int(finalHeight), cont
 }
 
 const (

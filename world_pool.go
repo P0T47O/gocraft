@@ -22,7 +22,6 @@ func NewChunkPool(initialCap int) *ChunkPool {
 // Get retrieves a chunk from the pool and resets it
 func (p *ChunkPool) Get() *Chunk {
 	c := p.pool.Get().(*Chunk)
-	c.Reset()
 	return c
 }
 
@@ -34,6 +33,12 @@ func (p *ChunkPool) Put(c *Chunk) {
 
 // Reset clears the chunk data so it can be reused
 func (c *Chunk) Reset() {
+	c.instance = 0
+	c.sectionBlocks = [sectionCount]uint16{}
+	c.torches = c.torches[:0]
+	c.tints = nil
+	c.meshRequest = [sectionCount]uint64{}
+	c.meshRetries = [sectionCount]byte{}
 	// Re-initialize arrays to zero
 	// Note: Go arrays are value types, so assigning a zero-value array clears them
 	c.blocks = [chunkWidth][chunkHeight][chunkWidth]byte{}

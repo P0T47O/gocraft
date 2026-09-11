@@ -243,8 +243,13 @@ func LoadGame(savePath string, world *World, state *InputState, camera *rl.Camer
 }
 
 func LoadWorld(savePath string, world *World) (bool, float64, float64, float64, error) {
-	if _, err := os.Stat(filepath.Join(savePath, chunkDir)); err != nil {
-		return false, 0, 0, 0, nil // No save exists
+	// New worlds have level.json before they have player/chunk files.
+	if data, err := os.ReadFile(filepath.Join(savePath, levelFile)); err == nil {
+		var level LevelData
+		if err := json.Unmarshal(data, &level); err != nil {
+			return false, 0, 0, 0, err
+		}
+		world.seed = uint32(level.Seed)
 	}
 
 	var posX, posY, posZ float64
@@ -267,10 +272,8 @@ func LoadWorld(savePath string, world *World) (bool, float64, float64, float64, 
 		}
 	}
 
-	// 2. Load Chunks
-	if err := loadAllChunks(savePath, world); err != nil {
-		return false, 0, 0, 0, err
-	}
+	// Chunks are loaded on demand by generation workers, not all at startup.
+	world.SavePath = savePath
 	// 3. Load Entities
 	_, _ = LoadEntities(savePath, world)
 

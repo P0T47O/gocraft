@@ -1,42 +1,178 @@
 package main
 
 import (
+	"cmp"
 	"gocraft/platform"
 	"math"
-	"sort"
+	"slices"
+	"time"
 
 	rl "github.com/gen2brain/raylib-go/raylib"
 	"github.com/go-gl/mathgl/mgl32"
 )
 
-type translucentDraw struct {
-	chunk *Chunk
-	dist  float32
-	dx    int
-	dz    int
+// World owns this cache through its render worldRenderCache field. All scratch
+// slices retain capacity, but release chunk references at the end of each frame.
+type worldRenderCache struct {
+	offsets     []chunkItem
+	radius      int
+	visible     []visibleSection
+	translucent []translucentDraw
+	paths       []string
+	state       meshRenderState
 }
 
+type visibleSection struct {
+	chunk       *Chunk
+	cx, cz, sec int
+	dist        float32
+}
+
+type translucentDraw struct {
+	section visibleSection
+	glass   bool
+}
+
+// Retained for compatibility with the old World.waterDraws field; Draw no longer
+// uses a separate water pass.
 type waterDraw struct {
-	chunk *Chunk
-	dist  float32
-	dx    int
-	dz    int
+	chunk  *Chunk
+	dist   float32
+	dx, dz int
+}
+
+func (r *worldRenderCache) radiusOffsets(radius int) []chunkItem {
+	if r.offsets != nil && r.radius == radius {
+		return r.offsets
+	}
+	r.radius = radius
+	r.offsets = r.offsets[:0]
+	for dz := -radius; dz <= radius; dz++ {
+		for dx := -radius; dx <= radius; dx++ {
+			dist := dx*dx + dz*dz
+			if dist <= radius*radius {
+				r.offsets = append(r.offsets, chunkItem{dx: dx, dz: dz, dist: float64(dist)})
+			}
+		}
+	}
+	slices.SortFunc(r.offsets, func(a, b chunkItem) int {
+		if order := cmp.Compare(a.dist, b.dist); order != 0 {
+			return order
+		}
+		if order := cmp.Compare(a.dz, b.dz); order != 0 {
+			return order
+		}
+		return cmp.Compare(a.dx, b.dx)
+	})
+	return r.offsets
+}
+
+// Explicit coordinate ties give deterministic ordering even when distance ties
+// change with camera movement; they do not depend on map iteration order.
+func compareVisibleSections(a, b visibleSection) int {
+	if order := cmp.Compare(a.dist, b.dist); order != 0 {
+		return order
+	}
+	return compareSectionCoordinates(a, b)
+}
+
+func compareSectionCoordinates(a, b visibleSection) int {
+	if order := cmp.Compare(a.cz, b.cz); order != 0 {
+		return order
+	}
+	if order := cmp.Compare(a.cx, b.cx); order != 0 {
+		return order
+	}
+	return cmp.Compare(a.sec, b.sec)
+}
+
+func compareTranslucentDraws(a, b translucentDraw) int {
+	if order := cmp.Compare(b.section.dist, a.section.dist); order != 0 {
+		return order
+	}
+	if order := compareSectionCoordinates(a.section, b.section); order != 0 {
+		return order
+	}
+	if a.glass == b.glass {
+		return 0
+	}
+	if a.glass {
+		return 1
+	}
+	return -1 // Water precedes glass only within the same section/distance.
+}
+
+func (r *worldRenderCache) appendVisibleSections(chunk *Chunk, chunkX, chunkZ int, frustum *Frustum, camPos mgl32.Vec3) {
+	for sec := 0; sec < sectionCount; sec++ {
+		if chunk.sectionBlocks[sec] == 0 {
+			continue
+		}
+		// Blocks are centered at integer positions, so bounds extend half a block
+		// beyond the first center (including torches and translucent geometry).
+		min := mgl32.Vec3{float32(chunkX*chunkWidth) - 0.5, float32(sec*sectionHeight) - 0.5, float32(chunkZ*chunkWidth) - 0.5}
+		max := min.Add(mgl32.Vec3{chunkWidth, sectionHeight, chunkWidth})
+		if !frustum.IntersectsAABB(min, max) {
+			continue
+		}
+		center := min.Add(max).Mul(0.5)
+		delta := camPos.Sub(center)
+		r.visible = append(r.visible, visibleSection{chunk: chunk, cx: chunkX, cz: chunkZ, sec: sec, dist: delta.Dot(delta)})
+	}
+}
+
+func (r *worldRenderCache) collectTranslucent() {
+	clear(r.translucent)
+	r.translucent = r.translucent[:0]
+	for _, section := range r.visible {
+		if len(section.chunk.waterMeshes[section.sec]) != 0 {
+			r.translucent = append(r.translucent, translucentDraw{section: section})
+		}
+		if len(section.chunk.glassMeshes[section.sec]) != 0 {
+			r.translucent = append(r.translucent, translucentDraw{section: section, glass: true})
+		}
+	}
+	slices.SortFunc(r.translucent, compareTranslucentDraws)
+}
+
+func (r *worldRenderCache) drawMeshes(meshes map[string][]*ChunkMesh, assets *RenderAssets, viewProj mgl32.Mat4) {
+	if len(meshes) == 0 {
+		return
+	}
+	paths := r.paths[:0]
+	for path, list := range meshes {
+		if len(list) != 0 {
+			paths = append(paths, path)
+		}
+	}
+	slices.Sort(paths)
+	for _, path := range paths {
+		var texture uint32
+		if assets.isAnimated(path) {
+			texture = assets.currentTexture(path).ID
+		}
+		for _, mesh := range meshes[path] {
+			if mesh == nil {
+				continue
+			}
+			r.state.draw(mesh, mesh.material.Shader.ID, viewProj, texture)
+		}
+	}
+	clear(paths)
+	r.paths = paths[:0]
 }
 
 func (w *World) Draw(assets *RenderAssets, camera rl.Camera3D) {
-	// Calculate MVP matrices manually for PureGL
 	aspect := float32(rl.GetScreenWidth()) / float32(rl.GetScreenHeight())
 	proj := mgl32.Perspective(mgl32.DegToRad(camera.Fovy), aspect, 0.01, 1000.0)
-
 	camPos := mgl32.Vec3{camera.Position.X, camera.Position.Y, camera.Position.Z}
-	camTarget := mgl32.Vec3{camera.Target.X, camera.Target.Y, camera.Target.Z}
-	camUp := mgl32.Vec3{camera.Up.X, camera.Up.Y, camera.Up.Z}
-	view := mgl32.LookAtV(camPos, camTarget, camUp)
-
-	// Pre-calculate ViewProj Matrix (Optimization)
+	view := mgl32.LookAtV(camPos, mgl32.Vec3{camera.Target.X, camera.Target.Y, camera.Target.Z}, mgl32.Vec3{camera.Up.X, camera.Up.Y, camera.Up.Z})
 	viewProj := proj.Mul4(view)
 	frustum := ExtractFrustum(viewProj)
 
+	// Flush Raylib before issuing direct GL commands and invalidate cached bindings.
+	rl.DrawRenderBatchActive()
+	r := &w.render
+	r.state.reset()
 	// Update Fog Shader Uniforms (if active)
 	if assets.fogShader.ID != 0 {
 		sid := assets.fogShader.ID
@@ -58,276 +194,85 @@ func (w *World) Draw(assets *RenderAssets, camera rl.Camera3D) {
 		platform.UniformMatrix4fv(platform.GetUniformLocation(sid, "matModel"), 1, false, &ident[0])
 	}
 
-	cx := int(math.Floor(float64(camera.Position.X) / 16.0))
-	cz := int(math.Floor(float64(camera.Position.Z) / 16.0))
-	playerSec := int(math.Floor(float64(camera.Position.Y) / 16.0))
-
-	// Sorting logic
-	renderRadius := 16
-	items := w.drawItems[:0]
-	backlog := w.drawBacklog[:0]
-
-	for dz := -renderRadius; dz <= renderRadius; dz++ {
-		for dx := -renderRadius; dx <= renderRadius; dx++ {
-			dist := float64(dx*dx + dz*dz)
-			if dist > float64(renderRadius*renderRadius) {
-				continue
-			}
-			item := chunkItem{dx, dz, dist}
-			items = append(items, item)
-
-			// Prioritize chunks closer to player or in backlog
-			if dist <= 2*2 {
-				// High priority, already in items
-			} else {
-				backlog = append(backlog, item)
-			}
-		}
-	}
-	sort.Slice(items, func(i, j int) bool {
-		return items[i].dist < items[j].dist
-	})
-	w.drawItems = items
-	w.drawBacklog = backlog
-
-	// meshBuildsUsed := 0
-	// maxMeshBuildsPerFrame := 10
-	// boostBuilds := false
-
-	// Define helper capture function to include view/proj
-	drawSection := func(dx, dz, secMin, secMax int) {
-		chunk := w.getChunkIfGenerated(cx+dx, cz+dz)
+	cx := int(math.Floor(float64(camera.Position.X) / float64(chunkWidth)))
+	cz := int(math.Floor(float64(camera.Position.Z) / float64(chunkWidth)))
+	r.visible = r.visible[:0]
+	for _, offset := range r.radiusOffsets(16) {
+		chunkX, chunkZ := cx+offset.dx, cz+offset.dz
+		chunk := w.getChunkIfGenerated(chunkX, chunkZ)
 		if chunk == nil {
-			return
-		}
-		ensureChunkSections(chunk)
-		baseX := (cx + dx) * chunkWidth
-		baseZ := (cz + dz) * chunkWidth
-		if secMin < 0 {
-			secMin = 0
-		}
-		if secMax > sectionCount {
-			secMax = sectionCount
-		}
-		for sec := secMin; sec < secMax; sec++ {
-			// Frustum Culling
-			yMin := sec * sectionHeight
-			yMax := yMin + sectionHeight
-			min := mgl32.Vec3{float32(baseX), float32(yMin), float32(baseZ)}
-			max := mgl32.Vec3{float32(baseX + chunkWidth), float32(yMax), float32(baseZ + chunkWidth)}
-			if !frustum.IntersectsAABB(min, max) {
-				continue
-			}
-
-			// Skip broken chunks
-			if chunk.meshRetries[sec] > 5 {
-				continue
-			}
-
-			rebuildWater := (chunk.sectionDirty[sec] || chunk.waterMeshes[sec] == nil) && !chunk.pendingWater[sec]
-			rebuildOpaque := (chunk.sectionDirty[sec] || chunk.opaqueMeshes[sec] == nil) && !chunk.pendingOpaque[sec]
-			rebuildCutout := (chunk.sectionDirty[sec] || chunk.cutoutMeshes[sec] == nil) && !chunk.pendingCutout[sec]
-			rebuildGlass := (chunk.sectionDirty[sec] || chunk.glassMeshes[sec] == nil) && !chunk.pendingGlass[sec]
-			if rebuildWater || rebuildOpaque || rebuildCutout || rebuildGlass {
-				var neighbors [3][3]*Chunk
-				for ndx := -1; ndx <= 1; ndx++ {
-					for ndz := -1; ndz <= 1; ndz++ {
-						neighbors[ndx+1][ndz+1] = w.getChunkIfGenerated(cx+dx+ndx, cz+dz+ndz)
-					}
-				}
-				job := meshJob{
-					key:       chunkKey{X: cx + dx, Z: cz + dz},
-					baseX:     baseX,
-					baseZ:     baseZ,
-					heightMap: chunk.heightMap,
-					centerCX:  cx + dx,
-					centerCZ:  cz + dz,
-					neighbors: neighbors,
-					section:   sec,
-					yMin:      yMin,
-					yMax:      yMax,
-					version:   chunk.meshVersion[sec],
-				}
-				select {
-				case w.meshJobs <- job:
-					chunk.pendingOpaque[sec] = true
-					chunk.pendingWater[sec] = true
-					chunk.pendingCutout[sec] = true
-					chunk.pendingGlass[sec] = true
-				default:
-					// If channel is full, we'll try again next frame.
-				}
-			}
-			for path, meshes := range chunk.opaqueMeshes[sec] {
-				var texID uint32
-				if assets.isAnimated(path) {
-					tex := assets.currentTexture(path)
-					texID = tex.ID
-				}
-				for _, mesh := range meshes {
-					mesh.Draw(mesh.material.Shader.ID, viewProj, texID)
-				}
-			}
-			rl.DisableBackfaceCulling() // Grass overlay needs double-sided due to internal culling logic? Or just consistent state. But definitely Enable Offset.
-			platform.Enable(platform.GL_POLYGON_OFFSET_FILL)
-			platform.PolygonOffset(-1.0, -1.0)
-			for _, meshes := range chunk.cutoutMeshes[sec] {
-				for _, mesh := range meshes {
-					mesh.Draw(mesh.material.Shader.ID, viewProj, 0)
-				}
-			}
-			platform.Disable(platform.GL_POLYGON_OFFSET_FILL)
-			rl.EnableBackfaceCulling()
-		}
-	}
-
-	nearMin := playerSec - 1
-	nearMax := playerSec + 2
-	for ndx := -1; ndx <= 1; ndx++ {
-		for ndz := -1; ndz <= 1; ndz++ {
-			drawSection(ndx, ndz, nearMin, nearMax)
-		}
-	}
-	for _, item := range items {
-		drawSection(item.dx, item.dz, 0, sectionCount)
-	}
-	// Removed legacy backlog and budget logic.
-	// Mesh requests are now handled by drawSection -> requestImmediateMesh.
-
-	// Draw Torches (Raylib legacy, or needs porting? Keeps usage of assets.drawBlock which uses Raylib)
-	// We'll leave it for now, it matches existing behavior.
-	for _, item := range items {
-		dx := item.dx
-		dz := item.dz
-		chunk := w.getChunkIfGenerated(cx+dx, cz+dz)
-		if chunk == nil || !chunk.generated {
-			continue
-		}
-		if chunk.torchCount == 0 {
-			continue
-		}
-		baseX := (cx + dx) * chunkWidth
-		baseZ := (cz + dz) * chunkWidth
-		for x := 0; x < chunkWidth; x++ {
-			for z := 0; z < chunkWidth; z++ {
-				maxY := int(chunk.heightMap[x][z])
-				for y := 0; y < maxY; y++ {
-					block := chunk.blocks[x][y][z]
-					if block != blockTorch {
-						continue
-					}
-					worldX := baseX + x
-					worldZ := baseZ + z
-					pos := rl.NewVector3(float32(worldX), float32(y), float32(worldZ))
-					assets.drawBlock(block, pos, w.BlockAt, w.LightAt, w.MetaAt, worldX, y, worldZ)
-				}
-			}
-		}
-	}
-
-	// Transparent Pass (Water/Glass)
-	// Needs to collect draws and sort by distance to camera
-	waterDraws := w.waterDraws[:0]
-	translucent := w.translucentDraws[:0]
-
-	for _, item := range items {
-		dx := item.dx
-		dz := item.dz
-		chunk := w.getChunkIfGenerated(cx+dx, cz+dz)
-		if chunk == nil || !chunk.generated {
 			continue
 		}
 		ensureChunkSections(chunk)
+		r.appendVisibleSections(chunk, chunkX, chunkZ, &frustum, camPos)
+	}
+	slices.SortFunc(r.visible, compareVisibleSections)
 
-		// Check if we need to draw transparents
-		hasWater := false
-		hasGlass := false
-		for sec := 0; sec < sectionCount; sec++ {
-			if chunk.waterMeshes[sec] != nil {
-				hasWater = true
-			}
-			if chunk.glassMeshes[sec] != nil {
-				hasGlass = true
-			}
+	// Bound submission work separately from drawing. submitMesh owns eligibility,
+	// pending flags, and nonblocking queue handling; only accepted jobs count.
+	deadline := time.Now().Add(time.Millisecond)
+	submissions := 0
+	for _, section := range r.visible {
+		if submissions == 8 || !time.Now().Before(deadline) {
+			break
 		}
-
-		if hasWater || hasGlass {
-			centerX := float32((cx+dx)*chunkWidth + chunkWidth/2)
-			centerZ := float32((cz+dz)*chunkWidth + chunkWidth/2)
-			camDX := camera.Position.X - centerX
-			camDZ := camera.Position.Z - centerZ
-			dist := camDX*camDX + camDZ*camDZ
-
-			if hasWater {
-				waterDraws = append(waterDraws, waterDraw{chunk: chunk, dist: dist, dx: dx, dz: dz})
-			}
-			if hasGlass {
-				translucent = append(translucent, translucentDraw{chunk: chunk, dist: dist, dx: dx, dz: dz})
-			}
+		if section.chunk.meshRetries[section.sec] <= 5 && w.submitMesh(section.cx, section.cz, section.sec, assets) {
+			submissions++
 		}
 	}
 
-	w.waterDraws = waterDraws
-	w.translucentDraws = translucent
-
-	// Sort far to near
-	sort.Slice(waterDraws, func(i, j int) bool { return waterDraws[i].dist > waterDraws[j].dist })
-	sort.Slice(translucent, func(i, j int) bool { return translucent[i].dist > translucent[j].dist })
-
-	// Draw Water
-	rl.DisableDepthMask()
-	platform.ActiveTexture(platform.GL_TEXTURE0)
-
-	// Apply Polygon Offset to prevent Z-fighting with solid blocks (especially bottom faces if drawn)
+	for _, section := range r.visible {
+		r.drawMeshes(section.chunk.opaqueMeshes[section.sec], assets, viewProj)
+	}
+	rl.DisableBackfaceCulling()
 	platform.Enable(platform.GL_POLYGON_OFFSET_FILL)
-	platform.PolygonOffset(-1.0, -1.0)
+	platform.PolygonOffset(-1, -1)
+	for _, section := range r.visible {
+		r.drawMeshes(section.chunk.cutoutMeshes[section.sec], assets, viewProj)
+	}
+	platform.Disable(platform.GL_POLYGON_OFFSET_FILL)
+	rl.EnableBackfaceCulling()
 
-	for _, item := range waterDraws {
-		for sec := 0; sec < sectionCount; sec++ {
-			// Sort keys for deterministic order to prevent z-fighting flicker
-			paths := make([]string, 0, len(item.chunk.waterMeshes[sec]))
-			for path := range item.chunk.waterMeshes[sec] {
-				paths = append(paths, path)
+	// Raylib owns torch drawing. Flush it before resuming the cached direct-GL
+	// renderer, since the batch may change the program and texture bindings.
+	platform.UseProgram(0)
+	for _, section := range r.visible {
+		for _, torch := range section.chunk.torches {
+			if torch.y/sectionHeight != section.sec {
+				continue
 			}
-			sort.Strings(paths)
+			worldX, worldZ := section.cx*chunkWidth+torch.x, section.cz*chunkWidth+torch.z
+			pos := rl.NewVector3(float32(worldX), float32(torch.y), float32(worldZ))
+			assets.drawBlock(blockTorch, pos, w.BlockAt, w.LightAt, w.MetaAt, worldX, torch.y, worldZ)
+		}
+	}
+	rl.DrawRenderBatchActive()
+	r.state.reset()
 
-			for _, path := range paths {
-				meshes := item.chunk.waterMeshes[sec][path]
-				var texID uint32
-				if assets.isAnimated(path) {
-					// Remove optimization: Always update texture for now to ensure animation works
-					// near := absInt(item.dx) <= 2 && absInt(item.dz) <= 2
-					tex := assets.currentTexture(path)
-					texID = tex.ID
-				}
-				for _, mesh := range meshes {
-					mesh.Draw(mesh.material.Shader.ID, viewProj, texID)
-				}
-			}
+	r.collectTranslucent()
+	rl.DisableDepthMask()
+	for _, item := range r.translucent {
+		section := item.section
+		if item.glass {
+			platform.Disable(platform.GL_POLYGON_OFFSET_FILL)
+			rl.DisableBackfaceCulling()
+			r.drawMeshes(section.chunk.glassMeshes[section.sec], assets, viewProj)
+		} else {
+			rl.EnableBackfaceCulling()
+			platform.Enable(platform.GL_POLYGON_OFFSET_FILL)
+			platform.PolygonOffset(-1, -1)
+			r.drawMeshes(section.chunk.waterMeshes[section.sec], assets, viewProj)
 		}
 	}
 	platform.Disable(platform.GL_POLYGON_OFFSET_FILL)
-	rl.EnableDepthMask() // Reset for safety, though disabled again below if needed
-	// Actually Glass needs it Disabled too.
-	rl.DisableDepthMask()
-	rl.EnableBackfaceCulling()
-	// Keep DepthMask Disabled for Glass loop which follows...
-
-	// Draw Glass
-	// DepthMask is disabled from above.
-	rl.DisableBackfaceCulling() // Often used for glass
-	for _, item := range translucent {
-		for sec := 0; sec < sectionCount; sec++ {
-			for _, meshes := range item.chunk.glassMeshes[sec] {
-				for _, mesh := range meshes {
-					mesh.Draw(mesh.material.Shader.ID, viewProj, 0)
-				}
-			}
-		}
-	}
 	rl.EnableBackfaceCulling()
 	rl.EnableDepthMask()
-	platform.UseProgram(0) // Reset shader state to avoid interfering with Raylib
+	platform.UseProgram(0)
+	r.state.reset()
+	clear(r.visible)
+	r.visible = r.visible[:0]
+	clear(r.translucent)
+	r.translucent = r.translucent[:0]
 }
 
 // DrawBlockCrack renders the mining progress crack overlay

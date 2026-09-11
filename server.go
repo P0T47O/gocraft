@@ -120,6 +120,7 @@ func (s *Server) Start() {
 		select {
 		case <-s.Shutdown:
 			s.Save()
+			s.World.Close()
 			close(s.Done)
 			return
 		case <-ticker.C:
@@ -1178,56 +1179,10 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 			return
 		}
 
-		// Get or create chunk
-		chunk := s.World.ensureChunk(cx, cz)
-		if chunk == nil {
-			return
-		}
+		key := chunkKey{cx, cz}
+		s.World.requestChunk(cx, cz)
+		s.queueChunkFor(key, wrap.From)
 
-		// If chunk not generated, try loading from disk, then generate
-		if !chunk.generated {
-			chunk.mu.Lock()
-			// Double-check inside lock (another goroutine might have loaded it)
-			if !chunk.generated {
-				// Try loading from saved data first
-				if TryLoadChunk(s.SavePath, chunk, cx, cz) {
-					// Successfully loaded from disk
-					ensureChunkSections(chunk)
-					chunk.rebuildHeightMap()
-					chunk.rebuildTorchCount()
-				} else {
-					// No saved data, generate terrain
-					generateChunkData(s.World.seed, cx, cz, chunk)
-					ensureChunkSections(chunk)
-				}
-				chunk.generated = true
-			}
-			chunk.mu.Unlock()
-		}
-
-		// Serialize and send
-		data := make([]byte, chunkWidth*chunkHeight*chunkWidth)
-		light := make([]byte, chunkWidth*chunkHeight*chunkWidth)
-
-		chunk.mu.RLock()
-		idx := 0
-		for lx := 0; lx < chunkWidth; lx++ {
-			for y := 0; y < chunkHeight; y++ {
-				for lz := 0; lz < chunkWidth; lz++ {
-					data[idx] = chunk.blocks[lx][y][lz]
-					light[idx] = (chunk.skyLight[lx][y][lz] << 4) | (chunk.blockLight[lx][y][lz] & 0x0F)
-					idx++
-				}
-			}
-		}
-		chunk.mu.RUnlock()
-
-		client.Send <- &PacketChunkData{
-			CX:        int32(cx),
-			CZ:        int32(cz),
-			Data:      data,
-			LightData: light,
-		}
 	} // End of switch
 } // End of HandlePacket
 
@@ -1286,57 +1241,108 @@ func (s *Server) SendChunksAround(username string, centerCX, centerCZ, radius in
 	}
 }
 
-func (s *Server) processPendingChunks() {
-	if len(s.PendingChunks) == 0 {
-		return
-	}
-
-	// Iterate keys (random order is fine-ish, generation order matters more)
-	// We could optimize to process only N per tick if needed
-
-	toRemove := []chunkKey{}
-
-	for key, users := range s.PendingChunks {
-		chunk := s.World.getChunkIfGenerated(key.X, key.Z)
-		if chunk == nil {
-			continue
+func (s *Server) queueChunkFor(key chunkKey, user string) {
+	for _, name := range s.PendingChunks[key] {
+		if name == user {
+			return
 		}
+	}
+	s.PendingChunks[key] = append(s.PendingChunks[key], user)
+}
 
-		// Chunk is ready! Serialize it.
-		data := make([]byte, chunkWidth*chunkHeight*chunkWidth)
-		light := make([]byte, chunkWidth*chunkHeight*chunkWidth)
+func chunkPacket(key chunkKey, chunk *Chunk) *PacketChunkData {
+	data := make([]byte, chunkWidth*chunkHeight*chunkWidth)
+	light := make([]byte, len(data))
+	idx := 0
+	for x := 0; x < chunkWidth; x++ {
+		for y := 0; y < chunkHeight; y++ {
+			for z := 0; z < chunkWidth; z++ {
+				data[idx] = chunk.blocks[x][y][z]
+				light[idx] = (chunk.skyLight[x][y][z] << 4) | (chunk.blockLight[x][y][z] & 15)
+				idx++
+			}
+		}
+	}
+	return &PacketChunkData{CX: int32(key.X), CZ: int32(key.Z), Data: data, LightData: light}
+}
 
-		chunk.mu.RLock()
-		idx := 0
-		for lx := 0; lx < chunkWidth; lx++ {
-			for y := 0; y < chunkHeight; y++ {
-				for lz := 0; lz < chunkWidth; lz++ {
-					data[idx] = chunk.blocks[lx][y][lz]
-					// Combine sky (high 4 bits) and block (low 4 bits)
-					light[idx] = (chunk.skyLight[lx][y][lz] << 4) | (chunk.blockLight[lx][y][lz] & 0x0F)
-					idx++
+func (s *Server) processPendingChunks() {
+	// Border lighting can change already-sent chunks when a neighbor arrives.
+	s.ClientsMu.RLock()
+	for key := range s.World.lightChanged {
+		for name, c := range s.Clients {
+			if c.KnownChunks[key] {
+				s.queueChunkFor(key, name)
+			}
+		}
+	}
+	s.ClientsMu.RUnlock()
+	clear(s.World.lightChanged)
+	keys := make([]chunkKey, 0, len(s.PendingChunks))
+	for key := range s.PendingChunks {
+		keys = append(keys, key)
+	}
+	distance := func(key chunkKey) int {
+		best := int(^uint(0) >> 1)
+		for _, name := range s.PendingChunks[key] {
+			if c := s.Clients[name]; c != nil {
+				dx, dz := key.X-c.LastChunkX, key.Z-c.LastChunkZ
+				if d := dx*dx + dz*dz; d < best {
+					best = d
 				}
 			}
 		}
-		chunk.mu.RUnlock()
-
-		p := &PacketChunkData{
-			CX:        int32(key.X),
-			CZ:        int32(key.Z),
-			Data:      data,
-			LightData: light,
-		}
-
-		// Send to all waiting users
-		for _, user := range users {
-			s.BroadcastTo(user, p)
-		}
-
-		toRemove = append(toRemove, key)
+		return best
 	}
-
-	for _, key := range toRemove {
-		delete(s.PendingChunks, key)
+	s.ClientsMu.RLock()
+	sort.Slice(keys, func(i, j int) bool {
+		di, dj := distance(keys[i]), distance(keys[j])
+		if di != dj {
+			return di < dj
+		}
+		if keys[i].X != keys[j].X {
+			return keys[i].X < keys[j].X
+		}
+		return keys[i].Z < keys[j].Z
+	})
+	s.ClientsMu.RUnlock()
+	deadline := time.Now().Add(2 * time.Millisecond)
+	sent := 0
+	for _, key := range keys {
+		if sent >= 4 || time.Now().After(deadline) {
+			return
+		}
+		// Retry submissions previously rejected by a full generation queue.
+		chunk := s.World.requestChunk(key.X, key.Z)
+		if !chunk.generated {
+			continue
+		}
+		packet := chunkPacket(key, chunk)
+		remaining := s.PendingChunks[key][:0]
+		s.ClientsMu.Lock()
+		for _, name := range s.PendingChunks[key] {
+			c := s.Clients[name]
+			if c == nil {
+				continue
+			}
+			dx, dz := key.X-c.LastChunkX, key.Z-c.LastChunkZ
+			if dx*dx+dz*dz > 24*24 {
+				continue
+			}
+			select {
+			case c.Send <- packet:
+				c.KnownChunks[key] = true
+			default:
+				remaining = append(remaining, name)
+			}
+		}
+		s.ClientsMu.Unlock()
+		if len(remaining) == 0 {
+			delete(s.PendingChunks, key)
+		} else {
+			s.PendingChunks[key] = remaining
+		}
+		sent++
 	}
 }
 

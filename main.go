@@ -34,7 +34,7 @@ var (
 	chunkPool            *ChunkPool
 	perfMon              *PerformanceMonitor
 	remoteEntities       = make(map[string]*RemoteEntity)
-	pendingChunkRequests = make(map[chunkKey]bool) // Track in-flight chunk requests
+	pendingChunkRequests = make(map[chunkKey]time.Time) // Retry lost/rejected requests.
 
 	// CLI Flags
 	isServer   = flag.Bool("server", false, "Start as dedicated server")
@@ -82,6 +82,7 @@ type RemoteEntity struct {
 
 func main() {
 	flag.Parse()
+	initBlockRegistry()
 
 	// Directed Server Mode
 	if *isServer {
@@ -135,7 +136,9 @@ func main() {
 			drawMenu()
 		case StatePlaying:
 			updateGame()
-			drawGame()
+			if currentState == StatePlaying {
+				drawGame()
+			}
 		}
 
 		rl.EndDrawing()
@@ -416,6 +419,8 @@ func startGame(savePath string, ip string, isMultiplayer bool) {
 	}
 
 	// Client World
+	clear(pendingChunkRequests)
+	clear(remoteEntities)
 	world = NewClientWorld()
 	world.StartMeshWorkers(assets, 8)
 
@@ -430,7 +435,8 @@ func startGame(savePath string, ip string, isMultiplayer bool) {
 
 func exitGame() {
 	if client != nil {
-		client.Conn.Close()
+		client.Close()
+		client = nil
 	}
 	if server != nil {
 		server.Stop()
@@ -442,9 +448,16 @@ func exitGame() {
 		}
 		server = nil
 	}
+	if world != nil {
+		world.Close()
+		world = nil
+	}
 	if assets != nil {
 		assets.unload()
+		assets = nil
 	}
+	clear(pendingChunkRequests)
+	clear(remoteEntities)
 	// Reset State
 	currentState = StateMenu
 	menuPage = MenuMain
@@ -532,17 +545,25 @@ func updateGame() {
 	assets.Update(dt)
 
 	// Packet Loop
+	packetDeadline := time.Now().Add(2 * time.Millisecond)
 Loop:
-	for {
+	for packets := 0; packets < 64; packets++ {
+		if packets > 0 && time.Now().After(packetDeadline) {
+			break
+		}
 		select {
-		case pkt := <-client.Incoming:
+		case pkt, ok := <-client.Incoming:
+			if !ok {
+				exitGame()
+				return
+			}
 			handlePacket(pkt)
 		default:
 			break Loop
 		}
 	}
 
-	world.ProcessMeshResults(assets, 64)
+	world.ProcessMeshResults(assets, 16)
 
 	HandleInput(world, &camera, input, client)
 	world.ProcessImmediateMeshes(assets, 16)
@@ -602,10 +623,10 @@ func requestMissingChunks() {
 		if chunk != nil && chunk.generated {
 			return true
 		}
-		if pendingChunkRequests[key] {
+		if sent, pending := pendingChunkRequests[key]; pending && time.Since(sent) < 3*time.Second {
 			return true
 		}
-		pendingChunkRequests[key] = true
+		pendingChunkRequests[key] = time.Now()
 		client.Send(&PacketChunkRequest{CX: int32(chunkX), CZ: int32(chunkZ)})
 		requestCount++
 		return requestCount < maxRequestsPerFrame
@@ -678,6 +699,7 @@ func handlePacket(pkt Packet) {
 		}
 		chunk.mu.Unlock()
 		world.markNeighborsDirty(cx, cz)
+		world.applyPendingEdits(chunkKey{cx, cz})
 
 	case *PacketBlockChange:
 		world.SetBlockAt(int(p.X), int(p.Y), int(p.Z), p.BlockID)

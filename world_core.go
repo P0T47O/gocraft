@@ -8,11 +8,12 @@ import (
 )
 
 type World struct {
+	render           worldRenderCache
 	chunks           map[chunkKey]*Chunk
 	chunksMu         sync.RWMutex // Protects the chunks map
 	dirty            bool
 	seed             uint32
-	genQueue         chan chunkKey
+	genQueue         chan chunkGenJob
 	genResults       chan chunkGenResult
 	pending          map[chunkKey]bool
 	waterDraws       []waterDraw
@@ -23,6 +24,13 @@ type World struct {
 	chunkPool        *ChunkPool
 	IsClient         bool   // True if this is a client-side world (rendering only)
 	SavePath         string // Path to save directory (for loading saved chunks)
+	done             chan struct{}
+	stopOnce         sync.Once
+	workers          sync.WaitGroup
+	nextChunkID      uint64
+	nextMeshID       uint64
+	lightChanged     map[chunkKey]bool
+	pendingEdits     map[chunkKey][]blockEdit
 
 	// Render frame-cached slices (avoid per-frame allocation)
 	drawItems   []chunkItem
@@ -59,6 +67,11 @@ type sectionKey struct {
 
 type Chunk struct {
 	mu            sync.RWMutex
+	instance      uint64
+	sectionBlocks [sectionCount]uint16
+	torches       []blockPos
+	tints         *meshTintCache
+	meshRequest   [sectionCount]uint64
 	blocks        [chunkWidth][chunkHeight][chunkWidth]byte
 	meta          [chunkWidth][chunkHeight][chunkWidth]byte
 	heightMap     [chunkWidth][chunkWidth]int16
@@ -82,38 +95,50 @@ type Chunk struct {
 
 func NewFlatWorld() *World {
 	w := &World{
-		chunks:      make(map[chunkKey]*Chunk),
-		seed:        uint32(time.Now().UnixNano()),
-		genQueue:    make(chan chunkKey, 1024),
-		genResults:  make(chan chunkGenResult, 1024),
-		pending:     make(map[chunkKey]bool),
-		meshJobs:    make(chan meshJob, 4096),
-		meshResults: make(chan meshResult, 4096),
-		immediate:   make(map[sectionKey]bool),
-		chunkPool:   NewChunkPool(1024),
+		chunks:       make(map[chunkKey]*Chunk),
+		seed:         uint32(time.Now().UnixNano()),
+		genQueue:     make(chan chunkGenJob, 256),
+		genResults:   make(chan chunkGenResult, 32),
+		pending:      make(map[chunkKey]bool),
+		meshJobs:     make(chan meshJob, 32),
+		meshResults:  make(chan meshResult, 32),
+		immediate:    make(map[sectionKey]bool),
+		chunkPool:    NewChunkPool(1024),
+		done:         make(chan struct{}),
+		lightChanged: make(map[chunkKey]bool),
 	}
 	return w
 }
 
 func (w *World) StartBackend() {
 	// init gen workers
-	for i := 0; i < runtime.NumCPU(); i++ {
+	workerCount := runtime.NumCPU() / 2
+	if workerCount < 1 {
+		workerCount = 1
+	}
+	if workerCount > 8 {
+		workerCount = 8
+	}
+	for i := 0; i < workerCount; i++ {
+		w.workers.Add(1)
 		go w.genWorker()
 	}
 }
 
 func NewClientWorld() *World {
 	world := &World{
-		chunks:      map[chunkKey]*Chunk{},
-		seed:        uint32(time.Now().UnixNano()),
-		genQueue:    make(chan chunkKey, 512),
-		genResults:  make(chan chunkGenResult, 512),
-		pending:     map[chunkKey]bool{},
-		meshJobs:    make(chan meshJob, 4096),
-		meshResults: make(chan meshResult, 4096),
-		immediate:   map[sectionKey]bool{},
-		chunkPool:   NewChunkPool(1024),
-		IsClient:    true,
+		chunks:       map[chunkKey]*Chunk{},
+		seed:         uint32(time.Now().UnixNano()),
+		genQueue:     make(chan chunkGenJob, 256),
+		genResults:   make(chan chunkGenResult, 32),
+		pending:      map[chunkKey]bool{},
+		meshJobs:     make(chan meshJob, 32),
+		meshResults:  make(chan meshResult, 32),
+		immediate:    map[sectionKey]bool{},
+		chunkPool:    NewChunkPool(1024),
+		IsClient:     true,
+		done:         make(chan struct{}),
+		lightChanged: make(map[chunkKey]bool),
 	}
 	// Client world does not spawn generation workers.
 	// It relies on receiving chunk data from the server.
@@ -122,7 +147,10 @@ func NewClientWorld() *World {
 
 func (w *World) allocChunk() *Chunk {
 	// fmt.Println("AllocChunk")
-	return w.chunkPool.Get()
+	c := w.chunkPool.Get()
+	w.nextChunkID++
+	c.instance = w.nextChunkID
+	return c
 }
 
 func (w *World) freeChunk(c *Chunk) {
@@ -274,26 +302,8 @@ func (w *World) SetMetaAt(x, y, z int, meta byte) {
 	lz := modFloor(z, chunkWidth)
 	chunk := w.requestChunk(cx, cz)
 	if !chunk.generated {
-		if !w.IsClient {
-			generateChunkData(w.seed, cx, cz, chunk)
-			chunk.mu.Lock()
-			// blocks and heightMap are already filled in chunk
-			ensureChunkSections(chunk)
-			for i := range chunk.sectionDirty {
-				chunk.sectionDirty[i] = true
-				chunk.meshVersion[i]++
-			}
-			chunk.mu.Unlock()
-		} else {
-			// Client: Don't generate, just ensure sections exist
-			chunk.mu.Lock()
-			ensureChunkSections(chunk)
-			chunk.mu.Unlock()
-		}
-		chunk.generated = true
-		w.chunksMu.Lock()
-		delete(w.pending, chunkKey{X: cx, Z: cz})
-		w.chunksMu.Unlock()
+		w.deferEdit(cx, cz, blockEdit{pos: blockPos{x, y, z}, value: meta, meta: true})
+		return
 	}
 	chunk.mu.Lock()
 	if chunk.meta[lx][y][lz] == meta {
@@ -327,26 +337,8 @@ func (w *World) SetBlockAt(x, y, z int, block byte) {
 	lz := modFloor(z, chunkWidth)
 	chunk := w.requestChunk(cx, cz)
 	if !chunk.generated {
-		if !w.IsClient {
-			generateChunkData(w.seed, cx, cz, chunk)
-			chunk.mu.Lock()
-			// blocks and heightMap are already filled in chunk
-			ensureChunkSections(chunk)
-			for i := range chunk.sectionDirty {
-				chunk.sectionDirty[i] = true
-				chunk.meshVersion[i]++
-			}
-			chunk.mu.Unlock()
-		} else {
-			// Client: Don't generate, just ensure sections exist
-			chunk.mu.Lock()
-			ensureChunkSections(chunk)
-			chunk.mu.Unlock()
-		}
-		chunk.generated = true
-		w.chunksMu.Lock()
-		delete(w.pending, chunkKey{X: cx, Z: cz})
-		w.chunksMu.Unlock()
+		w.deferEdit(cx, cz, blockEdit{pos: blockPos{x, y, z}, value: block})
+		return
 	}
 	chunk.mu.Lock()
 	oldBlock := chunk.blocks[lx][y][lz]
@@ -355,7 +347,19 @@ func (w *World) SetBlockAt(x, y, z int, block byte) {
 		return
 	}
 	chunk.blocks[lx][y][lz] = block
+	if oldBlock == blockAir {
+		chunk.sectionBlocks[y/sectionHeight]++
+	}
+	if block == blockAir {
+		chunk.sectionBlocks[y/sectionHeight]--
+	}
 	if oldBlock == blockTorch {
+		for i, p := range chunk.torches {
+			if p == (blockPos{lx, y, lz}) {
+				chunk.torches = append(chunk.torches[:i], chunk.torches[i+1:]...)
+				break
+			}
+		}
 		chunk.torchCount--
 		if chunk.torchCount < 0 {
 			chunk.torchCount = 0
@@ -363,6 +367,7 @@ func (w *World) SetBlockAt(x, y, z int, block byte) {
 	}
 	if block == blockTorch {
 		chunk.torchCount++
+		chunk.torches = append(chunk.torches, blockPos{lx, y, lz})
 	}
 	chunk.meta[lx][y][lz] = 0
 	chunk.updateHeightMap(lx, lz, y)
@@ -476,7 +481,7 @@ func (w *World) ensureChunk(cx, cz int) *Chunk {
 	if chunk, ok := w.chunks[key]; ok {
 		return chunk
 	}
-	chunk := &Chunk{}
+	chunk := w.allocChunk()
 	w.chunks[key] = chunk
 	return chunk
 }
@@ -567,11 +572,17 @@ func (c *Chunk) rebuildHeightMap() {
 
 func (c *Chunk) rebuildTorchCount() {
 	count := 0
+	c.sectionBlocks = [sectionCount]uint16{}
+	c.torches = c.torches[:0]
 	for x := 0; x < chunkWidth; x++ {
 		for y := 0; y < chunkHeight; y++ {
 			for z := 0; z < chunkWidth; z++ {
+				if c.blocks[x][y][z] != blockAir {
+					c.sectionBlocks[y/sectionHeight]++
+				}
 				if c.blocks[x][y][z] == blockTorch {
 					count++
+					c.torches = append(c.torches, blockPos{x, y, z})
 				}
 			}
 		}
@@ -609,6 +620,12 @@ func (w *World) UnloadChunks(playerX, playerZ, radius int, onUnload func(int, in
 				continue
 			}
 			delete(w.chunks, key)
+			delete(w.pending, key)
+			delete(w.pendingEdits, key)
+			delete(w.lightChanged, key)
+			for sec := 0; sec < sectionCount; sec++ {
+				delete(w.immediate, sectionKey{key.X, key.Z, sec})
+			}
 			w.freeChunk(chunk)
 			perfMon.IncrementChunkUnload()
 		}

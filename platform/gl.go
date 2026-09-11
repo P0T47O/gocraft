@@ -45,6 +45,7 @@ const (
 	GL_STATIC_DRAW          = 0x88E4
 	GL_FLOAT                = 0x1406
 	GL_UNSIGNED_INT         = 0x1405
+	GL_UNSIGNED_BYTE        = 0x1401
 	GL_TRIANGLES            = 0x0004
 	GL_TEXTURE_2D           = 0x0DE1
 	GL_TEXTURE0             = 0x84C0

@@ -1,490 +1,384 @@
 package main
 
-func isOpaqueBlock(block byte) bool {
-	return GetBlock(block).IsOpaque
-}
+func isOpaqueBlock(block byte) bool { return GetBlock(block).IsOpaque }
+func lightEmission(block byte) byte { return GetBlock(block).LightLevel }
+func emitsLight(block byte) bool    { return lightEmission(block) > 0 }
 
-func lightEmission(block byte) byte {
-	return GetBlock(block).LightLevel
-}
+type lightPos struct{ x, y, z int }
 
-func emitsLight(block byte) bool {
-	return lightEmission(block) > 0
-}
+var lightDirections = [...]lightPos{{1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}}
+
+func (p lightPos) add(d lightPos) lightPos { return lightPos{p.x + d.x, p.y + d.y, p.z + d.z} }
 
 func (w *World) LightAt(x, y, z int) byte {
-	if y < 0 || y >= chunkHeight {
-		return 0
-	}
-	cx := divFloor(x, chunkWidth)
-	cz := divFloor(z, chunkWidth)
-	lx := modFloor(x, chunkWidth)
-	lz := modFloor(z, chunkWidth)
-	chunk := w.getChunkIfGenerated(cx, cz)
-	if chunk == nil {
-		return 15
-	}
-	sky := chunk.skyLight[lx][y][lz]
-	block := chunk.blockLight[lx][y][lz]
+	sky, block := w.LightSkyAt(x, y, z), w.LightBlockAt(x, y, z)
 	if block > sky {
 		return block
 	}
 	return sky
 }
-
 func (w *World) LightSkyAt(x, y, z int) byte {
 	if y < 0 || y >= chunkHeight {
 		return 0
 	}
-	cx := divFloor(x, chunkWidth)
-	cz := divFloor(z, chunkWidth)
-	lx := modFloor(x, chunkWidth)
-	lz := modFloor(z, chunkWidth)
-	chunk := w.getChunkIfGenerated(cx, cz)
-	if chunk == nil {
+	c := w.getChunkIfGenerated(divFloor(x, chunkWidth), divFloor(z, chunkWidth))
+	if c == nil {
 		return 15
-	}
-	return chunk.skyLight[lx][y][lz]
+	} // Rendering fallback only; propagation never uses it.
+	return c.skyLight[modFloor(x, chunkWidth)][y][modFloor(z, chunkWidth)]
 }
-
 func (w *World) LightBlockAt(x, y, z int) byte {
 	if y < 0 || y >= chunkHeight {
 		return 0
 	}
-	cx := divFloor(x, chunkWidth)
-	cz := divFloor(z, chunkWidth)
-	lx := modFloor(x, chunkWidth)
-	lz := modFloor(z, chunkWidth)
-	chunk := w.getChunkIfGenerated(cx, cz)
-	if chunk == nil {
+	c := w.getChunkIfGenerated(divFloor(x, chunkWidth), divFloor(z, chunkWidth))
+	if c == nil {
 		return 0
 	}
-	return chunk.blockLight[lx][y][lz]
+	return c.blockLight[modFloor(x, chunkWidth)][y][modFloor(z, chunkWidth)]
 }
 
-func (w *World) setBlockLightAtInternal(x, y, z int, val byte) {
-	if y < 0 || y >= chunkHeight {
-		return
+// initializeChunkLighting operates only on c. The generation worker calls it
+// after filling blocks and before publishing c, while exclusively owning c.
+// Missing neighbors supply no light. No World, locks, or mesh state is needed.
+func initializeChunkLighting(c *Chunk) {
+	c.skyLight = [chunkWidth][chunkHeight][chunkWidth]byte{}
+	c.blockLight = [chunkWidth][chunkHeight][chunkWidth]byte{}
+	blockQueue := make([]lightPos, 0, 64)
+	for x := 0; x < chunkWidth; x++ {
+		for z := 0; z < chunkWidth; z++ {
+			open := true
+			for y := chunkHeight - 1; y >= 0; y-- {
+				block := c.blocks[x][y][z]
+				if isOpaqueBlock(block) {
+					open = false
+				}
+				if open {
+					c.skyLight[x][y][z] = 15
+				}
+				if emit := lightEmission(block); emit > 0 {
+					c.blockLight[x][y][z] = emit
+					blockQueue = append(blockQueue, lightPos{x, y, z})
+				}
+			}
+		}
 	}
-	cx := divFloor(x, chunkWidth)
-	cz := divFloor(z, chunkWidth)
-	lx := modFloor(x, chunkWidth)
-	lz := modFloor(z, chunkWidth)
-	chunk := w.getChunkIfGenerated(cx, cz)
-	if chunk == nil {
-		return
-	}
-	// Caller MUST hold the lock if they are modifying this chunk OR
-	// assume single-threaded access for lighting propagation.
-	// For MVP stability on Client, we use a single thread for these updates.
-	chunk.blockLight[lx][y][lz] = val
-	ensureChunkSections(chunk)
-	sec := sectionIndexForY(y)
-	chunk.sectionDirty[sec] = true
-	chunk.meshVersion[sec]++
-}
-
-func (w *World) setSkyLightAtInternal(x, y, z int, val byte) {
-	if y < 0 || y >= chunkHeight {
-		return
-	}
-	cx := divFloor(x, chunkWidth)
-	cz := divFloor(z, chunkWidth)
-	lx := modFloor(x, chunkWidth)
-	lz := modFloor(z, chunkWidth)
-	chunk := w.getChunkIfGenerated(cx, cz)
-	if chunk == nil {
-		return
-	}
-	chunk.skyLight[lx][y][lz] = val
-	ensureChunkSections(chunk)
-	sec := sectionIndexForY(y)
-	chunk.sectionDirty[sec] = true
-	chunk.meshVersion[sec]++
-}
-
-func (w *World) rebuildLightingForChunk(cx, cz int) {
-	chunk := w.requestChunk(cx, cz)
-	if !chunk.generated {
-		return
-	}
-	chunk.mu.Lock()
-	defer chunk.mu.Unlock()
-	ensureChunkSections(chunk)
-
-	// Fast Reset
+	// Enqueue only dark passable cells touching direct sky, not every sunlit cell.
+	skyQueue := make([]lightPos, 0, 256)
 	for x := 0; x < chunkWidth; x++ {
 		for y := 0; y < chunkHeight; y++ {
 			for z := 0; z < chunkWidth; z++ {
-				chunk.skyLight[x][y][z] = 0
-				chunk.blockLight[x][y][z] = 0
-			}
-		}
-	}
-
-	type node struct {
-		x, y, z int
-	}
-
-	skyQueue := make([]node, 0, 1024)
-	for x := 0; x < chunkWidth; x++ {
-		for z := 0; z < chunkWidth; z++ {
-			blocked := false
-			for y := chunkHeight - 1; y >= 0; y-- {
-				if isOpaqueBlock(chunk.blocks[x][y][z]) {
-					blocked = true
+				if c.skyLight[x][y][z] != 0 || isOpaqueBlock(c.blocks[x][y][z]) {
 					continue
 				}
-				if !blocked {
-					chunk.skyLight[x][y][z] = 15
-					skyQueue = append(skyQueue, node{cx*chunkWidth + x, y, cz*chunkWidth + z})
+				p := lightPos{x, y, z}
+				for _, d := range lightDirections {
+					n := p.add(d)
+					if localLightPos(n) && c.skyLight[n.x][n.y][n.z] == 15 {
+						c.skyLight[x][y][z] = 14
+						skyQueue = append(skyQueue, p)
+						break
+					}
 				}
 			}
 		}
 	}
-
-	// Simple propagation (Broad World View)
-	for i := 0; i < len(skyQueue); i++ {
-		n := skyQueue[i]
-		cur := w.LightSkyAt(n.x, n.y, n.z)
-		if cur <= 1 {
+	spreadLocalLight(c, &c.skyLight, skyQueue)
+	spreadLocalLight(c, &c.blockLight, blockQueue)
+}
+func localLightPos(p lightPos) bool {
+	return p.x >= 0 && p.x < chunkWidth && p.y >= 0 && p.y < chunkHeight && p.z >= 0 && p.z < chunkWidth
+}
+func spreadLocalLight(c *Chunk, light *[chunkWidth][chunkHeight][chunkWidth]byte, queue []lightPos) {
+	for head := 0; head < len(queue); head++ {
+		p := queue[head]
+		level := light[p.x][p.y][p.z]
+		if level <= 1 {
 			continue
+		} // Guard before unsigned subtraction.
+		for _, d := range lightDirections {
+			n := p.add(d)
+			if !localLightPos(n) || isOpaqueBlock(c.blocks[n.x][n.y][n.z]) {
+				continue
+			}
+			if light[n.x][n.y][n.z] < level-1 {
+				light[n.x][n.y][n.z] = level - 1
+				queue = append(queue, n)
+			}
 		}
-		next := cur - 1
-		neighbors := [6]node{
-			{n.x + 1, n.y, n.z}, {n.x - 1, n.y, n.z},
-			{n.x, n.y + 1, n.z}, {n.x, n.y - 1, n.z},
-			{n.x, n.y, n.z + 1}, {n.x, n.y, n.z - 1},
+	}
+}
+
+// World lighting mutations run on the owner thread. Cache pointers (including
+// missing chunks) and direct-sky columns for one transaction. No chunk locks.
+type lightChunkCache struct {
+	c     *Chunk
+	top   [chunkWidth][chunkWidth]int
+	known [chunkWidth][chunkWidth]bool
+}
+type lightUpdate struct {
+	w      *World
+	chunks map[chunkKey]*lightChunkCache
+	dirty  map[sectionKey]bool
+}
+
+func newLightUpdate(w *World) *lightUpdate {
+	return &lightUpdate{w: w, chunks: make(map[chunkKey]*lightChunkCache), dirty: make(map[sectionKey]bool)}
+}
+func (u *lightUpdate) chunk(key chunkKey) *lightChunkCache {
+	if c, ok := u.chunks[key]; ok {
+		return c
+	}
+	c := &lightChunkCache{c: u.w.getChunkIfGenerated(key.X, key.Z)}
+	u.chunks[key] = c
+	return c
+}
+func (u *lightUpdate) at(p lightPos) (*lightChunkCache, int, int) {
+	if p.y < 0 || p.y >= chunkHeight {
+		return nil, 0, 0
+	}
+	c := u.chunk(chunkKey{divFloor(p.x, chunkWidth), divFloor(p.z, chunkWidth)})
+	if c.c == nil {
+		return nil, 0, 0
+	}
+	return c, modFloor(p.x, chunkWidth), modFloor(p.z, chunkWidth)
+}
+func (u *lightUpdate) level(p lightPos, sky bool) byte {
+	c, x, z := u.at(p)
+	if c == nil {
+		return 0
+	}
+	if sky {
+		return c.c.skyLight[x][p.y][z]
+	}
+	return c.c.blockLight[x][p.y][z]
+}
+func (c *lightChunkCache) directSky(x, y, z int) bool {
+	if !c.known[x][z] {
+		c.known[x][z] = true
+		c.top[x][z] = -1
+		for cy := chunkHeight - 1; cy >= 0; cy-- {
+			if isOpaqueBlock(c.c.blocks[x][cy][z]) {
+				c.top[x][z] = cy
+				break
+			}
 		}
-		for _, nb := range neighbors {
-			if nb.y < 0 || nb.y >= chunkHeight {
+	}
+	return y > c.top[x][z]
+}
+
+// Invalidate the one-voxel mesh sampling halo, including diagonal chunks and
+// adjacent vertical sections at corners. Each section version advances once.
+func (u *lightUpdate) mark(p lightPos) {
+	if p.y < 0 || p.y >= chunkHeight {
+		return
+	}
+	minY, maxY := p.y-1, p.y+1
+	if minY < 0 {
+		minY = 0
+	}
+	if maxY >= chunkHeight {
+		maxY = chunkHeight - 1
+	}
+	for cx := divFloor(p.x-1, chunkWidth); cx <= divFloor(p.x+1, chunkWidth); cx++ {
+		for cz := divFloor(p.z-1, chunkWidth); cz <= divFloor(p.z+1, chunkWidth); cz++ {
+			key := chunkKey{cx, cz}
+			if u.chunk(key).c == nil {
 				continue
 			}
-			nx, nz := nb.x, nb.z
-			ncx, ncz := divFloor(nx, chunkWidth), divFloor(nz, chunkWidth)
-			nChunk := w.getChunkIfGenerated(ncx, ncz)
-			if nChunk == nil {
-				continue
+			for sec := sectionIndexForY(minY); sec <= sectionIndexForY(maxY); sec++ {
+				u.dirty[sectionKey{key.X, key.Z, sec}] = true
 			}
-			lx, lz := modFloor(nx, chunkWidth), modFloor(nz, chunkWidth)
-			// Lock neighbor chunk if it differs from source chunk
-			isNeighbor := ncx != cx || ncz != cz
-			if isNeighbor {
-				nChunk.mu.Lock()
-			}
-			if isOpaqueBlock(nChunk.blocks[lx][nb.y][lz]) {
-				if isNeighbor {
-					nChunk.mu.Unlock()
-				}
-				continue
-			}
-			if next > nChunk.skyLight[lx][nb.y][lz] {
-				nChunk.skyLight[lx][nb.y][lz] = next
-				ensureChunkSections(nChunk)
-				nChunk.sectionDirty[sectionIndexForY(nb.y)] = true
-				nChunk.meshVersion[sectionIndexForY(nb.y)]++
-				if isNeighbor {
-					nChunk.mu.Unlock()
-				}
-				skyQueue = append(skyQueue, nb)
-			} else {
-				if isNeighbor {
-					nChunk.mu.Unlock()
+		}
+	}
+}
+func (u *lightUpdate) set(p lightPos, sky bool, value byte) bool {
+	c, x, z := u.at(p)
+	if c == nil {
+		return false
+	}
+	light := &c.c.blockLight[x][p.y][z]
+	if sky {
+		light = &c.c.skyLight[x][p.y][z]
+	}
+	if *light == value {
+		return false
+	}
+	*light = value
+	if u.w.lightChanged == nil {
+		u.w.lightChanged = make(map[chunkKey]bool)
+	}
+	u.w.lightChanged[chunkKey{divFloor(p.x, chunkWidth), divFloor(p.z, chunkWidth)}] = true
+	u.mark(p)
+	return true
+}
+func (u *lightUpdate) flush() {
+	for key := range u.dirty {
+		c := u.chunk(chunkKey{key.X, key.Z}).c
+		ensureChunkSections(c)
+		c.sectionDirty[key.Section] = true
+		c.meshVersion[key.Section]++
+	}
+	if len(u.dirty) > 0 {
+		u.w.dirty = true
+	}
+}
+
+// Solve the local light equation until stable. Sources are explicit: emission
+// for block light, unobstructed columns for sky. Every other edge loses a level,
+// so removed sources cannot sustain stale cycles. Queue entries read CURRENT
+// values instead of retaining obsolete or zero propagation levels.
+func (u *lightUpdate) desired(p lightPos, sky bool) byte {
+	c, x, z := u.at(p)
+	if c == nil {
+		return 0
+	}
+	block := c.c.blocks[x][p.y][z]
+	value := lightEmission(block)
+	if sky {
+		value = 0
+	}
+	if !isOpaqueBlock(block) {
+		if sky && c.directSky(x, p.y, z) {
+			return 15
+		}
+		if value < 15 {
+			for _, d := range lightDirections {
+				level := u.level(p.add(d), sky)
+				if level > 1 && level-1 > value {
+					value = level - 1
 				}
 			}
 		}
 	}
+	return value
+}
 
-	blockQueue := make([]node, 0, 512)
+func (u *lightUpdate) settle(seeds []lightPos, sky bool) {
+	queue := make([]lightPos, 0, 256)
+	pending := make(map[lightPos]bool)
+	push := func(p lightPos) {
+		if p.y < 0 || p.y >= chunkHeight || pending[p] {
+			return
+		}
+		pending[p] = true
+		queue = append(queue, p)
+	}
+	for _, p := range seeds {
+		// Unchanged borders are scanned but never enter the propagation queue.
+		if u.desired(p, sky) != u.level(p, sky) {
+			push(p)
+		}
+	}
+	for head := 0; head < len(queue); head++ {
+		p := queue[head]
+		delete(pending, p)
+		value := u.desired(p, sky)
+		if u.set(p, sky, value) {
+			for _, d := range lightDirections {
+				push(p.add(d))
+			}
+		}
+	}
+}
+
+// Call after publishing the locally initialized, generated chunk. Seed BOTH
+// sides, since arrivals/replacements change incoming and outgoing border light.
+func (w *World) stitchChunkLighting(cx, cz int) {
+	u := newLightUpdate(w)
+	u.stitch(cx, cz)
+	u.flush()
+}
+
+func (u *lightUpdate) stitch(cx, cz int) {
+	if u.chunk(chunkKey{cx, cz}).c == nil {
+		return
+	}
+	// A locally initialized isolated chunk already has its final lighting.
+	west := u.chunk(chunkKey{cx - 1, cz}).c != nil
+	east := u.chunk(chunkKey{cx + 1, cz}).c != nil
+	north := u.chunk(chunkKey{cx, cz - 1}).c != nil
+	south := u.chunk(chunkKey{cx, cz + 1}).c != nil
+	if !west && !east && !north && !south {
+		return
+	}
+	seeds := make([]lightPos, 0, 8*chunkWidth*chunkHeight)
+	x0, z0 := cx*chunkWidth, cz*chunkWidth
+	for y := 0; y < chunkHeight; y++ {
+		for i := 0; i < chunkWidth; i++ {
+			if west {
+				seeds = append(seeds, lightPos{x0, y, z0 + i}, lightPos{x0 - 1, y, z0 + i})
+			}
+			if east {
+				seeds = append(seeds, lightPos{x0 + chunkWidth - 1, y, z0 + i}, lightPos{x0 + chunkWidth, y, z0 + i})
+			}
+			if north {
+				seeds = append(seeds, lightPos{x0 + i, y, z0}, lightPos{x0 + i, y, z0 - 1})
+			}
+			if south {
+				seeds = append(seeds, lightPos{x0 + i, y, z0 + chunkWidth - 1}, lightPos{x0 + i, y, z0 + chunkWidth})
+			}
+		}
+	}
+	u.settle(seeds, true)
+	u.settle(seeds, false)
+}
+func (w *World) rebuildLightingForChunk(cx, cz int) {
+	c := w.getChunkIfGenerated(cx, cz)
+	if c == nil {
+		return
+	}
+	oldSky, oldBlock := c.skyLight, c.blockLight
+	initializeChunkLighting(c)
+	u := newLightUpdate(w)
 	for x := 0; x < chunkWidth; x++ {
-		for z := 0; z < chunkWidth; z++ {
-			for y := 0; y < chunkHeight; y++ {
-				emit := lightEmission(chunk.blocks[x][y][z])
-				if emit > 0 {
-					chunk.blockLight[x][y][z] = emit
-					blockQueue = append(blockQueue, node{cx*chunkWidth + x, y, cz*chunkWidth + z})
+		for y := 0; y < chunkHeight; y++ {
+			for z := 0; z < chunkWidth; z++ {
+				if oldSky[x][y][z] != c.skyLight[x][y][z] || oldBlock[x][y][z] != c.blockLight[x][y][z] {
+					if w.lightChanged == nil {
+						w.lightChanged = make(map[chunkKey]bool)
+					}
+					w.lightChanged[chunkKey{cx, cz}] = true
+					u.mark(lightPos{cx*chunkWidth + x, y, cz*chunkWidth + z})
 				}
 			}
 		}
 	}
-
-	for i := 0; i < len(blockQueue); i++ {
-		n := blockQueue[i]
-		cur := w.LightBlockAt(n.x, n.y, n.z)
-		if cur <= 1 {
-			continue
-		}
-		next := cur - 1
-		neighbors := [6]node{
-			{n.x + 1, n.y, n.z}, {n.x - 1, n.y, n.z},
-			{n.x, n.y + 1, n.z}, {n.x, n.y - 1, n.z},
-			{n.x, n.y, n.z + 1}, {n.x, n.y, n.z - 1},
-		}
-		for _, nb := range neighbors {
-			if nb.y < 0 || nb.y >= chunkHeight {
-				continue
-			}
-			nx, nz := nb.x, nb.z
-			ncx, ncz := divFloor(nx, chunkWidth), divFloor(nz, chunkWidth)
-			nChunk := w.getChunkIfGenerated(ncx, ncz)
-			if nChunk == nil {
-				continue
-			}
-			lx, lz := modFloor(nx, chunkWidth), modFloor(nz, chunkWidth)
-			isNeighbor := ncx != cx || ncz != cz
-			if isNeighbor {
-				nChunk.mu.Lock()
-			}
-			if isOpaqueBlock(nChunk.blocks[lx][nb.y][lz]) {
-				if isNeighbor {
-					nChunk.mu.Unlock()
-				}
-				continue
-			}
-			if next > nChunk.blockLight[lx][nb.y][lz] {
-				nChunk.blockLight[lx][nb.y][lz] = next
-				ensureChunkSections(nChunk)
-				nChunk.sectionDirty[sectionIndexForY(nb.y)] = true
-				nChunk.meshVersion[sectionIndexForY(nb.y)]++
-				if isNeighbor {
-					nChunk.mu.Unlock()
-				}
-				blockQueue = append(blockQueue, nb)
-			} else {
-				if isNeighbor {
-					nChunk.mu.Unlock()
-				}
-			}
-		}
-	}
-
-	for sec := 0; sec < sectionCount; sec++ {
-		chunk.sectionDirty[sec] = true
-		chunk.meshVersion[sec]++
-	}
+	u.stitch(cx, cz)
+	u.flush()
 }
-
 func (w *World) updateBlockLight(x, y, z int, oldBlock, newBlock byte) {
-	type node struct {
-		x int
-		y int
-		z int
-		l byte
-	}
-
-	decrease := make([]node, 0, 128)
-	increase := make([]node, 0, 128)
-
-	oldEmit := lightEmission(oldBlock)
-	newEmit := lightEmission(newBlock)
-
-	oldLight := w.LightBlockAt(x, y, z)
-	if oldLight > 0 && (newEmit < oldEmit || !emitsLight(newBlock)) {
-		w.setBlockLightAtInternal(x, y, z, 0)
-		decrease = append(decrease, node{x: x, y: y, z: z, l: oldLight})
-	}
-
-	// FIX: Check if we can receive light from neighbors (inflow)
-	// This only applies if we were NOT already lit (i.e. mining opaque block)
-	// If we were lit (oldLight > 0), the decrease logic handles clearing and re-flooding.
-	calculatedLight := newEmit
-	if oldLight == 0 && !isOpaqueBlock(newBlock) {
-		maxNb := byte(0)
-		neighbors := [][]int{{1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}}
-		for _, offset := range neighbors {
-			nb := w.LightBlockAt(x+offset[0], y+offset[1], z+offset[2])
-			if nb > maxNb {
-				maxNb = nb
-			}
-		}
-		if maxNb > 1 {
-			if maxNb-1 > calculatedLight {
-				calculatedLight = maxNb - 1
-			}
-		}
-	}
-
-	if calculatedLight > 0 {
-		w.setBlockLightAtInternal(x, y, z, calculatedLight)
-		increase = append(increase, node{x: x, y: y, z: z, l: calculatedLight})
-	} else if newEmit > 0 {
-		w.setBlockLightAtInternal(x, y, z, newEmit)
-		increase = append(increase, node{x: x, y: y, z: z, l: newEmit})
-	}
-
-	isPassable := func(ix, iy, iz int) bool {
-		if iy < 0 || iy >= chunkHeight {
-			return false
-		}
-		return !isOpaqueBlock(w.BlockAt(ix, iy, iz))
-	}
-
-	for i := 0; i < len(decrease); i++ {
-		n := decrease[i]
-		neighbors := [6]node{
-			{x: n.x + 1, y: n.y, z: n.z},
-			{x: n.x - 1, y: n.y, z: n.z},
-			{x: n.x, y: n.y + 1, z: n.z},
-			{x: n.x, y: n.y - 1, z: n.z},
-			{x: n.x, y: n.y, z: n.z + 1},
-			{x: n.x, y: n.y, z: n.z - 1},
-		}
-		for _, nb := range neighbors {
-			light := w.LightBlockAt(nb.x, nb.y, nb.z)
-			if light == 0 {
-				continue
-			}
-			if light < n.l {
-				w.setBlockLightAtInternal(nb.x, nb.y, nb.z, 0)
-				decrease = append(decrease, node{x: nb.x, y: nb.y, z: nb.z, l: light})
-			} else {
-				increase = append(increase, node{x: nb.x, y: nb.y, z: nb.z, l: light})
-			}
-		}
-	}
-
-	for i := 0; i < len(increase); i++ {
-		n := increase[i]
-		neighbors := [6]node{
-			{x: n.x + 1, y: n.y, z: n.z},
-			{x: n.x - 1, y: n.y, z: n.z},
-			{x: n.x, y: n.y + 1, z: n.z},
-			{x: n.x, y: n.y - 1, z: n.z},
-			{x: n.x, y: n.y, z: n.z + 1},
-			{x: n.x, y: n.y, z: n.z - 1},
-		}
-		for _, nb := range neighbors {
-			if !isPassable(nb.x, nb.y, nb.z) {
-				continue
-			}
-			target := n.l - 1
-			if target <= 0 {
-				continue
-			}
-			if w.LightBlockAt(nb.x, nb.y, nb.z) >= target {
-				continue
-			}
-			w.setBlockLightAtInternal(nb.x, nb.y, nb.z, target)
-			increase = append(increase, node{x: nb.x, y: nb.y, z: nb.z, l: target})
-		}
-	}
-}
-
-func (w *World) updateSkyLight(x, y, z int) {
-	type node struct {
-		x, y, z int
-		l       byte
-	}
-	var increase []node
-	var decrease []node
-
-	oldLight := w.LightSkyAt(x, y, z)
-
-	// Check if this column still sees the sky
-	canSeeSky := true
-	for cy := chunkHeight - 1; cy > y; cy-- {
-		if isOpaqueBlock(w.BlockAt(x, cy, z)) {
-			canSeeSky = false
-			break
-		}
-	}
-
-	newLight := byte(0)
-	if canSeeSky && !isOpaqueBlock(w.BlockAt(x, y, z)) {
-		newLight = 15
-	} else {
-		// Try to get light from neighbors
-		maxNb := byte(0)
-		for _, offset := range [][]int{{1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}} {
-			nb := w.LightSkyAt(x+offset[0], y+offset[1], z+offset[2])
-			if nb > maxNb {
-				maxNb = nb
-			}
-		}
-		if maxNb > 1 {
-			newLight = maxNb - 1
-		}
-	}
-
-	if oldLight > newLight {
-		w.setSkyLightAtInternal(x, y, z, newLight)
-		decrease = append(decrease, node{x, y, z, oldLight})
-	} else if newLight > oldLight {
-		w.setSkyLightAtInternal(x, y, z, newLight)
-		increase = append(increase, node{x, y, z, newLight})
-	}
-
-	// Sky Light propagation: downward is always 15 if no obstruction
-	for i := 0; i < len(decrease); i++ {
-		n := decrease[i]
-		neighbors := [][]int{{1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}}
-		for _, offset := range neighbors {
-			nx, ny, nz := n.x+offset[0], n.y+offset[1], n.z+offset[2]
-			light := w.LightSkyAt(nx, ny, nz)
-			if light == 0 {
-				continue
-			}
-
-			shouldRemove := false
-			if light < n.l {
-				shouldRemove = true
-			} else if n.l == 15 && offset[1] == -1 && light == 15 {
-				// Special case: Sunlight (15) propagates to sunlight (15) downwards.
-				// If we lose sunlight, the block below also loses it (unless it's a separate column, which is impossible if we are directly above it).
-				shouldRemove = true
-			}
-
-			if shouldRemove {
-				w.setSkyLightAtInternal(nx, ny, nz, 0)
-				decrease = append(decrease, node{nx, ny, nz, light})
-			} else if light >= n.l {
-				increase = append(increase, node{nx, ny, nz, light})
-			}
-		}
-	}
-
-	for i := 0; i < len(increase); i++ {
-		n := increase[i]
-		neighbors := [][]int{{1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}}
-		for _, offset := range neighbors {
-			nx, ny, nz := n.x+offset[0], n.y+offset[1], n.z+offset[2]
-			if ny < 0 || ny >= chunkHeight {
-				continue
-			}
-			if isOpaqueBlock(w.BlockAt(nx, ny, nz)) {
-				continue
-			}
-
-			target := n.l - 1
-			if n.l == 15 && offset[1] == -1 {
-				target = 15 // Sunlight goes straight down
-			}
-
-			if w.LightSkyAt(nx, ny, nz) < target {
-				w.setSkyLightAtInternal(nx, ny, nz, target)
-				increase = append(increase, node{nx, ny, nz, target})
-			}
-		}
-	}
-}
-
-func (w *World) setBlockLightAt(x, y, z int, val byte) {
 	if y < 0 || y >= chunkHeight {
 		return
 	}
-	cx := divFloor(x, chunkWidth)
-	cz := divFloor(z, chunkWidth)
-	lx := modFloor(x, chunkWidth)
-	lz := modFloor(z, chunkWidth)
-	chunk := w.requestChunk(cx, cz)
-	if !chunk.generated {
+	u := newLightUpdate(w)
+	p := lightPos{x, y, z}
+	u.mark(p) // Geometry changes invalidate neighboring mesh samples too.
+	u.settle([]lightPos{p}, false)
+	u.flush()
+}
+func (w *World) updateSkyLight(x, y, z int) {
+	if y < 0 || y >= chunkHeight {
 		return
 	}
-	chunk.mu.Lock()
-	chunk.blockLight[lx][y][lz] = val
-	ensureChunkSections(chunk)
-	sec := sectionIndexForY(y)
-	chunk.sectionDirty[sec] = true
-	chunk.meshVersion[sec]++
-	chunk.mu.Unlock()
+	u := newLightUpdate(w)
+	// An opacity edit changes direct-sky sources below it in this column.
+	seeds := make([]lightPos, 0, y+1)
+	for cy := y; cy >= 0; cy-- {
+		seeds = append(seeds, lightPos{x, cy, z})
+	}
+	u.mark(lightPos{x, y, z})
+	u.settle(seeds, true)
+	u.flush()
 }
+func (w *World) setBlockLightAtInternal(x, y, z int, val byte) {
+	u := newLightUpdate(w)
+	u.set(lightPos{x, y, z}, false, val)
+	u.flush()
+}
+func (w *World) setSkyLightAtInternal(x, y, z int, val byte) {
+	u := newLightUpdate(w)
+	u.set(lightPos{x, y, z}, true, val)
+	u.flush()
+}
+func (w *World) setBlockLightAt(x, y, z int, val byte) { w.setBlockLightAtInternal(x, y, z, val) }
