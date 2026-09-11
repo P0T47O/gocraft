@@ -54,7 +54,9 @@ type InputState struct {
 	LastBreakTime  float64  // Time of last block break (Creative delay)
 
 	// Crafting UI State
-	CraftingScroll int // Number of recipe rows scrolled down
+	CraftingScroll   int   // Number of recipe rows scrolled down
+	RecipeSelected   int32 // Result ID, stable across ingredient variants
+	RecipesReadyOnly bool
 }
 
 // Block hardness values (seconds to break with hand/wrong tool)
@@ -604,8 +606,6 @@ func (s *InputState) UpdateInventorySelection(client *Client) {
 
 	// Constants
 	scale := inventoryScale()
-	w := float32(rl.GetScreenWidth())
-	h := float32(rl.GetScreenHeight())
 	mouse := rl.GetMousePosition()
 	leftClick := rl.IsMouseButtonPressed(rl.MouseLeftButton)
 	rightClick := rl.IsMouseButtonPressed(rl.MouseRightButton)
@@ -621,6 +621,10 @@ func (s *InputState) UpdateInventorySelection(client *Client) {
 
 		if button == -1 {
 			return
+		}
+
+		if button == 0 && (rl.IsKeyDown(rl.KeyLeftShift) || rl.IsKeyDown(rl.KeyRightShift)) && !isCreativeSource {
+			button = 2
 		}
 
 		// Server Authoritative Mode (Survival)
@@ -683,68 +687,8 @@ func (s *InputState) UpdateInventorySelection(client *Client) {
 			return
 		}
 
-		// Offline Survival Logic (Fallback)
-		currentInventory := &localInventory
-		if slotIndex < 0 || slotIndex >= len(currentInventory.Slots) {
-			return
-		}
-		targetSlot := &currentInventory.Slots[slotIndex]
-		cursor := &s.CursorItem
+		localInventory.Click(slotIndex, button, &s.CursorItem)
 
-		if button == 0 { // Left Click
-			if cursor.ID == 0 {
-				if targetSlot.ID != 0 {
-					*cursor = *targetSlot
-					*targetSlot = Item{}
-				}
-			} else {
-				if targetSlot.ID == 0 {
-					*targetSlot = *cursor
-					*cursor = Item{}
-				} else if targetSlot.ID == cursor.ID {
-					space := int32(MaxStackSize) - targetSlot.Count
-					if space > 0 {
-						toAdd := cursor.Count
-						if toAdd > space {
-							toAdd = space
-						}
-						targetSlot.Count += toAdd
-						cursor.Count -= toAdd
-						if cursor.Count == 0 {
-							cursor.ID = 0
-						}
-					}
-				} else {
-					tmp := *cursor
-					*cursor = *targetSlot
-					*targetSlot = tmp
-				}
-			}
-		} else if button == 1 { // Right Click
-			if cursor.ID == 0 {
-				if targetSlot.ID != 0 {
-					split := int32(math.Ceil(float64(targetSlot.Count) / 2.0))
-					*cursor = Item{ID: targetSlot.ID, Count: split}
-					targetSlot.Count -= split
-					if targetSlot.Count == 0 {
-						targetSlot.ID = 0
-					}
-				}
-			} else {
-				if targetSlot.ID == 0 {
-					*targetSlot = Item{ID: cursor.ID, Count: 1}
-					cursor.Count--
-				} else if targetSlot.ID == cursor.ID {
-					if targetSlot.Count < MaxStackSize {
-						targetSlot.Count++
-						cursor.Count--
-					}
-				}
-				if cursor.Count == 0 {
-					cursor.ID = 0
-				}
-			}
-		}
 	}
 
 	// ---- CREATIVE MODE ----
@@ -790,43 +734,13 @@ func (s *InputState) UpdateInventorySelection(client *Client) {
 		}
 
 	} else {
-		// ---- SURVIVAL MODE ----
-		slotSize := 36 * scale / 2
-		if slotSize < 32 {
-			slotSize = 32
-		}
-		stride := slotSize + 4
-		cols := 9
-		rows := 3
-
-		invW := float32(cols)*stride + 20
-		invH := float32(rows+1)*stride + 60
-		startX := (w - invW) / 2
-		startY := (h - invH) / 2
-		hotbarY := startY + invH - stride - 10
-		mainY := startY + 40
-
-		checkAndHandle := func(slotIndex int, x, y float32) {
-			if mouse.X >= x && mouse.X <= x+slotSize &&
-				mouse.Y >= y && mouse.Y <= y+slotSize {
-				handleSlotInteraction(slotIndex, false)
+		layout := survivalLayout(float32(rl.GetScreenWidth()), float32(rl.GetScreenHeight()))
+		for i := 0; i < 36; i++ {
+			if rl.CheckCollisionPointRec(mouse, layout.Slot(i)) {
+				handleSlotInteraction(i, false)
 			}
 		}
-
-		for i := 0; i < 9; i++ {
-			x := startX + 10 + float32(i)*stride
-			checkAndHandle(i, x, hotbarY)
-		}
-		for i := 9; i < 36; i++ {
-			idx := i - 9
-			r := idx / 9
-			c := idx % 9
-			x := startX + 10 + float32(c)*stride
-			y := mainY + float32(r)*stride
-			checkAndHandle(i, x, y)
-		}
-
-		// Keep cursor items when clicking outside; only slot clicks transfer ownership.
+		s.updateCraftingInput(layout, client)
 
 	}
 }

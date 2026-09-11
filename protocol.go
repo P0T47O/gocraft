@@ -33,9 +33,8 @@ const (
 
 type PacketClickWindow struct {
 	SlotID     int32
-	Button     int32 // 0: Left, 1: Right
+	Button     int32 // 0: Left, 1: Right, 2: Shift transfer
 	IsCreative bool  // Whether source is creative palette (for server logic)
-	// Mode? 0: Click, 1: ShiftClick, 2: Drop, etc. For now just Button.
 }
 
 // ... existing PacketClickWindow methods ...
@@ -118,15 +117,24 @@ func (p *PacketOpenWindow) Decode(r *bytes.Buffer) error {
 
 type PacketCraft struct {
 	RecipeID int32
+	Count    int32 // Batches, 0 means one for legacy clients; bounded to 64.
 }
 
 func (p *PacketCraft) ID() int32 { return IDCraft }
 func (p *PacketCraft) Encode(w *bytes.Buffer) error {
-	return WriteVarInt(w, p.RecipeID)
+	WriteVarInt(w, p.RecipeID)
+	return WriteVarInt(w, p.Count)
 }
 func (p *PacketCraft) Decode(r *bytes.Buffer) error {
 	var err error
 	p.RecipeID, err = ReadVarInt(r)
+	if err != nil {
+		return err
+	}
+	p.Count = 0
+	if r.Len() > 0 {
+		p.Count, err = ReadVarInt(r)
+	}
 	return err
 }
 

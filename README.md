@@ -94,6 +94,29 @@ go run . -name PlayerName
 - **E**: Open Inventory
 - **F3**: Toggle Debug Info
 
+### Survival inventory and crafting
+
+Press **E** to open the recipe book and backpack. **All recipes** shows missing
+materials and workbench requirements; **Ready to craft** filters to recipes you
+can make now. Select a recipe, then click **Craft** or **Craft max** (up to 64
+batches per click). Shift-clicking Craft also makes a batch. Outputs must fit in
+the backpack; a batch that does not fit leaves its ingredients untouched.
+
+- **Left click a slot**: pick up, place, merge, or swap a stack.
+- **Right click a slot**: take half (rounding up) or place one item.
+- **Shift + left click a slot**: transfer between backpack and hotbar; finish
+  placing any item held on the cursor first.
+- **Hover a slot**: view its item name and quantity.
+- **E / Escape / X**: close the inventory without discarding held items.
+
+Right-click a placed workbench to open workbench recipes. Recipes with equivalent
+wood variants share one row, using a variant available in your backpack.
+
+The UI uses existing item icons and code-drawn panels. To check its real rendering
+on Windows, run `$env:GOCRAFT_INVENTORY_PREVIEW='1'; go test -run '^TestInventoryPreview$' -count=1 .`
+in PowerShell. Captures are written to the ignored `work/` directory. Clear the
+environment variable afterward to skip the graphical preview during regular tests.
+
 ## License
 
 This project is licensed under the GNU General Public License v3.0 - see the [LICENSE](LICENSE) file for details.

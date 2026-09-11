@@ -866,30 +866,12 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 			if !s.hasCraftingStation(player, recipe.Station) {
 				return
 			}
-			// 2. Check Ingredients
-			if player.Inventory.ConsumeItems(recipe.Ingredients) {
-				// 3. Add Result
-				rem := player.Inventory.Add(recipe.Result.ID, recipe.Result.Count)
-				if rem > 0 {
-					// Drop remaining if full
-					// Handle overflow (drop item entity)
-					drop := &ItemEntity{
-						BaseEntity: BaseEntity{
-							Type: EntityItem,
-							X:    player.X,
-							Y:    player.Y + 1.5,
-							Z:    player.Z,
-						},
-						ItemID: byte(recipe.Result.ID),
-						Count:  int(rem),
-					}
-					// Random velocity?
-					s.SpawnEntity(drop)
-				}
-
-				// 4. Sync Inventory
-				s.SendInventory(player)
-			}
+			count := int(p.Count)
+			if count == 0 {
+				count = 1
+			} // Older clients craft one batch.
+			player.Inventory.Craft(recipe, count)
+			s.SendInventory(player)
 		}
 
 	case *PacketChat:
@@ -1100,116 +1082,10 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 		s.World.entitiesMu.RLock()
 		player := s.findPlayerEntity(wrap.From)
 		s.World.entitiesMu.RUnlock()
-
-		if player != nil {
-			if p.IsCreative {
-				// Creative Pick (Client authority for palette acts as "spawn item")
-				// We trust the client is picking a valid block from palette.
-				// Put it in Cursor? Or directly in Slot?
-				// Usually Creative Pick puts directly in Slot (handled by InventoryUpdate for legacy)
-				// But let's support "Pick to Cursor" -> "Place in Slot".
-				// For now, let's assume Creative Palette pickup sends specific slot update.
-				// If p.SlotID is -1 (outside), maybe it's dropping?
-				// Let's implement basic Creative Cursor Set:
-				// If clicking inside inventory with creative flag, maybe just Fill Stack?
-				// For simplicity, let's defer Creative logic to client sending SetSlot,
-				// OR if we want server authoritative, we need to know what they clicked in the palette.
-				// Since palette is static, we could validate.
-				// BUT, user's request is about Survival logic mostly.
-			} else {
-				// Survival Logic
-				// Slot -999 is usually "Drop Outside" in MC, but we can stick to 0-35 for now.
-				if p.SlotID >= 0 && p.SlotID < 36 {
-					slot := &player.Inventory.Slots[p.SlotID]
-					cursor := &player.CursorItem
-
-					// Logic mirroring input.go
-					if p.Button == 0 { // Left Click
-						if cursor.ID == 0 {
-							// Pickup / Swap
-							if slot.ID != 0 {
-								// Pickup
-								*cursor = *slot
-								*slot = Item{}
-							}
-						} else {
-							// Place / Swap / Stack
-							if slot.ID == 0 {
-								// Place All
-								*slot = *cursor
-								*cursor = Item{}
-							} else if slot.ID == cursor.ID {
-								// Stack
-								space := int32(64) - slot.Count
-								if space > 0 {
-									toAdd := cursor.Count
-									if toAdd > space {
-										toAdd = space
-									}
-									slot.Count += toAdd
-									cursor.Count -= toAdd
-									if cursor.Count == 0 {
-										cursor.ID = 0
-									}
-								}
-							} else {
-								// Swap
-								temp := *slot
-								*slot = *cursor
-								*cursor = temp
-							}
-						}
-					} else if p.Button == 1 { // Right Click
-						if cursor.ID == 0 {
-							if slot.ID != 0 {
-								// Split (Take Half)
-								half := slot.Count / 2
-								rem := slot.Count - half
-								if half > 0 {
-									cursor.ID = slot.ID
-									cursor.Count = half
-									slot.Count = rem
-									if slot.Count == 0 {
-										slot.ID = 0
-									}
-								}
-							}
-						} else {
-							// Place One
-							if slot.ID == 0 {
-								slot.ID = cursor.ID
-								slot.Count = 1
-								cursor.Count--
-							} else if slot.ID == cursor.ID {
-								if slot.Count < 64 {
-									slot.Count++
-									cursor.Count--
-								}
-							}
-							if cursor.Count == 0 {
-								cursor.ID = 0
-							}
-						}
-					}
-
-					// Send Updates
-					// 1. Update Clicked Slot
-					s.SendTo(wrap.From, &PacketInventoryUpdate{
-						SlotID: p.SlotID,
-						ItemID: slot.ID,
-						Count:  slot.Count,
-					})
-					// 2. Update Cursor (Slot -1? Or special packet?)
-					// MC uses SetSlot -1 for cursor.
-					// We need to support SlotID -1 in InventoryUpdate or add PacketSetCursor.
-					// Let's reuse InventoryUpdate with SlotID -1 for Cursor.
-					s.SendTo(wrap.From, &PacketInventoryUpdate{
-						SlotID: -1,
-						ItemID: cursor.ID,
-						Count:  cursor.Count,
-					})
-				}
-			}
+		if player != nil && !p.IsCreative {
+			player.Inventory.Click(int(p.SlotID), int(p.Button), &player.CursorItem)
+			s.SendInventory(player)
+			s.SendTo(wrap.From, &PacketInventoryUpdate{SlotID: -1, ItemID: player.CursorItem.ID, Count: player.CursorItem.Count})
 		}
 
 	case *PacketPlayerAction:
