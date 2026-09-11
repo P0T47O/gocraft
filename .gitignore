@@ -6,9 +6,12 @@
 # Logs
 *.log
 
-# Assets
+# Assets & Minecraft Resources
 textures/
 !textures/.gitkeep
+minecraft/
+assets/minecraft/
+*.mcmeta
 
 # IDEs
 .vscode/

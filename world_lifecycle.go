@@ -74,5 +74,7 @@ func (w *World) Close() {
 		clear(w.immediate)
 		clear(w.pendingEdits)
 		clear(w.lightChanged)
+		w.render = worldRenderCache{}
+		w.entities = nil
 	})
 }

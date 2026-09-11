@@ -142,6 +142,7 @@ func main() {
 		}
 
 		rl.EndDrawing()
+		perfMon.Update()
 	}
 
 	// Cleanup on Exit
@@ -403,18 +404,23 @@ func startGame(savePath string, ip string, isMultiplayer bool) {
 		// Singleplayer: Start Internal Server
 		fmt.Printf("Starting Internal Server at %s\n", savePath)
 		server = NewServer(savePath)
-		go server.StartTCP("127.0.0.1:25566")
-
-		// Wait for socket to listen
-		time.Sleep(200 * time.Millisecond)
-		ip = "127.0.0.1:25566"
+		if err = server.ListenTCP("127.0.0.1:0"); err != nil {
+			fmt.Printf("Cannot start local server: %v\n", err)
+			server.World.Close()
+			server = nil
+			assets.unload()
+			assets = nil
+			return
+		}
+		ip = server.Listener.Addr().String()
+		go server.ServeTCP()
 	}
 
 	fmt.Printf("Connecting to %s...\n", ip)
 	client, err = ConnectTCP(ip, *username)
 	if err != nil {
 		fmt.Printf("Connection failed: %v\n", err)
-		assets.unload()
+		exitGame()
 		return
 	}
 
@@ -541,7 +547,6 @@ func updateGame() {
 	}
 
 	dt := rl.GetFrameTime()
-	perfMon.Update()
 	assets.Update(dt)
 
 	// Packet Loop
@@ -567,6 +572,7 @@ Loop:
 
 	HandleInput(world, &camera, input, client)
 	world.ProcessImmediateMeshes(assets, 16)
+	clear(world.lightChanged) // Only the server publishes authoritative light updates.
 
 	// Client-Pull: Request any missing chunks
 	requestMissingChunks()
@@ -671,38 +677,13 @@ func handlePacket(pkt Packet) {
 		}
 
 	case *PacketChunkData:
-		cx, cz := int(p.CX), int(p.CZ)
-		// Clear pending request
-		delete(pendingChunkRequests, chunkKey{X: cx, Z: cz})
-		chunk := world.requestChunk(cx, cz)
-		chunk.mu.Lock()
-		idx := 0
-		for lx := 0; lx < chunkWidth; lx++ {
-			for y := 0; y < chunkHeight; y++ {
-				for lz := 0; lz < chunkWidth; lz++ {
-					chunk.blocks[lx][y][lz] = p.Data[idx]
-					l := p.LightData[idx]
-					chunk.skyLight[lx][y][lz] = l >> 4
-					chunk.blockLight[lx][y][lz] = l & 0x0F
-					idx++
-				}
-			}
+		if world.applyChunkPacket(p) {
+			delete(pendingChunkRequests, chunkKey{int(p.CX), int(p.CZ)})
 		}
-		chunk.rebuildHeightMap()
-		chunk.rebuildTorchCount()
-		chunk.generated = true
-		chunk.dirty = true
-		ensureChunkSections(chunk)
-		for i := range chunk.sectionDirty {
-			chunk.sectionDirty[i] = true
-			chunk.meshVersion[i]++
-		}
-		chunk.mu.Unlock()
-		world.markNeighborsDirty(cx, cz)
-		world.applyPendingEdits(chunkKey{cx, cz})
 
 	case *PacketBlockChange:
 		world.SetBlockAt(int(p.X), int(p.Y), int(p.Z), p.BlockID)
+		world.SetMetaAt(int(p.X), int(p.Y), int(p.Z), p.Meta)
 
 	case *PacketLogin:
 		world.seed = p.Seed
@@ -843,10 +824,10 @@ func drawGame() {
 
 	assets.drawCrosshair()
 
-	if input.ShowDebug {
+	if input.ShowDebug && perfMon != nil {
 		m := perfMon.Metrics
 		// Background for readability
-		rl.DrawRectangle(5, 5, 400, 150, rl.NewColor(0, 0, 0, 100))
+		rl.DrawRectangle(5, 5, 550, 225, rl.NewColor(0, 0, 0, 100))
 
 		rl.DrawFPS(10, 10)
 		rl.DrawText(fmt.Sprintf("Pos: %.1f, %.1f, %.1f", camera.Position.X, camera.Position.Y, camera.Position.Z), 10, 35, 20, rl.White)
@@ -855,6 +836,9 @@ func drawGame() {
 		rl.DrawText(fmt.Sprintf("%d chunk updates/sec", m.MeshesPerSec), 10, 85, 20, rl.White)
 		rl.DrawText(fmt.Sprintf("Mem: %d MB (GC: %d)", m.HeapAllocMB, m.NumGC), 10, 110, 20, rl.White)
 		rl.DrawText(fmt.Sprintf("Unloads/sec: %d", m.UnloadsPerSec), 10, 135, 20, rl.White)
+		rl.DrawText(fmt.Sprintf("Frame p95/p99: %.1f/%.1f ms; Tick: %.1f ms", m.FrameP95, m.FrameP99, m.ServerTickMS), 10, 160, 18, rl.White)
+		rl.DrawText(fmt.Sprintf("Mesh queue: %d/%d; Draws: %d", m.MeshJobs, m.MeshResults, m.DrawCalls), 10, 183, 18, rl.White)
+		rl.DrawText(fmt.Sprintf("Triangles: %d", m.Triangles), 10, 206, 18, rl.White)
 	}
 
 	if input.InventoryOpen {

@@ -332,6 +332,7 @@ func (p *PacketLogin) Decode(r *bytes.Buffer) error {
 }
 
 type PacketChunkData struct {
+	MetaData  []byte // Optional trailing field; older peers omit it.
 	CX, CZ    int32
 	Data      []byte
 	LightData []byte
@@ -345,6 +346,10 @@ func (p *PacketChunkData) Encode(w *bytes.Buffer) error {
 	w.Write(p.Data)
 	_ = WriteVarInt(w, int32(len(p.LightData)))
 	w.Write(p.LightData)
+	if p.MetaData != nil {
+		_ = WriteVarInt(w, int32(len(p.MetaData)))
+		w.Write(p.MetaData)
+	}
 	return nil
 }
 func (p *PacketChunkData) Decode(r *bytes.Buffer) error {
@@ -361,6 +366,9 @@ func (p *PacketChunkData) Decode(r *bytes.Buffer) error {
 	if err != nil {
 		return err
 	}
+	if len1 != chunkWidth*chunkHeight*chunkWidth {
+		return fmt.Errorf("invalid chunk block count: %d", len1)
+	}
 	p.Data = make([]byte, len1)
 	if _, err := io.ReadFull(r, p.Data); err != nil {
 		return err
@@ -369,9 +377,25 @@ func (p *PacketChunkData) Decode(r *bytes.Buffer) error {
 	if err != nil {
 		return err
 	}
+	if len2 != len1 {
+		return fmt.Errorf("invalid chunk light count: %d", len2)
+	}
 	p.LightData = make([]byte, len2)
 	if _, err := io.ReadFull(r, p.LightData); err != nil {
 		return err
+	}
+	if r.Len() > 0 {
+		count, err := ReadVarInt(r)
+		if err != nil {
+			return err
+		}
+		if count != len1 {
+			return fmt.Errorf("invalid chunk metadata count: %d", count)
+		}
+		p.MetaData = make([]byte, count)
+		if _, err := io.ReadFull(r, p.MetaData); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -379,6 +403,7 @@ func (p *PacketChunkData) Decode(r *bytes.Buffer) error {
 type PacketBlockChange struct {
 	X, Y, Z int32
 	BlockID byte
+	Meta    byte
 }
 
 func (p *PacketBlockChange) ID() int32 { return IDBlockChange }
@@ -386,7 +411,8 @@ func (p *PacketBlockChange) Encode(w *bytes.Buffer) error {
 	_ = WriteVarInt(w, p.X)
 	_ = WriteVarInt(w, p.Y)
 	_ = WriteVarInt(w, p.Z)
-	return binary.Write(w, binary.BigEndian, p.BlockID)
+	w.WriteByte(p.BlockID)
+	return w.WriteByte(p.Meta)
 }
 func (p *PacketBlockChange) Decode(r *bytes.Buffer) error {
 	var err error
@@ -402,7 +428,13 @@ func (p *PacketBlockChange) Decode(r *bytes.Buffer) error {
 	if err != nil {
 		return err
 	}
-	return binary.Read(r, binary.BigEndian, &p.BlockID)
+	if err := binary.Read(r, binary.BigEndian, &p.BlockID); err != nil {
+		return err
+	}
+	if r.Len() > 0 {
+		p.Meta, err = r.ReadByte()
+	}
+	return err
 }
 
 type PacketChunkRequest struct {

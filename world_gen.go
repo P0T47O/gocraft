@@ -561,7 +561,9 @@ func fbm2(seed uint32, x, z float32) float32 {
 		amp *= 0.5
 		freq *= 2.0
 	}
-	return value
+	// The terrain spline and climate thresholds consume [-1,1]. Four raw
+	// octaves sum to 1.875 and could otherwise flatten entire regions at Y=255.
+	return value / 1.875
 }
 
 func noise2(seed uint32, x, z float32) float32 {

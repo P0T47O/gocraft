@@ -546,6 +546,7 @@ func HandleInput(world *World, camera *rl.Camera3D, state *InputState, client *C
 					Y:       int32(py),
 					Z:       int32(pz),
 					BlockID: state.CurrentBlock,
+					Meta:    world.MetaAt(px, py, pz),
 				})
 			}
 		}

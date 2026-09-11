@@ -302,21 +302,37 @@ func (u *lightUpdate) stitch(cx, cz int) {
 	if !west && !east && !north && !south {
 		return
 	}
-	seeds := make([]lightPos, 0, 8*chunkWidth*chunkHeight)
+	var seeds []lightPos
+	// Equal/adjacent border levels cannot change either side. Most arrivals
+	// meet identical open sky or solid terrain, so avoid queuing entire walls.
+	addBorder := func(a, b lightPos) {
+		ac, ax, az := u.at(a)
+		bc, bx, bz := u.at(b)
+		if ac == nil || bc == nil {
+			return
+		}
+		as, bs := int(ac.c.skyLight[ax][a.y][az]), int(bc.c.skyLight[bx][b.y][bz])
+		al, bl := int(ac.c.blockLight[ax][a.y][az]), int(bc.c.blockLight[bx][b.y][bz])
+		toA := !isOpaqueBlock(ac.c.blocks[ax][a.y][az]) && (bs > as+1 || bl > al+1)
+		toB := !isOpaqueBlock(bc.c.blocks[bx][b.y][bz]) && (as > bs+1 || al > bl+1)
+		if toA || toB {
+			seeds = append(seeds, a, b)
+		}
+	}
 	x0, z0 := cx*chunkWidth, cz*chunkWidth
 	for y := 0; y < chunkHeight; y++ {
 		for i := 0; i < chunkWidth; i++ {
 			if west {
-				seeds = append(seeds, lightPos{x0, y, z0 + i}, lightPos{x0 - 1, y, z0 + i})
+				addBorder(lightPos{x0, y, z0 + i}, lightPos{x0 - 1, y, z0 + i})
 			}
 			if east {
-				seeds = append(seeds, lightPos{x0 + chunkWidth - 1, y, z0 + i}, lightPos{x0 + chunkWidth, y, z0 + i})
+				addBorder(lightPos{x0 + chunkWidth - 1, y, z0 + i}, lightPos{x0 + chunkWidth, y, z0 + i})
 			}
 			if north {
-				seeds = append(seeds, lightPos{x0 + i, y, z0}, lightPos{x0 + i, y, z0 - 1})
+				addBorder(lightPos{x0 + i, y, z0}, lightPos{x0 + i, y, z0 - 1})
 			}
 			if south {
-				seeds = append(seeds, lightPos{x0 + i, y, z0 + chunkWidth - 1}, lightPos{x0 + i, y, z0 + chunkWidth})
+				addBorder(lightPos{x0 + i, y, z0 + chunkWidth - 1}, lightPos{x0 + i, y, z0 + chunkWidth})
 			}
 		}
 	}

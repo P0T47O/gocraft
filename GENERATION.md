@@ -7,6 +7,11 @@ height minus one. Height is clamped to 2 through chunkHeight minus one, preservi
 bedrock at Y=0. Water fills up to Y=61 wherever terrain is below sea level.
 Procedural queries outside the world height return air.
 
+The four terrain/climate noise octaves are normalized to [-1,1] before spline
+evaluation. Previously their summed amplitude reached 1.875, causing some seeds
+(including 12345 near spawn) to clip broad regions at the world's Y=255 ceiling.
+New terrain leaves building headroom. This also changes new biome distributions.
+
 Trees use deterministic world-coordinate anchors, including a two-block halo
 outside each chunk. Anchors use the terrain surface, unaffected by earlier trees.
 Each intersecting tree is replayed in ascending world X/Z order. Logs take

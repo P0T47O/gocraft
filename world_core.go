@@ -8,33 +8,27 @@ import (
 )
 
 type World struct {
-	render           worldRenderCache
-	chunks           map[chunkKey]*Chunk
-	chunksMu         sync.RWMutex // Protects the chunks map
-	dirty            bool
-	seed             uint32
-	genQueue         chan chunkGenJob
-	genResults       chan chunkGenResult
-	pending          map[chunkKey]bool
-	waterDraws       []waterDraw
-	translucentDraws []translucentDraw
-	meshJobs         chan meshJob
-	meshResults      chan meshResult
-	immediate        map[sectionKey]bool
-	chunkPool        *ChunkPool
-	IsClient         bool   // True if this is a client-side world (rendering only)
-	SavePath         string // Path to save directory (for loading saved chunks)
-	done             chan struct{}
-	stopOnce         sync.Once
-	workers          sync.WaitGroup
-	nextChunkID      uint64
-	nextMeshID       uint64
-	lightChanged     map[chunkKey]bool
-	pendingEdits     map[chunkKey][]blockEdit
-
-	// Render frame-cached slices (avoid per-frame allocation)
-	drawItems   []chunkItem
-	drawBacklog []chunkItem
+	render       worldRenderCache
+	chunks       map[chunkKey]*Chunk
+	chunksMu     sync.RWMutex // Protects the chunks map
+	dirty        bool
+	seed         uint32
+	genQueue     chan chunkGenJob
+	genResults   chan chunkGenResult
+	pending      map[chunkKey]bool
+	meshJobs     chan meshJob
+	meshResults  chan meshResult
+	immediate    map[sectionKey]bool
+	chunkPool    *ChunkPool
+	IsClient     bool   // True if this is a client-side world (rendering only)
+	SavePath     string // Path to save directory (for loading saved chunks)
+	done         chan struct{}
+	stopOnce     sync.Once
+	workers      sync.WaitGroup
+	nextChunkID  uint64
+	nextMeshID   uint64
+	lightChanged map[chunkKey]bool
+	pendingEdits map[chunkKey][]blockEdit
 
 	// Entity System
 	entities   []Entity
@@ -317,14 +311,8 @@ func (w *World) SetMetaAt(x, y, z int, meta byte) {
 	chunk.sectionDirty[sec] = true
 	chunk.meshVersion[sec]++
 	chunk.mu.Unlock()
-	for dx := -1; dx <= 1; dx++ {
-		for dz := -1; dz <= 1; dz++ {
-			ncx := cx + dx
-			ncz := cz + dz
-			w.markChunkAllSectionsDirty(ncx, ncz)
-			w.requestImmediateAllSections(ncx, ncz)
-		}
-	}
+	w.requestImmediateMesh(cx, cz, sec)
+	w.dirty = true
 }
 
 func (w *World) SetBlockAt(x, y, z int, block byte) {

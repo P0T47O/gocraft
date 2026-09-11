@@ -19,12 +19,15 @@ var chunkDataBufPool = sync.Pool{
 }
 
 type Server struct {
-	World     *World // The authoritative world
-	Clients   map[string]*ClientConnection
-	ClientsMu sync.RWMutex
-	PacketCh  chan PacketWrapper
-	Shutdown  chan bool
-	Done      chan bool
+	World       *World // The authoritative world
+	Clients     map[string]*ClientConnection
+	ClientsMu   sync.RWMutex
+	PacketCh    chan PacketWrapper
+	Shutdown    chan bool
+	Done        chan bool
+	stopOnce    sync.Once
+	networkWG   sync.WaitGroup
+	connections map[net.Conn]bool // Includes sockets still waiting for login; ClientsMu protects it.
 
 	// Initial player state (Loaded from save)
 	InitialPosX, InitialPosY, InitialPosZ float64
@@ -41,6 +44,8 @@ type lastPos struct {
 }
 
 type ClientConnection struct {
+	done        chan struct{}
+	closeOnce   sync.Once
 	Name        string
 	Conn        net.Conn
 	Send        chan Packet // Buffer for outgoing packets
@@ -50,8 +55,9 @@ type ClientConnection struct {
 }
 
 type PacketWrapper struct {
-	Packet Packet
-	From   string
+	Packet     Packet
+	From       string
+	Connection *ClientConnection
 }
 
 func NewServer(savePath string) *Server {
@@ -81,6 +87,7 @@ func NewServer(savePath string) *Server {
 		LastSentMeta:  make(map[string]int32),
 		SavePath:      savePath,
 		PendingChunks: make(map[chunkKey][]string),
+		connections:   make(map[net.Conn]bool),
 	}
 
 	if !hasPos && len(world.entities) == 0 {
@@ -101,14 +108,7 @@ func NewServer(savePath string) *Server {
 }
 
 func (s *Server) Stop() {
-	if s.Shutdown != nil {
-		select {
-		case <-s.Shutdown:
-			// Already closed
-		default:
-			close(s.Shutdown)
-		}
-	}
+	s.stopOnce.Do(func() { close(s.Shutdown) })
 }
 
 func (s *Server) Start() {
@@ -119,6 +119,18 @@ func (s *Server) Start() {
 	for {
 		select {
 		case <-s.Shutdown:
+			if s.Listener != nil {
+				s.Listener.Close()
+			}
+			s.ClientsMu.Lock()
+			for conn := range s.connections {
+				conn.Close()
+			}
+			for _, c := range s.Clients {
+				c.close()
+			}
+			s.ClientsMu.Unlock()
+			s.networkWG.Wait()
 			s.Save()
 			s.World.Close()
 			close(s.Done)
@@ -133,10 +145,6 @@ func (s *Server) Start() {
 
 func (s *Server) Save() {
 	fmt.Println("Server: Saving world state...")
-	// 0. Close listener if active
-	if s.Listener != nil {
-		s.Listener.Close()
-	}
 	// 1. Save Chunks
 	if err := SaveWorldChunks(s.SavePath, s.World); err != nil {
 		fmt.Printf("Server Save Chunks Error: %v\n", err)
@@ -180,6 +188,8 @@ func (s *Server) Save() {
 }
 
 func (s *Server) Tick() {
+	started := time.Now()
+	defer func() { perfMon.RecordTick(time.Since(started)) }()
 	s.World.ProcessGenResults()
 	s.processPendingChunks()
 	s.UpdateEntities()
@@ -275,6 +285,9 @@ func (s *Server) Tick() {
 			}
 
 			delete(s.World.chunks, key)
+			delete(s.World.pending, key)
+			delete(s.World.pendingEdits, key)
+			delete(s.World.lightChanged, key)
 
 			// Safe Free (using our new thread-safe freeChunk)
 			// We are holding chunksMu.Lock.
@@ -427,93 +440,148 @@ func (s *Server) UpdateEntities() {
 	}
 }
 
-func (s *Server) StartTCP(addr string) error {
+// ListenTCP establishes readiness synchronously, including an OS-assigned local port.
+func (s *Server) ListenTCP(addr string) error {
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
 		return err
 	}
 	s.Listener = ln
-	fmt.Printf("Server listening on %s\n", addr)
+	return nil
+}
 
-	go s.Start()
+func (s *Server) StartTCP(addr string) error {
+	if err := s.ListenTCP(addr); err != nil {
+		s.World.Close()
+		return err
+	}
+	s.ServeTCP()
+	return nil
+}
 
-	for {
-		conn, err := ln.Accept()
-		if err != nil {
-			// Check if this is a shutdown
+// ServeTCP runs after ListenTCP, and returns only after all sockets/workers close.
+func (s *Server) ServeTCP() {
+	ln := s.Listener
+	fmt.Printf("Server listening on %s\n", ln.Addr())
+	s.networkWG.Add(1)
+	go func() {
+		defer s.networkWG.Done()
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				s.Stop()
+				return
+			}
+			s.ClientsMu.Lock()
 			select {
 			case <-s.Shutdown:
-				// Silent exit on shutdown
-				return nil
+				s.ClientsMu.Unlock()
+				conn.Close()
+				return
 			default:
-				fmt.Printf("Accept error: %v\n", err)
-				continue
 			}
+			s.connections[conn] = true
+			s.networkWG.Add(1)
+			s.ClientsMu.Unlock()
+			go func() {
+				defer s.networkWG.Done()
+				defer func() {
+					conn.Close()
+					s.ClientsMu.Lock()
+					delete(s.connections, conn)
+					s.ClientsMu.Unlock()
+				}()
+				s.handleNewConnection(conn)
+			}()
 		}
-		go s.handleNewConnection(conn)
+	}()
+	s.Start()
+}
+
+func (c *ClientConnection) close() {
+	c.closeOnce.Do(func() {
+		if c.done != nil {
+			close(c.done)
+		}
+		if c.Conn != nil {
+			c.Conn.Close()
+		}
+	})
+}
+
+// Critical messages never block the world loop. A saturated peer reconnects
+// instead of silently losing authoritative inventory/block changes.
+func (c *ClientConnection) enqueue(p Packet) bool {
+	select {
+	case <-c.done:
+		return false
+	default:
+	}
+	select {
+	case c.Send <- p:
+		return true
+	default:
+		c.close()
+		return false
 	}
 }
 
 func (s *Server) handleNewConnection(conn net.Conn) {
-	fmt.Printf("New connection from %s\n", conn.RemoteAddr())
-
-	// We don't know the name yet, wait for login
+	_ = conn.SetReadDeadline(time.Now().Add(10 * time.Second))
 	pkt, err := ReadPacket(conn)
 	if err != nil {
-		conn.Close()
 		return
 	}
-
 	login, ok := pkt.(*PacketLogin)
 	if !ok {
-		conn.Close()
 		return
 	}
-
+	_ = conn.SetReadDeadline(time.Time{})
 	name := login.Username
+	cc := &ClientConnection{Name: name, Conn: conn, Send: make(chan Packet, 128), KnownChunks: make(map[chunkKey]bool), done: make(chan struct{})}
 	s.ClientsMu.Lock()
-	if old, exists := s.Clients[name]; exists {
-		old.Conn.Close()
-	}
-	cc := &ClientConnection{
-		Name:        name,
-		Conn:        conn,
-		Send:        make(chan Packet, 4096), // Increased buffer for chunk bursts
-		KnownChunks: make(map[chunkKey]bool),
+	if old := s.Clients[name]; old != nil {
+		old.close()
 	}
 	s.Clients[name] = cc
 	s.ClientsMu.Unlock()
-
-	// Start Writer Loop
+	writerDone := make(chan struct{})
 	go func() {
-		for p := range cc.Send {
-			if err := WritePacket(cc.Conn, p); err != nil {
-				fmt.Printf("Write error to %s: %v\n", name, err)
-				break
+		defer close(writerDone)
+		defer cc.close()
+		for {
+			select {
+			case <-cc.done:
+				return
+			case p := <-cc.Send:
+				if err := WritePacket(conn, p); err != nil {
+					return
+				}
 			}
 		}
-		cc.Conn.Close()
 	}()
-
-	// Feed login to dispatcher
-	s.PacketCh <- PacketWrapper{Packet: pkt, From: name}
-
-	// Reader Loop
-	for {
-		p, err := ReadPacket(conn)
-		if err != nil {
-			fmt.Printf("Client %s disconnected: %v\n", name, err)
-			break
+	defer func() {
+		cc.close()
+		<-writerDone
+		s.ClientsMu.Lock()
+		// A previous connection must not remove its replacement on rapid rejoin.
+		if s.Clients[name] == cc {
+			delete(s.Clients, name)
 		}
-		s.PacketCh <- PacketWrapper{Packet: p, From: name}
-	}
-
-	s.ClientsMu.Lock()
-	cc = s.Clients[name]
-	delete(s.Clients, name)
-	s.ClientsMu.Unlock()
-	if cc != nil {
-		close(cc.Send) // Terminates the writer goroutine
+		s.ClientsMu.Unlock()
+	}()
+	for {
+		select {
+		case s.PacketCh <- PacketWrapper{Packet: pkt, From: name, Connection: cc}:
+		case <-s.Shutdown:
+			return
+		case <-cc.done:
+			return
+		}
+		pkt, err = ReadPacket(conn)
+		if err != nil {
+			return
+		}
 	}
 }
 
@@ -534,9 +602,7 @@ func (s *Server) BroadcastTo(name string, p Packet) {
 	s.ClientsMu.RLock()
 	defer s.ClientsMu.RUnlock()
 	if c, ok := s.Clients[name]; ok {
-		// Blocking send for critical per-user data (Chunks)
-		// With 4096 buffer, this should rarely block unless client is dead
-		c.Send <- p
+		c.enqueue(p)
 	}
 }
 
@@ -579,6 +645,14 @@ func (s *Server) findPlayerEntity(uuid string) *PlayerEntity {
 }
 
 func (s *Server) HandlePacket(wrap PacketWrapper) {
+	if wrap.Connection != nil {
+		s.ClientsMu.RLock()
+		current := s.Clients[wrap.From]
+		s.ClientsMu.RUnlock()
+		if current != wrap.Connection {
+			return
+		}
+	}
 	pkt := wrap.Packet
 	// client := s.Clients[wrap.From]
 
@@ -600,8 +674,8 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 		}
 		s.ClientsMu.Unlock()
 
-		// 1. Send Initial Chunks (Radius 16)
-		s.SendChunksAround(p.Username, 0, 0, 16)
+		// Send the seed before any chunk snapshots or meshes.
+		s.BroadcastTo(p.Username, p)
 
 		// 2. Send Spawn Point
 		var spawnX, spawnY, spawnZ float64
@@ -620,11 +694,14 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 		s.ClientsMu.RUnlock()
 
 		if ok {
-			client.Send <- &PacketSpawnPoint{
+			client.LastChunkX = int(math.Floor(spawnX / chunkWidth))
+			client.LastChunkZ = int(math.Floor(spawnZ / chunkWidth))
+			client.enqueue(&PacketSpawnPoint{
 				X: spawnX,
 				Y: spawnY,
 				Z: spawnZ,
-			}
+			})
+			s.SendChunksAround(p.Username, client.LastChunkX, client.LastChunkZ, 16)
 		}
 
 		// 3. Send Existing Entities
@@ -645,7 +722,7 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 			client, ok := s.Clients[p.Username]
 			s.ClientsMu.RUnlock()
 			if ok {
-				client.Send <- &PacketEntitySpawn{
+				client.enqueue(&PacketEntitySpawn{
 					EntityID: e.GetUUID(),
 					Type:     e.GetType(),
 					X:        ex,
@@ -654,7 +731,7 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 					Yaw:      eyaw,
 					Pitch:    epitch,
 					Metadata: meta,
-				}
+				})
 			}
 		}
 		s.World.entitiesMu.RUnlock()
@@ -744,10 +821,10 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 			if ok {
 				// WindowID 1, Type 1 (Workbench) - Type 0 is Inventory/Hand
 				// Wait, let's use Type=1 for Workbench as per plan
-				client.Send <- &PacketOpenWindow{
+				client.enqueue(&PacketOpenWindow{
 					WindowID:   1,
 					WindowType: 1, // 1 = Workbench
-				}
+				})
 			}
 		}
 
@@ -933,6 +1010,10 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 		// Validation logic would go here
 		fmt.Printf("Server: Block set at %d %d %d\n", p.X, p.Y, p.Z)
 		s.World.SetBlockAt(int(p.X), int(p.Y), int(p.Z), p.BlockID)
+		if p.BlockID != blockTorch || p.Meta > 4 {
+			p.Meta = 0
+		}
+		s.World.SetMetaAt(int(p.X), int(p.Y), int(p.Z), p.Meta)
 
 		// Broadcast to all clients (including sender for confirmation, or skip sender)
 		// For now, simple echo to prove it works
@@ -1200,8 +1281,10 @@ func (s *Server) SendChunksAround(username string, centerCX, centerCZ, radius in
 		for dx := -radius; dx <= radius; dx++ {
 			cx, cz := centerCX+dx, centerCZ+dz
 			key := chunkKey{X: cx, Z: cz}
+			if dx*dx+dz*dz > radius*radius {
+				continue
+			}
 			if !client.KnownChunks[key] {
-				client.KnownChunks[key] = true
 				missing = append(missing, key)
 			}
 		}
@@ -1253,17 +1336,19 @@ func (s *Server) queueChunkFor(key chunkKey, user string) {
 func chunkPacket(key chunkKey, chunk *Chunk) *PacketChunkData {
 	data := make([]byte, chunkWidth*chunkHeight*chunkWidth)
 	light := make([]byte, len(data))
+	meta := make([]byte, len(data))
 	idx := 0
 	for x := 0; x < chunkWidth; x++ {
 		for y := 0; y < chunkHeight; y++ {
 			for z := 0; z < chunkWidth; z++ {
 				data[idx] = chunk.blocks[x][y][z]
+				meta[idx] = chunk.meta[x][y][z]
 				light[idx] = (chunk.skyLight[x][y][z] << 4) | (chunk.blockLight[x][y][z] & 15)
 				idx++
 			}
 		}
 	}
-	return &PacketChunkData{CX: int32(key.X), CZ: int32(key.Z), Data: data, LightData: light}
+	return &PacketChunkData{CX: int32(key.X), CZ: int32(key.Z), Data: data, LightData: light, MetaData: meta}
 }
 
 func (s *Server) processPendingChunks() {
@@ -1351,7 +1436,7 @@ func (s *Server) SendTo(player string, p Packet) {
 	client, ok := s.Clients[player]
 	s.ClientsMu.RUnlock()
 	if ok {
-		client.Send <- p
+		client.enqueue(p)
 	}
 }
 

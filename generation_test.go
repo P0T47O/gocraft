@@ -5,6 +5,23 @@ import (
 	"testing"
 )
 
+func TestGenerationNoiseRangeAndHeadroom(t *testing.T) {
+	for _, seed := range []uint32{0, 1, 12345, 12345231, 0xffffffff} {
+		for x := -1024; x <= 1024; x += 64 {
+			for z := -1024; z <= 1024; z += 64 {
+				noise := fbm2(seed, float32(x)/800, float32(z)/800)
+				if noise < -1 || noise > 1 {
+					t.Fatalf("noise outside spline domain: %f", noise)
+				}
+				h := rawTerrainHeight(seed, x, z)
+				if h >= chunkHeight-16 {
+					t.Fatalf("seed %d at %d,%d exhausted build headroom: %d", seed, x, z, h)
+				}
+			}
+		}
+	}
+}
+
 func TestGenerationDeterminismAndReuse(t *testing.T) {
 	for _, p := range [][2]int{{0, 0}, {-1, -1}, {3, -7}, {-65, 64}} {
 		var a, b Chunk

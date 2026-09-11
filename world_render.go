@@ -14,12 +14,13 @@ import (
 // World owns this cache through its render worldRenderCache field. All scratch
 // slices retain capacity, but release chunk references at the end of each frame.
 type worldRenderCache struct {
-	offsets     []chunkItem
-	radius      int
-	visible     []visibleSection
-	translucent []translucentDraw
-	paths       []string
-	state       meshRenderState
+	drawCalls, triangles int
+	offsets              []chunkItem
+	radius               int
+	visible              []visibleSection
+	translucent          []translucentDraw
+	paths                []string
+	state                meshRenderState
 }
 
 type visibleSection struct {
@@ -31,14 +32,6 @@ type visibleSection struct {
 type translucentDraw struct {
 	section visibleSection
 	glass   bool
-}
-
-// Retained for compatibility with the old World.waterDraws field; Draw no longer
-// uses a separate water pass.
-type waterDraw struct {
-	chunk  *Chunk
-	dist   float32
-	dx, dz int
 }
 
 func (r *worldRenderCache) radiusOffsets(radius int) []chunkItem {
@@ -155,6 +148,10 @@ func (r *worldRenderCache) drawMeshes(meshes map[string][]*ChunkMesh, assets *Re
 				continue
 			}
 			r.state.draw(mesh, mesh.material.Shader.ID, viewProj, texture)
+			if mesh.glMesh != nil {
+				r.drawCalls++
+				r.triangles += int(mesh.glMesh.IndexCount) / 3
+			}
 		}
 	}
 	clear(paths)
@@ -172,6 +169,7 @@ func (w *World) Draw(assets *RenderAssets, camera rl.Camera3D) {
 	// Flush Raylib before issuing direct GL commands and invalidate cached bindings.
 	rl.DrawRenderBatchActive()
 	r := &w.render
+	r.drawCalls, r.triangles = 0, 0
 	r.state.reset()
 	// Update Fog Shader Uniforms (if active)
 	if assets.fogShader.ID != 0 {
