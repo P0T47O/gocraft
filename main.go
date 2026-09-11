@@ -63,7 +63,7 @@ var (
 
 	// Client Game State
 	localInventory  Inventory
-	currentGameMode byte = ModeCreative
+	currentGameMode byte = ModeSurvival
 
 	// Chat
 	isChatOpen  bool   = false
@@ -529,16 +529,6 @@ func updateGame() {
 		}
 	}
 
-	// GameMode Switch (F1)
-	if rl.IsKeyPressed(rl.KeyF1) {
-		newMode := byte(ModeCreative)
-		if currentGameMode == ModeCreative {
-			newMode = ModeSurvival
-		}
-		// Request mode switch
-		client.Send(&PacketGameMode{Mode: newMode})
-	}
-
 	// Inventory toggle is handled in HandleInput -> ToggleInventory
 
 	// Singleplayer Pause: Freeze update loop
@@ -741,6 +731,11 @@ func handlePacket(pkt Packet) {
 		currentGameMode = p.Mode
 		fmt.Printf("GameMode switched to %d\n", p.Mode)
 
+	case *PacketSlotChange:
+		if p.Slot >= 0 && p.Slot < 9 {
+			input.SelectedSlot = int(p.Slot)
+			input.CurrentBlock = input.Hotbar[input.SelectedSlot]
+		}
 	case *PacketInventoryUpdate:
 		if p.SlotID == -1 {
 			// Update Cursor Item (Held on mouse)

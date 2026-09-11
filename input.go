@@ -437,6 +437,11 @@ func HandleInput(world *World, camera *rl.Camera3D, state *InputState, client *C
 		// 1. Get Block Hardness
 		blockType := world.BlockAt(hit.x, hit.y, hit.z)
 		def := GetBlock(blockType)
+		if def.Hardness < 0 && currentGameMode == ModeSurvival {
+			state.MiningProgress = 0
+			state.MiningTarget = nil
+			return hit
+		}
 		hardness := def.Hardness
 		if hardness <= 0 {
 			hardness = 0.05 // Minimum hardness to prevent div/0 or instant break if not intended
@@ -526,6 +531,9 @@ func HandleInput(world *World, camera *rl.Camera3D, state *InputState, client *C
 			return hit // Consume interaction
 		}
 
+		if state.CurrentBlock == blockAir || state.CurrentBlock >= 100 {
+			return hit
+		}
 		// 2. Block Placement Logic
 		nx := hit.x + int(math.Round(float64(hit.normal.X)))
 		ny := hit.y + int(math.Round(float64(hit.normal.Y)))
@@ -818,13 +826,8 @@ func (s *InputState) UpdateInventorySelection(client *Client) {
 			checkAndHandle(i, x, y)
 		}
 
-		if (leftClick || rightClick) &&
-			!rl.CheckCollisionPointRec(mouse, rl.NewRectangle(startX, startY, invW, invH)) {
-			s.CursorItem = Item{}
-			if client != nil {
-				client.Send(&PacketInventoryUpdate{SlotID: -1, ItemID: 0, Count: 0})
-			}
-		}
+		// Keep cursor items when clicking outside; only slot clicks transfer ownership.
+
 	}
 }
 

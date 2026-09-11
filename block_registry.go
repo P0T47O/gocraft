@@ -74,6 +74,7 @@ func GetBlock(id byte) *BlockDef {
 }
 
 func initBlockRegistry() {
+	defer configureBasicMining()
 	// Define and register all block types
 	RegisterBlock(&BlockDef{
 		ID:            blockGrass,

@@ -13,6 +13,9 @@ type Inventory struct {
 }
 
 func (inv *Inventory) Add(id int32, count int32) int32 {
+	if id <= 0 || count <= 0 {
+		return count
+	}
 	// 1. Try to stack
 	for i := 0; i < 36; i++ {
 		if inv.Slots[i].ID == id && inv.Slots[i].Count < MaxStackSize {
@@ -29,8 +32,15 @@ func (inv *Inventory) Add(id int32, count int32) int32 {
 	for i := 0; i < 36; i++ {
 		if inv.Slots[i].ID == 0 {
 			inv.Slots[i].ID = id
-			inv.Slots[i].Count = count
-			return 0
+			n := count
+			if n > MaxStackSize {
+				n = MaxStackSize
+			}
+			inv.Slots[i].Count = n
+			count -= n
+			if count == 0 {
+				return 0
+			}
 		}
 	}
 	return count // Return remaining
@@ -40,6 +50,9 @@ func (inv *Inventory) Add(id int32, count int32) int32 {
 // Returns true if successful (enough items found), false otherwise.
 // Prioritizes removing from the hotbar (0-8) first, then main inventory.
 func (inv *Inventory) Consume(id int32, count int32) bool {
+	if id <= 0 || count <= 0 {
+		return false
+	}
 	// First check if we have enough
 	total := int32(0)
 	for i := 0; i < 36; i++ {

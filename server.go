@@ -68,6 +68,10 @@ func NewServer(savePath string) *Server {
 	// Set save path for chunk loading in background workers
 	world.SavePath = savePath
 
+	if err := loadSurvivalPlayers(savePath, world); err != nil {
+		panic(fmt.Errorf("load player inventory: %w", err))
+	}
+
 	// Now we can start the workers with the correct seed
 	fmt.Printf("Server: Authoritative Seed Loaded: %d\n", world.seed)
 	world.StartBackend()
@@ -115,6 +119,8 @@ func (s *Server) Start() {
 	fmt.Println("Server starting...")
 	ticker := time.NewTicker(50 * time.Millisecond) // 20 TPS
 	defer ticker.Stop()
+	playerSaveTicker := time.NewTicker(60 * time.Second)
+	defer playerSaveTicker.Stop()
 
 	for {
 		select {
@@ -135,6 +141,8 @@ func (s *Server) Start() {
 			s.World.Close()
 			close(s.Done)
 			return
+		case <-playerSaveTicker.C:
+			s.Save()
 		case <-ticker.C:
 			s.Tick()
 		case wrap := <-s.PacketCh:
@@ -145,6 +153,9 @@ func (s *Server) Start() {
 
 func (s *Server) Save() {
 	fmt.Println("Server: Saving world state...")
+	if err := saveSurvivalPlayers(s.SavePath, s.World); err != nil {
+		fmt.Printf("Player save failed: %v\n", err)
+	}
 	// 1. Save Chunks
 	if err := SaveWorldChunks(s.SavePath, s.World); err != nil {
 		fmt.Printf("Server Save Chunks Error: %v\n", err)
@@ -689,6 +700,9 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 			spawnX, spawnY, spawnZ = float64(sx), float64(s.World.HeightAt(sx, sz))+2.0, float64(sz)
 		}
 
+		if saved := s.findPlayerEntity(p.Username); saved != nil {
+			spawnX, spawnY, spawnZ = saved.X, saved.Y, saved.Z
+		}
 		s.ClientsMu.RLock()
 		client, ok := s.Clients[p.Username]
 		s.ClientsMu.RUnlock()
@@ -750,6 +764,7 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 
 		if !exists {
 			playerEnt := &PlayerEntity{
+				GameMode: ModeSurvival,
 				BaseEntity: BaseEntity{
 					UUID: p.Username, Type: EntityPlayer,
 					X: spawnX, Y: spawnY, Z: spawnZ,
@@ -758,6 +773,13 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 			s.SpawnEntity(playerEnt)
 		} else {
 			fmt.Printf("Player %s rejoining existing entity\n", p.Username)
+		}
+
+		if player := s.findPlayerEntity(p.Username); player != nil {
+			s.SendInventory(player)
+			s.BroadcastTo(p.Username, &PacketInventoryUpdate{SlotID: -1, ItemID: player.CursorItem.ID, Count: player.CursorItem.Count})
+			s.BroadcastTo(p.Username, &PacketSlotChange{Slot: int32(player.SelectedSlot)})
+			s.BroadcastTo(p.Username, &PacketGameMode{Mode: player.GameMode})
 		}
 
 	case *PacketGameMode:
@@ -841,6 +863,9 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 			}
 			recipe := RecipeRegistry[p.RecipeID]
 
+			if !s.hasCraftingStation(player, recipe.Station) {
+				return
+			}
 			// 2. Check Ingredients
 			if player.Inventory.ConsumeItems(recipe.Ingredients) {
 				// 3. Add Result
@@ -891,6 +916,11 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 			return
 		}
 
+		old := s.World.BlockAt(int(p.X), int(p.Y), int(p.Z))
+		if p.Y < 0 || p.Y >= chunkHeight || (p.BlockID != blockAir && (p.BlockID >= 100 || GetBlock(p.BlockID).ID == blockAir || (old != blockAir && old != blockWater))) {
+			s.BroadcastTo(wrap.From, &PacketBlockChange{X: p.X, Y: p.Y, Z: p.Z, BlockID: old, Meta: s.World.MetaAt(int(p.X), int(p.Y), int(p.Z))})
+			return
+		}
 		if p.BlockID != blockAir {
 			// Placement Logic
 			if player.GameMode == ModeSurvival {
@@ -913,7 +943,7 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 					if !player.Inventory.Consume(int32(p.BlockID), 1) {
 						// Failed to consume (cheating? lag?), revert client block
 						fmt.Printf("Player %s tried to place Block %d without item.\n", wrap.From, p.BlockID)
-						s.BroadcastTo(wrap.From, &PacketBlockChange{X: p.X, Y: p.Y, Z: p.Z, BlockID: blockAir})
+						s.BroadcastTo(wrap.From, &PacketBlockChange{X: p.X, Y: p.Y, Z: p.Z, BlockID: old})
 						return
 					}
 				}
@@ -926,6 +956,10 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 			oldBlockID := s.World.BlockAt(int(p.X), int(p.Y), int(p.Z))
 			if oldBlockID != blockAir {
 				blockDef := GetBlock(oldBlockID)
+				if player.GameMode == ModeSurvival && blockDef.Hardness < 0 {
+					s.BroadcastTo(wrap.From, &PacketBlockChange{X: p.X, Y: p.Y, Z: p.Z, BlockID: oldBlockID})
+					return
+				}
 
 				// 1. Determine Held Tool
 				var toolDef *BlockDef
@@ -948,7 +982,7 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 						if toolDef.ToolType == blockDef.EffectiveTool {
 							hasCorrectTool = true
 						}
-						if toolDef.ToolMaterial >= blockDef.RequiredMaterial {
+						if harvestTier(toolDef.ToolMaterial) >= harvestTier(blockDef.RequiredMaterial) {
 							hasCorrectTier = true
 						}
 					}
@@ -1035,6 +1069,10 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 		s.World.entitiesMu.RUnlock()
 
 		if player != nil {
+			if player.GameMode != ModeCreative {
+				s.SendInventory(player)
+				return
+			}
 			// Handle Cursor Update (Slot -1)
 			if p.SlotID == -1 {
 				// Only allow arbitrary cursor setting in Creative Mode?
