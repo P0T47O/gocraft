@@ -189,7 +189,8 @@ type PlayerEntity struct {
 	GameMode     byte
 	Inventory    Inventory
 	SelectedSlot int
-	CursorItem   Item // Held on mouse
+	CursorItem   Item          // Held on mouse
+	Vitals       *PlayerVitals `json:",omitempty"`
 }
 
 func (p *PlayerEntity) Tick(world *World) {

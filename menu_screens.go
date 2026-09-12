@@ -250,7 +250,7 @@ func drawSettingsMenu(l SurvivalLayout, fromPause bool) {
 		}
 	}
 	l.Text("CONTROLS", 28, 328, 14, invAccent)
-	for i, line := range []string{"WASD  Move", "Space  Jump", "E  Inventory", "Esc  Pause / back"} {
+	for i, line := range []string{"WASD  Move", "Space  Jump / swim up", "Ctrl + W  Sprint", "Shift  Sneak / dive", "E  Inventory", "Esc  Pause / back"} {
 		l.Text(line, 28, 364+float32(i)*26, 14, invMuted)
 	}
 	if rl.IsMouseButtonReleased(rl.MouseLeftButton) || rl.IsKeyPressed(rl.KeyEnter) {
@@ -290,6 +290,9 @@ func drawPauseMenu() {
 	l.Text(label, 292, 222, 14, invMuted)
 	if ui.DrawAction(l.Rect(292, 264, 416, 46), "Resume game", true, true) {
 		isPaused = false
+		if server != nil {
+			server.Paused.Store(false)
+		}
 		input.SkipCamera = true
 		rl.DisableCursor()
 	}

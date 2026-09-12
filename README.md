@@ -85,9 +85,10 @@ go run . -name PlayerName
 
 - **ESC**: Toggle Pause Menu
 - **W, A, S, D**: Move
-- **Space**: Jump / Fly Up
-- **Left Control**: Fly Down
-- **F**: Toggle Flying Mode
+- **Space**: Jump / Swim Up / Fly Up
+- **Left Control + W** or **double-tap W**: Sprint
+- **Shift**: Sneak at edges / Swim Down / Fly Down
+- **F1**: Toggle Survival / Creative Mode
 - **Left Click**: Break Block
 - **Right Click**: Place Block
 - **1-9**: Select Block from Hotbar
@@ -131,6 +132,25 @@ For real-render menu captures, run
 in PowerShell. This opt-in test uses sample settings/world entries and writes
 screenshots to `work/` without changing your saves or settings. Clear the variable
 afterward for normal test runs.
+
+### Movement, health and respawn
+
+Survival players have 20 health and 15 seconds of underwater air. The server
+applies fall, drowning, lava, lingering fire, suffocation and void damage.
+Water cushions falls and extinguishes fire. Without a food system yet, staying
+out of danger slowly restores one health about every ten seconds.
+
+Death drops the backpack and cursor items at the death location. Use **Respawn**
+to return near your saved spawn anchor with full health and air. Terrain loads
+before movement resumes. If no safe ground remains nearby, a small cobblestone
+landing is created. Health, air, fire and the anchor are saved; older player
+records start with full health. Singleplayer pause stops simulation; multiplayer
+menus do not pause the remote server. Update client and server together.
+
+Sprint using **Ctrl + W** or double-tap **W**. **Shift** slows movement and prevents
+walking off an edge while grounded; it does not prevent deliberate jumps.
+In water, **Space** swims up and **Shift** dives. Food, hunger and combat are not
+implemented in this stage.
 
 ## License
 

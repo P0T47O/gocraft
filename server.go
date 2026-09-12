@@ -7,6 +7,7 @@ import (
 	"net"
 	"sort"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -20,6 +21,7 @@ var chunkDataBufPool = sync.Pool{
 
 type Server struct {
 	World       *World // The authoritative world
+	Paused      atomic.Bool
 	Clients     map[string]*ClientConnection
 	ClientsMu   sync.RWMutex
 	PacketCh    chan PacketWrapper
@@ -199,10 +201,14 @@ func (s *Server) Save() {
 }
 
 func (s *Server) Tick() {
+	if s.Paused.Load() {
+		return
+	}
 	started := time.Now()
 	defer func() { perfMon.RecordTick(time.Since(started)) }()
 	s.World.ProcessGenResults()
 	s.processPendingChunks()
+	s.updatePlayerVitals()
 	s.UpdateEntities()
 
 	// Garbage Collect Chunks
@@ -349,7 +355,15 @@ func (s *Server) UpdateEntities() {
 	// Collect Players for distance check
 	var players []*PlayerEntity
 	for _, e := range s.World.entities {
-		if p, ok := e.(*PlayerEntity); ok {
+		if p, ok := e.(*PlayerEntity); ok && !p.dead() {
+			if p.Vitals != nil {
+				s.ClientsMu.RLock()
+				online := s.Clients[p.UUID] != nil
+				s.ClientsMu.RUnlock()
+				if !online {
+					continue
+				}
+			}
 			players = append(players, p)
 		}
 	}
@@ -665,9 +679,20 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 		}
 	}
 	pkt := wrap.Packet
+	if player := s.findPlayerEntity(wrap.From); player != nil && player.dead() {
+		switch pkt.(type) {
+		case *PacketRespawn, *PacketLogin, *PacketChunkRequest, *PacketUnloadChunk:
+		default:
+			return
+		}
+	}
 	// client := s.Clients[wrap.From]
 
 	switch p := pkt.(type) {
+	case *PacketRespawn:
+		if player := s.findPlayerEntity(wrap.From); player != nil {
+			s.respawnPlayer(player)
+		}
 	case *PacketLogin:
 		fmt.Printf("Client %s logged in on protocol %d (Seed: %d)\n", p.Username, p.ProtocolVersion, s.World.seed)
 		// Update packet with server seed so client can sync if desired
@@ -776,6 +801,9 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 		}
 
 		if player := s.findPlayerEntity(p.Username); player != nil {
+			player.initVitals()
+			player.Vitals.grace = 60
+			s.sendVitals(player)
 			s.SendInventory(player)
 			s.BroadcastTo(p.Username, &PacketInventoryUpdate{SlotID: -1, ItemID: player.CursorItem.ID, Count: player.CursorItem.Count})
 			s.BroadcastTo(p.Username, &PacketSlotChange{Slot: int32(player.SelectedSlot)})
@@ -783,6 +811,9 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 		}
 
 	case *PacketGameMode:
+		if p.Mode > ModeSurvival {
+			return
+		}
 		// Switch GameMode
 		s.World.entitiesMu.RLock()
 		var player *PlayerEntity
@@ -796,12 +827,22 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 
 		if player != nil {
 			player.GameMode = p.Mode
+			if player.Vitals != nil {
+				player.Vitals.Air = maxAir
+				player.Vitals.FireTicks = 0
+				player.Vitals.FallDistance = 0
+				player.Vitals.lastY = player.Y
+				s.sendVitals(player)
+			}
 			fmt.Printf("Player %s switched to GameMode %d\n", wrap.From, p.Mode)
 			// Echo back to confirm (or broadcast if others need to know)
 			s.BroadcastTo(wrap.From, p)
 		}
 
 	case *PacketPlayerMove:
+		if math.IsNaN(p.X) || math.IsNaN(p.Y) || math.IsNaN(p.Z) || math.IsInf(p.X, 0) || math.IsInf(p.Y, 0) || math.IsInf(p.Z, 0) {
+			return
+		}
 		// Update player position in ServerWorld for saving
 		s.InitialPosX = p.X
 		s.InitialPosY = p.Y

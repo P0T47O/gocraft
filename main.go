@@ -277,64 +277,70 @@ func updateGame() {
 		ui.ActiveID = ""
 		return
 	}
-	// Chat Input
-	if isChatOpen {
-		// Handle keys
-		char := rl.GetCharPressed()
-		for char > 0 {
-			if char >= 32 && char <= 125 {
-				chatInput += string(char)
+	if !input.isDead() {
+		// Chat Input
+		if isChatOpen {
+			// Handle keys
+			char := rl.GetCharPressed()
+			for char > 0 {
+				if char >= 32 && char <= 125 {
+					chatInput += string(char)
+				}
+				char = rl.GetCharPressed()
 			}
-			char = rl.GetCharPressed()
-		}
 
-		if rl.IsKeyPressed(rl.KeyBackspace) {
-			if len(chatInput) > 0 {
-				chatInput = chatInput[:len(chatInput)-1]
+			if rl.IsKeyPressed(rl.KeyBackspace) {
+				if len(chatInput) > 0 {
+					chatInput = chatInput[:len(chatInput)-1]
+				}
 			}
-		}
 
-		if rl.IsKeyPressed(rl.KeyEnter) {
-			if len(chatInput) > 0 {
-				client.Send(&PacketChat{Message: chatInput})
-				chatInput = ""
+			if rl.IsKeyPressed(rl.KeyEnter) {
+				if len(chatInput) > 0 {
+					client.Send(&PacketChat{Message: chatInput})
+					chatInput = ""
+				}
+				isChatOpen = false
+				rl.DisableCursor()
 			}
-			isChatOpen = false
-			rl.DisableCursor()
+
+			if rl.IsKeyPressed(rl.KeyEscape) {
+				isChatOpen = false
+				rl.DisableCursor()
+			}
+
+			return // Block other inputs while chat is open
+		} else if !isPaused && !input.InventoryOpen && rl.IsKeyPressed(rl.KeyEnter) {
+			isChatOpen = true
+			rl.EnableCursor()
+			// rl.SetMousePosition? No, let cursor be free.
+			return
 		}
 
 		if rl.IsKeyPressed(rl.KeyEscape) {
-			isChatOpen = false
-			rl.DisableCursor()
-		}
-
-		return // Block other inputs while chat is open
-	} else if !isPaused && !input.InventoryOpen && rl.IsKeyPressed(rl.KeyEnter) {
-		isChatOpen = true
-		rl.EnableCursor()
-		// rl.SetMousePosition? No, let cursor be free.
-		return
-	}
-
-	if rl.IsKeyPressed(rl.KeyEscape) {
-		if input.InventoryOpen {
-			input.InventoryOpen = false
-			input.CraftingStation = 0
-			input.SkipCamera = true
-			if !isPaused {
-				rl.DisableCursor()
-			}
-		} else {
-			isPaused = !isPaused
-			if isPaused {
-				rl.EnableCursor()
-				ui.ActiveID = ""
+			if input.InventoryOpen {
+				input.InventoryOpen = false
+				input.CraftingStation = 0
+				input.SkipCamera = true
+				if !isPaused {
+					rl.DisableCursor()
+				}
 			} else {
-				rl.DisableCursor()
-				// Reset mouse to center to prevent view jump
-				rl.SetMousePosition(int32(rl.GetScreenWidth()/2), int32(rl.GetScreenHeight()/2))
+				isPaused = !isPaused
+				if server != nil {
+					server.Paused.Store(isPaused)
+				}
+				if isPaused {
+					rl.EnableCursor()
+					ui.ActiveID = ""
+				} else {
+					rl.DisableCursor()
+					// Reset mouse to center to prevent view jump
+					rl.SetMousePosition(int32(rl.GetScreenWidth()/2), int32(rl.GetScreenHeight()/2))
+				}
 			}
 		}
+
 	}
 
 	// Inventory toggle is handled in HandleInput -> ToggleInventory
@@ -371,6 +377,26 @@ Loop:
 	} // Keep receiving multiplayer packets without gameplay input.
 
 	world.ProcessMeshResults(assets, 16)
+
+	if input.isDead() {
+		input.updateRespawnRequest(client)
+		requestMissingChunks()
+		return
+	}
+	if input.AwaitingTerrain {
+		cx := divFloor(blockIndexFromCoord(camera.Position.X), chunkWidth)
+		cz := divFloor(blockIndexFromCoord(camera.Position.Z), chunkWidth)
+		if world.getChunkIfGenerated(cx, cz) == nil {
+			requestMissingChunks()
+			return
+		}
+		input.AwaitingTerrain = false
+	}
+	if !input.VitalsReady {
+		requestMissingChunks()
+		return
+	}
+	input.HurtFlash = max(float32(0), input.HurtFlash-dt)
 
 	HandleInput(world, &camera, input, client)
 	world.ProcessImmediateMeshes(assets, 16)
@@ -467,6 +493,30 @@ func requestMissingChunks() {
 
 func handlePacket(pkt Packet) {
 	switch p := pkt.(type) {
+	case *PacketVitals:
+		wasDead := input.isDead()
+		if input.VitalsReady && p.Health < input.Vitals.Health {
+			input.HurtFlash = 0.45
+		}
+		input.Vitals = *p
+		input.VitalsReady = true
+		if input.isDead() {
+			input.InventoryOpen = false
+			input.CraftingStation = 0
+			input.MiningProgress = 0
+			input.MiningTarget = nil
+			input.VelocityY = 0
+			isChatOpen = false
+			isPaused = false
+			if server != nil {
+				server.Paused.Store(false)
+			}
+			rl.EnableCursor()
+		} else if wasDead {
+			input.RespawnWaiting = false
+			input.SkipCamera = true
+			rl.DisableCursor()
+		}
 	case *PacketOpenWindow:
 		if p.WindowType == 1 { // Workbench
 			input.InventoryOpen = true
@@ -492,9 +542,20 @@ func handlePacket(pkt Packet) {
 		fmt.Printf("Synced with server seed: %d\n", p.Seed)
 
 	case *PacketSpawnPoint:
+		input.AwaitingTerrain = true
 		camera.Position = rl.NewVector3(float32(p.X), float32(p.Y), float32(p.Z))
 		camera.Target = rl.NewVector3(camera.Position.X, camera.Position.Y-2, camera.Position.Z+5)
 		input.InitFromCamera(camera)
+		input.VelocityY = 0
+		input.OnGround = false
+		input.IsRunning = false
+		input.SprintLatched = false
+		input.SkipCamera = true
+		if client != nil {
+			client.LastSentX = p.X
+			client.LastSentY = p.Y
+			client.LastSentZ = p.Z
+		}
 
 	case *PacketEntitySpawn:
 		remoteEntities[p.EntityID] = &RemoteEntity{
@@ -629,7 +690,7 @@ func drawGame() {
 		rl.DrawRectangle(0, 0, int32(rl.GetScreenWidth()), int32(rl.GetScreenHeight()), overlay)
 	}
 
-	if !input.InventoryOpen && !isPaused {
+	if !input.InventoryOpen && !isPaused && !input.isDead() {
 		assets.drawCrosshair()
 	}
 
@@ -656,6 +717,13 @@ func drawGame() {
 		assets.drawHotbar(input)
 	}
 
+	if !input.InventoryOpen {
+		drawVitalsHUD(input)
+	}
+	if input.isDead() {
+		drawDeathScreen(input)
+		return
+	}
 	drawChatOverlay()
 
 	if isPaused {

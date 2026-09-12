@@ -42,10 +42,19 @@ type InputState struct {
 	CraftingStation byte // 0: None, 1: Workbench
 
 	// Survival Mode Physics
-	VelocityY float32 // Vertical velocity
-	OnGround  bool    // Is player standing on solid ground
-	LastWTime float64 // Time of last W key press (for double-tap detection)
-	IsRunning bool    // Running state (activated by double-tap W)
+	VelocityY       float32 // Vertical velocity
+	OnGround        bool    // Is player standing on solid ground
+	LastWTime       float64 // Time of last W key press (for double-tap detection)
+	IsRunning       bool    // Current movement state
+	SprintLatched   bool
+	IsSneaking      bool
+	IsSwimming      bool
+	Vitals          PacketVitals
+	VitalsReady     bool
+	HurtFlash       float32
+	RespawnWaiting  bool
+	RespawnLast     float64
+	AwaitingTerrain bool
 
 	// Mining System
 	MiningTarget   *hitInfo // Block currently being mined (can be nil)
@@ -141,136 +150,33 @@ func (s *InputState) UpdateCamera(world *World, camera *rl.Camera3D) {
 	forward = rl.Vector3Normalize(forward)
 	up := rl.NewVector3(0, 1, 0)
 
-	flatForward := rl.NewVector3(forward.X, 0, forward.Z)
-	if rl.Vector3Length(flatForward) > 0 {
-		flatForward = rl.Vector3Normalize(flatForward)
+	controls := MovementControls{}
+	if rl.IsKeyPressed(rl.KeyW) {
+		now := rl.GetTime()
+		if s.LastWTime > 0 && now-s.LastWTime < doubleTapTime {
+			s.SprintLatched = true
+		}
+		s.LastWTime = now
 	}
-	right := rl.Vector3CrossProduct(flatForward, up)
-	if rl.Vector3Length(right) > 0 {
-		right = rl.Vector3Normalize(right)
+	if !rl.IsKeyDown(rl.KeyW) {
+		s.SprintLatched = false
 	}
-
-	dt := rl.GetFrameTime()
-
-	// Creative Mode: Free flying
-	if currentGameMode == ModeCreative {
-		move := rl.NewVector3(0, 0, 0)
-		if rl.IsKeyDown(rl.KeyW) {
-			move = rl.Vector3Add(move, flatForward)
-		}
-		if rl.IsKeyDown(rl.KeyS) {
-			move = rl.Vector3Subtract(move, flatForward)
-		}
-		if rl.IsKeyDown(rl.KeyD) {
-			move = rl.Vector3Add(move, right)
-		}
-		if rl.IsKeyDown(rl.KeyA) {
-			move = rl.Vector3Subtract(move, right)
-		}
-		if rl.IsKeyDown(rl.KeySpace) {
-			move.Y += 1
-		}
-		if rl.IsKeyDown(rl.KeyLeftShift) || rl.IsKeyDown(rl.KeyRightShift) {
-			move.Y -= 1
-		}
-		if rl.Vector3Length(move) > 0 {
-			move = rl.Vector3Normalize(move)
-		}
-		camera.Position = resolveCollision(world, camera.Position, rl.Vector3Scale(move, flySpeed*dt))
-	} else {
-		// Survival Mode: Gravity-based movement
-
-		// Double-tap W detection for running
-		currentTime := rl.GetTime()
-		if rl.IsKeyPressed(rl.KeyW) {
-			if currentTime-s.LastWTime < doubleTapTime {
-				s.IsRunning = true
-			}
-			s.LastWTime = currentTime
-		}
-		// Stop running when W is released
-		if !rl.IsKeyDown(rl.KeyW) {
-			s.IsRunning = false
-		}
-
-		// Horizontal movement
-		move := rl.NewVector3(0, 0, 0)
-		if rl.IsKeyDown(rl.KeyW) {
-			move = rl.Vector3Add(move, flatForward)
-		}
-		if rl.IsKeyDown(rl.KeyS) {
-			move = rl.Vector3Subtract(move, flatForward)
-		}
-		if rl.IsKeyDown(rl.KeyD) {
-			move = rl.Vector3Add(move, right)
-		}
-		if rl.IsKeyDown(rl.KeyA) {
-			move = rl.Vector3Subtract(move, right)
-		}
-		if rl.Vector3Length(move) > 0 {
-			move = rl.Vector3Normalize(move)
-		}
-
-		// Determine movement speed
-		speed := float32(walkSpeed)
-		if s.IsRunning {
-			speed = runSpeed
-		}
-
-		// Apply horizontal movement with collision
-		newPos := resolveCollision(world, camera.Position, rl.Vector3Scale(move, speed*dt))
-
-		// Apply gravity (always, unless jumping this frame)
-		s.VelocityY -= gravity * dt
-		if s.VelocityY < -terminalVel {
-			s.VelocityY = -terminalVel
-		}
-
-		// Jump input (must be before vertical collision so jump can happen)
-		if s.OnGround && rl.IsKeyPressed(rl.KeySpace) {
-			s.VelocityY = jumpVelocity
-		}
-
-		// Calculate vertical movement
-		verticalDelta := s.VelocityY * dt
-
-		// Apply vertical movement with collision
-		posBeforeVertical := newPos
-		newPos = resolveCollision(world, newPos, rl.NewVector3(0, verticalDelta, 0))
-
-		// Minecraft-style ground detection:
-		// If we tried to move down but couldn't (or moved less), we're on ground
-		actualVerticalMove := newPos.Y - posBeforeVertical.Y
-
-		if verticalDelta < 0 {
-			// Was trying to fall
-			if actualVerticalMove > verticalDelta+0.001 {
-				// Collision stopped us from falling as much as we wanted = on ground
-				s.OnGround = true
-				s.VelocityY = 0
-			} else {
-				s.OnGround = false
-			}
-		} else if verticalDelta > 0 {
-			// Was trying to jump/rise
-			if actualVerticalMove < verticalDelta-0.001 {
-				// Hit ceiling
-				s.VelocityY = 0
-			}
-			s.OnGround = false
-		} else {
-			// No vertical movement requested, check if we should start falling
-			// Try a tiny downward probe
-			probePos := resolveCollision(world, newPos, rl.NewVector3(0, -0.01, 0))
-			if probePos.Y < newPos.Y-0.005 {
-				// We can fall, so we're not on ground
-				s.OnGround = false
-			}
-			// If can't fall, stay at current OnGround state
-		}
-
-		camera.Position = newPos
+	if rl.IsKeyDown(rl.KeyW) {
+		controls.Forward++
 	}
+	if rl.IsKeyDown(rl.KeyS) {
+		controls.Forward--
+	}
+	if rl.IsKeyDown(rl.KeyD) {
+		controls.Side++
+	}
+	if rl.IsKeyDown(rl.KeyA) {
+		controls.Side--
+	}
+	controls.Jump = rl.IsKeyDown(rl.KeySpace)
+	controls.Sneak = rl.IsKeyDown(rl.KeyLeftShift) || rl.IsKeyDown(rl.KeyRightShift)
+	controls.Sprint = s.SprintLatched || rl.IsKeyDown(rl.KeyLeftControl) || rl.IsKeyDown(rl.KeyRightControl)
+	camera.Position = s.StepMovement(world, camera.Position, rl.GetFrameTime(), controls, currentGameMode == ModeCreative)
 
 	camera.Target = rl.Vector3Add(camera.Position, forward)
 	camera.Up = up
@@ -314,26 +220,42 @@ func (s *InputState) RayFromCenter(camera rl.Camera3D) rl.Ray {
 }
 
 func resolveCollision(world *World, pos rl.Vector3, delta rl.Vector3) rl.Vector3 {
-	next := pos
-	if delta.X != 0 {
-		test := rl.NewVector3(next.X+delta.X, next.Y, next.Z)
-		if !collides(world, test) {
-			next = test
+	// Sweep short segments, then bisect a blocked axis to land flush with surfaces.
+	steps := int(math.Ceil(float64(max(abs32(delta.X), abs32(delta.Y), abs32(delta.Z))) / 0.2))
+	if steps < 1 {
+		return pos
+	}
+	step := rl.Vector3Scale(delta, 1/float32(steps))
+	for n := 0; n < steps; n++ {
+		for _, axis := range []int{0, 2, 1} {
+			d := step.X
+			if axis == 1 {
+				d = step.Y
+			}
+			if axis == 2 {
+				d = step.Z
+			}
+			if d == 0 {
+				continue
+			}
+			target := offsetAxis(pos, axis, d)
+			if !collides(world, target) {
+				pos = target
+				continue
+			}
+			low, high := float32(0), float32(1)
+			for j := 0; j < 10; j++ {
+				mid := (low + high) / 2
+				if collides(world, offsetAxis(pos, axis, d*mid)) {
+					high = mid
+				} else {
+					low = mid
+				}
+			}
+			pos = offsetAxis(pos, axis, d*low)
 		}
 	}
-	if delta.Z != 0 {
-		test := rl.NewVector3(next.X, next.Y, next.Z+delta.Z)
-		if !collides(world, test) {
-			next = test
-		}
-	}
-	if delta.Y != 0 {
-		test := rl.NewVector3(next.X, next.Y+delta.Y, next.Z)
-		if !collides(world, test) {
-			next = test
-		}
-	}
-	return next
+	return pos
 }
 
 func collides(world *World, pos rl.Vector3) bool {
@@ -402,6 +324,9 @@ func HandleInput(world *World, camera *rl.Camera3D, state *InputState, client *C
 		state.SkipCamera = false
 	}
 	if state.InventoryOpen {
+		old := camera.Position
+		camera.Position = state.StepMovement(world, old, rl.GetFrameTime(), MovementControls{}, currentGameMode == ModeCreative)
+		camera.Target = rl.Vector3Add(camera.Target, rl.Vector3Subtract(camera.Position, old))
 		state.UpdateSelection(false)
 		state.UpdateInventoryPage()
 		state.UpdateInventorySelection(client)

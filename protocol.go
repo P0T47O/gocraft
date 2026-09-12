@@ -29,6 +29,8 @@ const (
 	IDOpenWindow      = 0x16
 	IDCraft           = 0x17
 	IDBlockInteract   = 0x18
+	IDVitals          = 0x19
+	IDRespawn         = 0x1A
 )
 
 type PacketClickWindow struct {
@@ -264,6 +266,10 @@ func ReadPacket(conn io.Reader) (Packet, error) {
 
 	var p Packet
 	switch id {
+	case IDVitals:
+		p = &PacketVitals{}
+	case IDRespawn:
+		p = &PacketRespawn{}
 	case IDLogin:
 		p = &PacketLogin{}
 	case IDChunkData:

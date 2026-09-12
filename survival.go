@@ -70,6 +70,11 @@ func loadSurvivalPlayers(root string, world *World) error {
 		if name == "" || p.SelectedSlot < 0 || p.SelectedSlot >= 9 || p.GameMode > ModeSurvival {
 			return fmt.Errorf("invalid player state for %q", name)
 		}
+		if v := p.Vitals; v != nil {
+			if v.Health < 0 || v.Health > maxHealth || v.Air < 0 || v.Air > maxAir || v.FireTicks < 0 || v.FireTicks > 160 || v.FallDistance < 0 {
+				return fmt.Errorf("invalid vitals for %q", name)
+			}
+		}
 		for _, item := range append(p.Inventory.Slots[:], p.CursorItem) {
 			if item.ID < 0 || item.ID > 255 || item.Count < 0 || item.Count > MaxStackSize || (item.ID == 0) != (item.Count == 0) {
 				return fmt.Errorf("invalid inventory for %q", name)
