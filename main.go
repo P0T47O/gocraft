@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"gocraft/platform"
 	"math"
-	"os"
 	"time"
 
 	rl "github.com/gen2brain/raylib-go/raylib"
@@ -126,9 +125,9 @@ func main() {
 		}
 	}
 
-	for !rl.WindowShouldClose() {
+	for !rl.WindowShouldClose() && !quitRequested {
 		rl.BeginDrawing()
-		rl.ClearBackground(rl.RayWhite)
+		rl.ClearBackground(invBackground)
 
 		switch currentState {
 		case StateMenu:
@@ -153,6 +152,17 @@ func main() {
 
 func updateMenu() {
 	rl.ShowCursor()
+	if rl.IsKeyPressed(rl.KeyEscape) && menuPage != MenuMain {
+		if menuPage == MenuSettings {
+			SaveSettings()
+			*username = LoadSettings().PlayerName
+		}
+		if menuPage == MenuCreateWorld {
+			menuNavigate(MenuSingleplayer)
+		} else {
+			menuNavigate(MenuMain)
+		}
+	}
 
 	// Simple Menu Logic
 	switch menuPage {
@@ -162,223 +172,6 @@ func updateMenu() {
 		// Refresh save list occasionally?
 	case MenuCreateWorld:
 	case MenuMultiplayer:
-	}
-}
-
-var logoTexture rl.Texture2D
-
-func drawMenu() {
-	if logoTexture.ID == 0 {
-		// Load the transparent logo directly
-		logoTexture = rl.LoadTexture("assets/logo.png")
-	}
-
-	w := float32(rl.GetScreenWidth())
-	h := float32(rl.GetScreenHeight())
-
-	// Background
-	rl.DrawRectangleGradientV(0, 0, int32(w), int32(h), rl.SkyBlue, rl.DarkBlue)
-
-	btnWidth := float32(300)
-	btnHeight := float32(50)
-	centerX := (w - btnWidth) / 2
-	startY := h * 0.35
-
-	switch menuPage {
-	case MenuMain:
-		if logoTexture.ID != 0 {
-			// Calculate Logo Scale to fit nicely
-			// Max width: 60% of screen
-			// Max height: 20% of screen (to fit before startY=35%)
-			maxLogoW := w * 0.6
-			maxLogoH := h * 0.2
-
-			scaleW := maxLogoW / float32(logoTexture.Width)
-			scaleH := maxLogoH / float32(logoTexture.Height)
-
-			// Use the smaller scale to maintain aspect ratio
-			scalar := scaleW
-			if scaleH < scaleW {
-				scalar = scaleH
-			}
-			// Don't upscale pixel art too much if not needed, but here we want it big enough
-			if scalar < 0.5 {
-				scalar = 0.5
-			}
-
-			logoW := float32(logoTexture.Width) * scalar
-			logoH := float32(logoTexture.Height) * scalar
-
-			logoX := (w - logoW) / 2
-			// Position: Centered in the top area available (0 to startY)
-			// Available height = startY = h * 0.35
-			// Center of top area = startY / 2
-			logoY := (startY - logoH) / 2
-
-			rl.DrawTextureEx(logoTexture, rl.Vector2{X: logoX, Y: logoY}, 0, scalar, rl.White)
-		} else {
-			ui.DrawLabel(w/2-100, h*0.15, "GoCraft", 60, rl.White)
-		}
-
-		if ui.DrawButton(rl.NewRectangle(centerX, startY, btnWidth, btnHeight), "Singleplayer", true) {
-			menuPage = MenuSingleplayer
-			saveList = ScanSaves()
-		}
-		if ui.DrawButton(rl.NewRectangle(centerX, startY+70, btnWidth, btnHeight), "Multiplayer", true) {
-			menuPage = MenuMultiplayer
-		}
-		if ui.DrawButton(rl.NewRectangle(centerX, startY+140, btnWidth, btnHeight), "Settings", true) {
-			menuPage = MenuSettings
-		}
-		if ui.DrawButton(rl.NewRectangle(centerX, startY+210, btnWidth, btnHeight), "Quit", true) {
-			os.Exit(0)
-		}
-
-	case MenuSingleplayer:
-		ui.DrawLabel(centerX, h*0.25, "Select World", 30, rl.White)
-
-		listY := h * 0.35
-		for _, save := range saveList {
-			label := fmt.Sprintf("%s (Seed: %d)", save.Name, save.Seed)
-			if save.IsLegacy {
-				label += " [Legacy]"
-			}
-			if ui.DrawButton(rl.NewRectangle(centerX, listY, btnWidth, btnHeight), label, true) {
-				startGame(save.Path, "", false)
-			}
-			// Delete Button small
-			if ui.DrawButton(rl.NewRectangle(centerX+btnWidth+10, listY, 80, btnHeight), "Delete", true) {
-				DeleteSave(save.Path)
-				saveList = ScanSaves() // Refresh
-			}
-			listY += 60
-		}
-
-		if ui.DrawButton(rl.NewRectangle(centerX, h*0.75, btnWidth, btnHeight), "Create New World", true) {
-			menuPage = MenuCreateWorld
-		}
-		if ui.DrawButton(rl.NewRectangle(centerX, h*0.85, btnWidth, btnHeight), "Back", true) {
-			menuPage = MenuMain
-		}
-
-	case MenuCreateWorld:
-		ui.DrawLabel(centerX, h*0.3, "World Name", 20, rl.White)
-		ui.DrawTextField(rl.NewRectangle(centerX, h*0.35, btnWidth, 40), &newWorldName, "world_name", 20, false)
-
-		ui.DrawLabel(centerX, h*0.45, "Seed (Number)", 20, rl.White)
-		ui.DrawTextField(rl.NewRectangle(centerX, h*0.5, btnWidth, 40), &newWorldSeed, "world_seed", 10, false)
-
-		if ui.DrawButton(rl.NewRectangle(centerX, h*0.7, btnWidth, btnHeight), "Create & Play", len(newWorldName) > 0) {
-			var seed int64 = 12345
-			fmt.Sscanf(newWorldSeed, "%d", &seed)
-			path, err := CreateNewSave(newWorldName, seed)
-			if err == nil {
-				startGame(path, "", false)
-			} else {
-				fmt.Printf("Error creating save: %v\n", err)
-			}
-		}
-		if ui.DrawButton(rl.NewRectangle(centerX, h*0.85, btnWidth, btnHeight), "Cancel", true) {
-			menuPage = MenuSingleplayer
-		}
-
-	case MenuMultiplayer:
-		ui.DrawLabel(centerX, h*0.3, "Server IP", 20, rl.White)
-		ui.DrawTextField(rl.NewRectangle(centerX, h*0.35, btnWidth, 40), &ipInput, "server_ip", 30, false)
-
-		if ui.DrawButton(rl.NewRectangle(centerX, h*0.5, btnWidth, btnHeight), "Connect", true) {
-			startGame("", ipInput, true)
-		}
-		if ui.DrawButton(rl.NewRectangle(centerX, h*0.85, btnWidth, btnHeight), "Back", true) {
-			menuPage = MenuMain
-		}
-
-	case MenuSettings:
-		settings := LoadSettings() // Returns singleton cached if already loaded
-		ui.DrawLabel(centerX, h*0.2, "Settings", 40, rl.White)
-
-		// Resolution
-		// Resolution Options
-		resOptions := []string{
-			"1280x720 (16:9)",
-			"1600x900 (16:9)",
-			"1920x1080 (16:9)",
-			"2560x1440 (16:9)",
-			"1024x768 (4:3)",
-			"1280x800 (16:10)",
-			"2560x1080 (21:9)",
-		}
-
-		// Find current index
-		currentRes := fmt.Sprintf("%dx%d", settings.ResolutionWidth, settings.ResolutionHeight)
-		selectedIndex := 0
-		for i, opt := range resOptions {
-			if len(opt) >= len(currentRes) && opt[:len(currentRes)] == currentRes {
-				selectedIndex = i
-				break
-			}
-		}
-
-		// Z-Order: Draw dropdown LAST in the frame (after others) so it appears on top.
-		// However, immediate mode is top-down.
-		// For simple fix with no layering system: Draw everything else first, then dropdown?
-		// But layout is sequential.
-		// Actually, DrawDropdown draws the header first. The expansion is drawn below.
-		// If sensitivity slider is below, dropdown expansion might be covered by it or cover it depending on draw order.
-		// Raylib draws painters algorithm (last on top).
-		// So if we draw dropdown here, and then sensitivity slider below it...
-		// The dropdown OPTIONS (drawn inside DrawDropdown) will be drawn NOW.
-		// Use a deferred approach or specific Z-handling?
-		// For now, let's just draw it. If it overlaps sensitivity, sensitivity might draw ON TOP of dropdown options.
-		// To fix: Draw Sensitivity FIRST, then Dropdown?
-		// Layout Y positions matter.
-		// Let's modify the order: Draw Sensitivity, THEN Resolution Dropdown (which is visually above, but drawn later).
-		// Sensitivity Y=330. Resolution Y=220.
-		// If we draw Sensitivity (330) first, then Resolution (220) + Options (dropping down to >260)...
-		// Resolution + Options will be ON TOP of Sensitivity.
-		// Perfect.
-
-		// Player Name
-		dropdownOpen := ui.ActiveID == "res_dropdown"
-		ui.DrawLabel(centerX, h*0.35, "Player Name", 20, rl.White)
-		ui.DrawTextField(rl.NewRectangle(centerX, h*0.4, btnWidth, 30), &settings.PlayerName, "player_name", 16, dropdownOpen)
-
-		// Sensitivity (Draw First to be partially occluded by dropdown if needed)
-		ui.DrawLabel(centerX, h*0.45, fmt.Sprintf("Sensitivity: %.4f", settings.Sensitivity), 20, rl.White)
-		ui.DrawSlider(rl.NewRectangle(centerX, h*0.5, btnWidth, 20), &settings.Sensitivity, 0.001, 0.02, "sens_slider")
-
-		// Auto-save settings on change
-		if rl.IsMouseButtonReleased(rl.MouseLeftButton) || rl.IsKeyPressed(rl.KeyEnter) {
-			SaveSettings()
-		}
-
-		// Back Button (Draw First to be behind dropdown)
-		if ui.DrawButton(rl.NewRectangle(centerX, h*0.85, btnWidth, btnHeight), "Back", true) {
-			menuPage = MenuMain
-		}
-
-		// Resolution Dropdown (Draw Last)
-		if ui.DrawDropdown(rl.NewRectangle(centerX, h*0.3, btnWidth, btnHeight), resOptions, &selectedIndex, "res_dropdown") {
-			// Apply Selection
-			switch selectedIndex {
-			case 0:
-				settings.ResolutionWidth, settings.ResolutionHeight = 1280, 720
-			case 1:
-				settings.ResolutionWidth, settings.ResolutionHeight = 1600, 900
-			case 2:
-				settings.ResolutionWidth, settings.ResolutionHeight = 1920, 1080
-			case 3:
-				settings.ResolutionWidth, settings.ResolutionHeight = 2560, 1440
-			case 4:
-				settings.ResolutionWidth, settings.ResolutionHeight = 1024, 768
-			case 5:
-				settings.ResolutionWidth, settings.ResolutionHeight = 1280, 800
-			case 6:
-				settings.ResolutionWidth, settings.ResolutionHeight = 2560, 1080
-			}
-			SaveSettings()
-			ApplySettings()
-		}
 	}
 }
 
@@ -420,7 +213,11 @@ func startGame(savePath string, ip string, isMultiplayer bool) {
 	client, err = ConnectTCP(ip, *username)
 	if err != nil {
 		fmt.Printf("Connection failed: %v\n", err)
+		menuError = "Connection failed: " + err.Error()
 		exitGame()
+		if isMultiplayer {
+			menuPage = MenuMultiplayer
+		}
 		return
 	}
 
@@ -436,6 +233,7 @@ func startGame(savePath string, ip string, isMultiplayer bool) {
 
 	rl.DisableCursor()
 	isPaused = false
+	pauseSettings = false
 	currentState = StatePlaying
 }
 
@@ -468,10 +266,17 @@ func exitGame() {
 	currentState = StateMenu
 	menuPage = MenuMain
 	isPaused = false
+	pauseSettings = false
 	rl.EnableCursor()
 }
 
 func updateGame() {
+	if isPaused && pauseSettings && rl.IsKeyPressed(rl.KeyEscape) {
+		SaveSettings()
+		pauseSettings = false
+		ui.ActiveID = ""
+		return
+	}
 	// Chat Input
 	if isChatOpen {
 		// Handle keys
@@ -504,7 +309,7 @@ func updateGame() {
 		}
 
 		return // Block other inputs while chat is open
-	} else if rl.IsKeyPressed(rl.KeyEnter) {
+	} else if !isPaused && !input.InventoryOpen && rl.IsKeyPressed(rl.KeyEnter) {
 		isChatOpen = true
 		rl.EnableCursor()
 		// rl.SetMousePosition? No, let cursor be free.
@@ -514,13 +319,16 @@ func updateGame() {
 	if rl.IsKeyPressed(rl.KeyEscape) {
 		if input.InventoryOpen {
 			input.InventoryOpen = false
+			input.CraftingStation = 0
+			input.SkipCamera = true
 			if !isPaused {
 				rl.DisableCursor()
 			}
 		} else {
 			isPaused = !isPaused
 			if isPaused {
-				rl.ShowCursor()
+				rl.EnableCursor()
+				ui.ActiveID = ""
 			} else {
 				rl.DisableCursor()
 				// Reset mouse to center to prevent view jump
@@ -557,6 +365,10 @@ Loop:
 			break Loop
 		}
 	}
+
+	if isPaused {
+		return
+	} // Keep receiving multiplayer packets without gameplay input.
 
 	world.ProcessMeshResults(assets, 16)
 
@@ -817,23 +629,25 @@ func drawGame() {
 		rl.DrawRectangle(0, 0, int32(rl.GetScreenWidth()), int32(rl.GetScreenHeight()), overlay)
 	}
 
-	assets.drawCrosshair()
+	if !input.InventoryOpen && !isPaused {
+		assets.drawCrosshair()
+	}
 
 	if input.ShowDebug && perfMon != nil {
 		m := perfMon.Metrics
 		// Background for readability
-		rl.DrawRectangle(5, 5, 550, 225, rl.NewColor(0, 0, 0, 100))
+		rl.DrawRectangle(5, 5, 550, 225, rl.Fade(invBackground, 0.92))
 
-		rl.DrawFPS(10, 10)
-		rl.DrawText(fmt.Sprintf("Pos: %.1f, %.1f, %.1f", camera.Position.X, camera.Position.Y, camera.Position.Z), 10, 35, 20, rl.White)
+		rl.DrawText(fmt.Sprintf("%d FPS", rl.GetFPS()), 10, 10, 20, invAccent)
+		rl.DrawText(fmt.Sprintf("Pos: %.1f, %.1f, %.1f", camera.Position.X, camera.Position.Y, camera.Position.Z), 10, 35, 20, invText)
 
-		rl.DrawText(fmt.Sprintf("Chunks: %d loaded / %d mesh buffers", len(world.chunks), m.ActiveMeshes), 10, 60, 20, rl.White)
-		rl.DrawText(fmt.Sprintf("%d chunk updates/sec", m.MeshesPerSec), 10, 85, 20, rl.White)
-		rl.DrawText(fmt.Sprintf("Mem: %d MB (GC: %d)", m.HeapAllocMB, m.NumGC), 10, 110, 20, rl.White)
-		rl.DrawText(fmt.Sprintf("Unloads/sec: %d", m.UnloadsPerSec), 10, 135, 20, rl.White)
-		rl.DrawText(fmt.Sprintf("Frame p95/p99: %.1f/%.1f ms; Tick: %.1f ms", m.FrameP95, m.FrameP99, m.ServerTickMS), 10, 160, 18, rl.White)
-		rl.DrawText(fmt.Sprintf("Mesh queue: %d/%d; Draws: %d", m.MeshJobs, m.MeshResults, m.DrawCalls), 10, 183, 18, rl.White)
-		rl.DrawText(fmt.Sprintf("Triangles: %d", m.Triangles), 10, 206, 18, rl.White)
+		rl.DrawText(fmt.Sprintf("Chunks: %d loaded / %d mesh buffers", len(world.chunks), m.ActiveMeshes), 10, 60, 20, invText)
+		rl.DrawText(fmt.Sprintf("%d chunk updates/sec", m.MeshesPerSec), 10, 85, 20, invText)
+		rl.DrawText(fmt.Sprintf("Mem: %d MB (GC: %d)", m.HeapAllocMB, m.NumGC), 10, 110, 20, invText)
+		rl.DrawText(fmt.Sprintf("Unloads/sec: %d", m.UnloadsPerSec), 10, 135, 20, invText)
+		rl.DrawText(fmt.Sprintf("Frame p95/p99: %.1f/%.1f ms; Tick: %.1f ms", m.FrameP95, m.FrameP99, m.ServerTickMS), 10, 160, 18, invText)
+		rl.DrawText(fmt.Sprintf("Mesh queue: %d/%d; Draws: %d", m.MeshJobs, m.MeshResults, m.DrawCalls), 10, 183, 18, invText)
+		rl.DrawText(fmt.Sprintf("Triangles: %d", m.Triangles), 10, 206, 18, invText)
 	}
 
 	if input.InventoryOpen {
@@ -842,45 +656,10 @@ func drawGame() {
 		assets.drawHotbar(input)
 	}
 
-	// Chat UI
-	if len(chatHistory) > 0 || isChatOpen {
-		// Draw History
-		historyH := int32(len(chatHistory) * 20)
-		baseY := int32(rl.GetScreenHeight()) - 50 - historyH
-		if baseY < int32(rl.GetScreenHeight())/2 {
-			baseY = int32(rl.GetScreenHeight()) / 2
-		}
-
-		rl.DrawRectangle(5, baseY-5, 500, historyH+10, rl.NewColor(0, 0, 0, 100))
-		for i, msg := range chatHistory {
-			rl.DrawText(msg, 10, baseY+int32(i*20), 18, rl.White)
-		}
-	}
-
-	if isChatOpen {
-		// Draw Input
-		baseY := int32(rl.GetScreenHeight()) - 40
-		rl.DrawRectangle(5, baseY, 500, 30, rl.NewColor(0, 0, 0, 200))
-		rl.DrawText("> "+chatInput+"_", 10, baseY+6, 20, rl.Yellow)
-	}
+	drawChatOverlay()
 
 	if isPaused {
-		rl.DrawRectangle(0, 0, int32(rl.GetScreenWidth()), int32(rl.GetScreenHeight()), rl.NewColor(0, 0, 0, 150))
-
-		w := float32(rl.GetScreenWidth())
-		h := float32(rl.GetScreenHeight())
-		centerX := w / 2
-		centerY := h / 2
-		btnWidth := float32(300)
-		btnHeight := float32(50)
-
-		text := "Game Paused"
-		textW := rl.MeasureText(text, 40)
-		ui.DrawLabel(centerX-float32(textW)/2, centerY-100, text, 40, rl.White)
-
-		if ui.DrawButton(rl.NewRectangle(centerX-btnWidth/2, centerY, btnWidth, btnHeight), "Save & Quit", true) {
-			exitGame()
-		}
+		drawPauseMenu()
 	}
 }
 

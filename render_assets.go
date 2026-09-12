@@ -20,11 +20,6 @@ type RenderAssets struct {
 	animated        map[string]*AnimatedTexture
 	materials       map[string]rl.Material
 	crossItemModels map[byte]rl.Model // Pre-generated extruded meshes for cross-type items
-	hotbarTex       rl.Texture2D
-	hotbarSel       rl.Texture2D
-	slotTex         rl.Texture2D
-	slotSelect      rl.Texture2D
-	inventoryTex    rl.Texture2D
 	iconCamera      rl.Camera3D
 	cutoutShader    rl.Shader
 	fogShader       rl.Shader
@@ -62,27 +57,6 @@ func loadRenderAssets() *RenderAssets {
 			Fovy:       2.4,
 			Projection: rl.CameraOrthographic,
 		},
-	}
-
-	assets.hotbarTex = rl.LoadTexture("textures/gui/sprites/hud/hotbar.png")
-	assets.hotbarSel = rl.LoadTexture("textures/gui/sprites/hud/hotbar_selection.png")
-	assets.slotTex = rl.LoadTexture("textures/gui/sprites/container/slot.png")
-	assets.slotSelect = rl.LoadTexture("textures/gui/sprites/container/slot_highlight_front.png")
-	assets.inventoryTex = rl.LoadTexture("textures/gui/container/inventory.png")
-	if assets.hotbarTex.ID != 0 {
-		rl.SetTextureFilter(assets.hotbarTex, rl.FilterPoint)
-	}
-	if assets.hotbarSel.ID != 0 {
-		rl.SetTextureFilter(assets.hotbarSel, rl.FilterPoint)
-	}
-	if assets.slotTex.ID != 0 {
-		rl.SetTextureFilter(assets.slotTex, rl.FilterPoint)
-	}
-	if assets.slotSelect.ID != 0 {
-		rl.SetTextureFilter(assets.slotSelect, rl.FilterPoint)
-	}
-	if assets.inventoryTex.ID != 0 {
-		rl.SetTextureFilter(assets.inventoryTex, rl.FilterPoint)
 	}
 
 	assets.loadBlockTextures()
@@ -133,21 +107,6 @@ func (a *RenderAssets) unload() {
 		if tex.ID != 0 && !animatedIDs[tex.ID] {
 			rl.UnloadTexture(tex)
 		}
-	}
-	if a.hotbarTex.ID != 0 {
-		rl.UnloadTexture(a.hotbarTex)
-	}
-	if a.hotbarSel.ID != 0 {
-		rl.UnloadTexture(a.hotbarSel)
-	}
-	if a.slotTex.ID != 0 {
-		rl.UnloadTexture(a.slotTex)
-	}
-	if a.slotSelect.ID != 0 {
-		rl.UnloadTexture(a.slotSelect)
-	}
-	if a.inventoryTex.ID != 0 {
-		rl.UnloadTexture(a.inventoryTex)
 	}
 
 	// Do NOT unload materials as they share textures/shaders managed by RenderAssets.

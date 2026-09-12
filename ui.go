@@ -19,7 +19,7 @@ func uiScale() float32 {
 }
 
 func inventoryScale() float32 {
-	return uiScale() * 3.2
+	return min(uiScale()*3.2, (float32(rl.GetScreenWidth())-32)/176, (float32(rl.GetScreenHeight())-32)/196)
 }
 
 type InventoryLayout struct {

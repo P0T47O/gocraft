@@ -117,6 +117,21 @@ on Windows, run `$env:GOCRAFT_INVENTORY_PREVIEW='1'; go test -run '^TestInventor
 in PowerShell. Captures are written to the ignored `work/` directory. Clear the
 environment variable afterward to skip the graphical preview during regular tests.
 
+### Menus and visual theme
+
+The main menu, world browser, settings, pause overlay, inventories and hotbar share
+the same dark pixel theme and green selection states. Menu backgrounds are drawn
+in code and require no image pack. The world browser scrolls; deleting a world
+requires a second click on **Confirm delete**. Press **Escape** to go back from a
+menu page. The pause overlay provides **Resume**, **Settings**, and a return to the
+main menu; a multiplayer server continues running while its menu is open.
+
+For real-render menu captures, run
+`$env:GOCRAFT_MENU_PREVIEW='1'; go test -run '^TestMenuPreview$' -count=1 .`
+in PowerShell. This opt-in test uses sample settings/world entries and writes
+screenshots to `work/` without changing your saves or settings. Clear the variable
+afterward for normal test runs.
+
 ## License
 
 This project is licensed under the GNU General Public License v3.0 - see the [LICENSE](LICENSE) file for details.

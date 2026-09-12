@@ -20,36 +20,17 @@ func NewUIComponents() *UIComponents {
 }
 
 func (ui *UIComponents) DrawButton(rect rl.Rectangle, text string, active bool) bool {
-	hover := rl.CheckCollisionPointRec(rl.GetMousePosition(), rect)
-	clicked := hover && rl.IsMouseButtonReleased(rl.MouseLeftButton)
+	return ui.DrawAction(rect, text, active, false)
+}
 
-	// If clicking button, clear focus from text fields
+func (ui *UIComponents) DrawAction(rect rl.Rectangle, text string, enabled, primary bool) bool {
+	inventoryButton(rect, text, enabled, primary && enabled, rect.Height/38)
+	clicked := enabled && rl.CheckCollisionPointRec(rl.GetMousePosition(), rect) && rl.IsMouseButtonReleased(rl.MouseLeftButton)
 	if clicked {
 		ui.ActiveID = ""
+		ui.DraggingID = ""
 	}
-
-	color := rl.DarkGray
-	if active {
-		if clicked {
-			color = rl.Blue
-		} else if hover {
-			color = rl.Gray
-		}
-	} else {
-		color = rl.Black
-	}
-
-	rl.DrawRectangleRec(rect, color)
-	rl.DrawRectangleLinesEx(rect, 2, rl.LightGray)
-
-	textSize := rl.MeasureTextEx(ui.Font, text, 20, 2)
-	textPos := rl.Vector2{
-		X: rect.X + (rect.Width-textSize.X)/2,
-		Y: rect.Y + (rect.Height-textSize.Y)/2,
-	}
-	rl.DrawTextEx(ui.Font, text, textPos, 20, 2, rl.White)
-
-	return active && clicked
+	return clicked
 }
 
 func (ui *UIComponents) DrawTextField(rect rl.Rectangle, text *string, id string, maxLength int, blocked bool) {
@@ -62,13 +43,13 @@ func (ui *UIComponents) DrawTextField(rect rl.Rectangle, text *string, id string
 		}
 	}
 
-	active := (ui.ActiveID == id)
+	active := !blocked && (ui.ActiveID == id)
 
-	rl.DrawRectangleRec(rect, rl.DarkGray)
+	rl.DrawRectangleRec(rect, invBackground)
 	if active || hover {
-		rl.DrawRectangleLinesEx(rect, 2, rl.White)
+		rl.DrawRectangleLinesEx(rect, 2, invText)
 	} else {
-		rl.DrawRectangleLinesEx(rect, 2, rl.Gray)
+		rl.DrawRectangleLinesEx(rect, 2, invLine)
 	}
 
 	// Simple Input Handling
@@ -76,7 +57,7 @@ func (ui *UIComponents) DrawTextField(rect rl.Rectangle, text *string, id string
 		// Handle Character Input
 		char := rl.GetCharPressed()
 		for char != 0 {
-			if char >= 32 && len(*text) < maxLength {
+			if char >= 32 && len([]rune(*text)) < maxLength {
 				*text += string(char)
 			}
 			char = rl.GetCharPressed()
@@ -105,7 +86,11 @@ func (ui *UIComponents) DrawTextField(rect rl.Rectangle, text *string, id string
 		display += "_"
 	}
 
-	rl.DrawTextEx(ui.Font, display, rl.Vector2{X: rect.X + 5, Y: rect.Y + (rect.Height-20)/2}, 20, 2, rl.White)
+	fs := rect.Height * 0.4
+	for len(display) > 0 && rl.MeasureTextEx(ui.Font, display, fs, 1).X > rect.Width-20 {
+		display = string([]rune(display)[1:])
+	}
+	rl.DrawTextEx(ui.Font, display, rl.NewVector2(rect.X+10, rect.Y+(rect.Height-fs)/2), fs, 1, invText)
 }
 
 func (ui *UIComponents) DrawLabel(x, y float32, text string, fontSize float32, color rl.Color) {
@@ -135,7 +120,7 @@ func (ui *UIComponents) DrawSlider(rect rl.Rectangle, value *float32, min, max f
 	}
 
 	// Draw Background
-	rl.DrawRectangleRec(rect, rl.DarkGray)
+	rl.DrawRectangleRec(rect, invBackground)
 
 	// Draw Fill
 	t := (*value - min) / (max - min)
@@ -146,103 +131,15 @@ func (ui *UIComponents) DrawSlider(rect rl.Rectangle, value *float32, min, max f
 		t = 1
 	}
 	fillRec := rl.NewRectangle(rect.X, rect.Y, rect.Width*float32(t), rect.Height)
-	rl.DrawRectangleRec(fillRec, rl.Gray)
+	rl.DrawRectangleRec(fillRec, rl.NewColor(70, 90, 63, 255))
 
-	rl.DrawRectangleLinesEx(rect, 2, rl.LightGray)
+	rl.DrawRectangleLinesEx(rect, 2, invLine)
 
-	// Draw Text Value
+	// Value and handle scale with the component rather than screen pixels.
+	fs := rect.Height * 0.48
 	valText := fmt.Sprintf("%.3f", *value)
-	textSize := rl.MeasureTextEx(ui.Font, valText, 20, 2)
-	textPos := rl.Vector2{
-		X: rect.X + (rect.Width-textSize.X)/2,
-		Y: rect.Y + (rect.Height-textSize.Y)/2,
-	}
-	rl.DrawTextEx(ui.Font, valText, textPos, 20, 2, rl.White)
-}
-
-func (ui *UIComponents) DrawDropdown(rect rl.Rectangle, options []string, selectedIndex *int, id string) bool {
-	active := (ui.ActiveID == id)
-	hover := rl.CheckCollisionPointRec(rl.GetMousePosition(), rect)
-
-	// Toggle dropdown
-	if hover && rl.IsMouseButtonReleased(rl.MouseLeftButton) {
-		if active {
-			ui.ActiveID = ""
-		} else {
-			ui.ActiveID = id
-		}
-	}
-
-	// Draw Header
-	rl.DrawRectangleRec(rect, rl.DarkGray)
-	rl.DrawRectangleLinesEx(rect, 2, rl.LightGray)
-
-	currentText := ""
-	if *selectedIndex >= 0 && *selectedIndex < len(options) {
-		currentText = options[*selectedIndex]
-	}
-
-	ui.DrawLabel(rect.X+10, rect.Y+(rect.Height-20)/2, currentText, 20, rl.White)
-
-	// Draw Arrow
-	arrowX := rect.X + rect.Width - 30
-	arrowY := rect.Y + rect.Height/2
-	if active {
-		rl.DrawTriangle(
-			rl.NewVector2(arrowX, arrowY-5),
-			rl.NewVector2(arrowX-5, arrowY+5),
-			rl.NewVector2(arrowX+5, arrowY+5),
-			rl.White,
-		)
-	} else {
-		rl.DrawTriangle(
-			rl.NewVector2(arrowX-5, arrowY-5),
-			rl.NewVector2(arrowX, arrowY+5),
-			rl.NewVector2(arrowX+5, arrowY-5),
-			rl.White,
-		)
-	}
-
-	// Draw Options if Active
-	changed := false
-	if active {
-		itemHeight := rect.Height
-		totalHeight := float32(len(options)) * itemHeight
-
-		// Background for options
-		// Draw on top of everything? In immediate mode without z-layering, we rely on draw order.
-		// Main loop should draw active dropdown LAST.
-		optsRect := rl.NewRectangle(rect.X, rect.Y+rect.Height, rect.Width, totalHeight)
-		rl.DrawRectangleRec(optsRect, rl.DarkGray)
-		rl.DrawRectangleLinesEx(optsRect, 2, rl.LightGray)
-
-		for i, opt := range options {
-			optRect := rl.NewRectangle(rect.X, rect.Y+rect.Height+float32(i)*itemHeight, rect.Width, itemHeight)
-			optHover := rl.CheckCollisionPointRec(rl.GetMousePosition(), optRect)
-
-			color := rl.DarkGray
-			if optHover {
-				color = rl.Gray
-			}
-			if i == *selectedIndex {
-				color = rl.Blue
-			}
-
-			rl.DrawRectangleRec(optRect, color)
-			ui.DrawLabel(optRect.X+10, optRect.Y+(optRect.Height-20)/2, opt, 20, rl.White)
-
-			if optHover && rl.IsMouseButtonReleased(rl.MouseLeftButton) {
-				*selectedIndex = i
-				ui.ActiveID = "" // Close dropdown
-				changed = true
-			}
-		}
-
-		// If clicked outside, close
-		if rl.IsMouseButtonReleased(rl.MouseLeftButton) && !rl.CheckCollisionPointRec(rl.GetMousePosition(), optsRect) && !hover {
-			ui.ActiveID = ""
-		}
-	}
-
-	return changed
+	textSize := rl.MeasureTextEx(ui.Font, valText, fs, 1)
+	rl.DrawTextEx(ui.Font, valText, rl.NewVector2(rect.X+(rect.Width-textSize.X)/2, rect.Y+(rect.Height-fs)/2), fs, 1, invText)
+	handle := rl.NewRectangle(rect.X+t*(rect.Width-4), rect.Y, 4, rect.Height)
+	rl.DrawRectangleRec(handle, invAccent)
 }

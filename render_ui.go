@@ -37,52 +37,31 @@ func (a *RenderAssets) drawCrosshair() {
 }
 
 func (a *RenderAssets) drawHotbar(state *InputState) {
-	if a.hotbarTex.ID == 0 {
-		return
-	}
-	scale := float32(3) * uiScale()
-	hotbarWidth := float32(a.hotbarTex.Width) * scale
-	hotbarHeight := float32(a.hotbarTex.Height) * scale
-	hbX := float32(rl.GetScreenWidth())/2 - hotbarWidth/2
-	hbY := float32(rl.GetScreenHeight()) - hotbarHeight - 10
-	rl.DrawTextureEx(a.hotbarTex, rl.NewVector2(hbX, hbY), 0, scale, rl.White)
-
-	slotWidth := float32(a.hotbarTex.Width) / 9
-	slotSize := slotWidth * scale
-	hotbarBlocks := state.Hotbar[:]
-	selectedIndex := state.SelectedSlot
-	if a.hotbarSel.ID != 0 {
-		selW := float32(a.hotbarSel.Width) * scale
-		selH := float32(a.hotbarSel.Height) * scale
-		selX := hbX + float32(selectedIndex)*slotWidth*scale + (slotWidth*scale-selW)/2
-		selY := hbY - (selH-hotbarHeight)/2
-		rl.DrawTextureEx(a.hotbarSel, rl.NewVector2(selX, selY), 0, scale, rl.White)
-	}
-
-	for i, b := range hotbarBlocks {
-		if currentGameMode == ModeSurvival {
-			var item Item
-			if client != nil {
-				item = client.Inventory.Slots[i]
-			} else {
-				item = localInventory.Slots[i]
-			}
-			if item.ID != 0 {
-				iconX := hbX + float32(i)*slotWidth*scale + (slotWidth*scale-slotSize)/2
-				iconY := hbY + (hotbarHeight-slotSize)/2
-				a.drawIcon(byte(item.ID), iconX, iconY, slotSize)
-				if item.Count > 1 {
-					rl.DrawText(fmt.Sprintf("%d", item.Count), int32(iconX+slotSize-30), int32(iconY+slotSize-25), 20, rl.White)
-				}
-			}
-		} else {
-			if b == blockAir {
-				continue
-			}
-			iconX := hbX + float32(i)*slotWidth*scale + (slotWidth*scale-slotSize)/2
-			iconY := hbY + (hotbarHeight-slotSize)/2
-			a.drawIcon(b, iconX, iconY, slotSize)
+	scale := min(float32(1.5), float32(rl.GetScreenWidth())/1280, float32(rl.GetScreenHeight())/720)
+	slot, stride := float32(48)*scale, float32(54)*scale
+	width := 9*stride + 10*scale
+	x := (float32(rl.GetScreenWidth()) - width) / 2
+	y := float32(rl.GetScreenHeight()) - 68*scale
+	inventoryBox(rl.NewRectangle(x, y, width, 60*scale), invBackground, invLine)
+	for i := 0; i < 9; i++ {
+		r := rl.NewRectangle(x+8*scale+float32(i)*stride, y+6*scale, slot, slot)
+		inventoryBox(r, invSlot, invLine)
+		if i == state.SelectedSlot {
+			rl.DrawRectangleLinesEx(r, 2*scale, invAccent)
 		}
+		item := inventoryFor(client).Slots[i]
+		if currentGameMode == ModeCreative {
+			item = Item{ID: int32(state.Hotbar[i]), Count: 1}
+		}
+		a.drawInventoryItem(item, r, scale)
+		inventoryText(fmt.Sprint(i+1), r.X+3*scale, r.Y+3*scale, int32(10*scale), invMuted)
+	}
+	if state.CurrentBlock != blockAir {
+		label := GetBlock(state.CurrentBlock).Name
+		fs := int32(15 * scale)
+		tw := float32(rl.MeasureText(label, fs))
+		inventoryBox(rl.NewRectangle(float32(rl.GetScreenWidth())/2-tw/2-10*scale, y-30*scale, tw+20*scale, 23*scale), invBackground, invLine)
+		inventoryText(label, float32(rl.GetScreenWidth())/2-tw/2, y-26*scale, fs, invText)
 	}
 }
 
@@ -95,23 +74,13 @@ func (a *RenderAssets) drawInventory(state *InputState) {
 	layout := inventoryLayout()
 	scale := inventoryScale()
 
-	// Draw semi-transparent background for the whole screen
-	rl.DrawRectangle(0, 0, int32(rl.GetScreenWidth()), int32(rl.GetScreenHeight()), rl.Fade(rl.Black, 0.5))
-
-	// Draw Creative Inventory Window Background
-	windowRect := rl.Rectangle{
-		X:      layout.OriginX,
-		Y:      layout.OriginY,
-		Width:  layout.GridW + 16*scale, // Padding
-		Height: layout.GridH + 60*scale, // Padding + label space
-	}
-	// Main background
-	rl.DrawRectangleRec(windowRect, rl.NewColor(198, 198, 198, 255))
-	// Borders
-	rl.DrawRectangleLinesEx(windowRect, 2*scale, rl.NewColor(255, 255, 255, 255))                                                                                                    // Highlight
-	rl.DrawRectangleLinesEx(rl.NewRectangle(windowRect.X-2*scale, windowRect.Y-2*scale, windowRect.Width+4*scale, windowRect.Height+4*scale), 2*scale, rl.NewColor(85, 85, 85, 255)) // Shadow
-
-	rl.DrawText("Creative Inventory", int32(layout.GridX), int32(layout.OriginY+8*scale), int32(10*scale), rl.DarkGray)
+	rl.DrawRectangle(0, 0, int32(rl.GetScreenWidth()), int32(rl.GetScreenHeight()), rl.NewColor(9, 17, 22, 190))
+	windowRect := rl.NewRectangle(layout.OriginX, layout.OriginY, 176*scale, 196*scale)
+	inventoryBox(windowRect, invBackground, invLine)
+	rl.DrawRectangleRec(rl.NewRectangle(windowRect.X, windowRect.Y, windowRect.Width, 2*scale), invAccent)
+	rl.DrawText("CREATIVE INVENTORY", int32(layout.GridX), int32(layout.OriginY+6*scale), int32(6*scale), invText)
+	rl.DrawText("HOTBAR", int32(layout.GridX), int32(layout.HotbarY-10*scale), int32(5*scale), invMuted)
+	rl.DrawText(fmt.Sprintf("Page %d  /  scroll to browse", state.InventoryPage+1), int32(layout.GridX), int32(layout.GridY+layout.GridH+7*scale), int32(5*scale), invMuted)
 
 	itemsPerPage := layout.Cols * layout.Rows
 	start := state.InventoryPage * itemsPerPage
@@ -119,7 +88,7 @@ func (a *RenderAssets) drawInventory(state *InputState) {
 	if end > len(allBlocks) {
 		end = len(allBlocks)
 	}
-	drawFrames := a.inventoryTex.ID == 0
+	drawFrames := true
 	a.drawSlotGrid(layout, allBlocks[start:end], drawFrames)
 	a.drawHotbarSlots(layout, state, drawFrames)
 	if state.CursorItem.ID != 0 {
@@ -159,18 +128,19 @@ func (a *RenderAssets) drawHotbarSlots(layout InventoryLayout, state *InputState
 		if block != blockAir {
 			a.drawIcon(block, x, y, layout.SlotSize)
 		}
-		if col == state.SelectedSlot && a.slotSelect.ID != 0 {
-			a.drawSlotOverlay(a.slotSelect, x, y, layout.SlotSize)
+		if col == state.SelectedSlot {
+			rl.DrawRectangleLinesEx(rl.NewRectangle(x, y, layout.SlotSize, layout.SlotSize), 2, invAccent)
 		}
 	}
 }
 
 func (a *RenderAssets) drawSlot(x, y, size float32) {
-	if a.slotTex.ID == 0 {
-		rl.DrawRectangle(int32(x), int32(y), int32(size), int32(size), rl.NewColor(60, 60, 60, 220))
-		return
+	r := rl.NewRectangle(x+1, y+1, size-2, size-2)
+	fill := invSlot
+	if rl.CheckCollisionPointRec(rl.GetMousePosition(), r) {
+		fill = rl.NewColor(76, 89, 76, 255)
 	}
-	a.drawSlotOverlay(a.slotTex, x, y, size)
+	inventoryBox(r, fill, invLine)
 }
 
 func (a *RenderAssets) drawSlotOverlay(tex rl.Texture2D, x, y, size float32) {

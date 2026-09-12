@@ -58,4 +58,34 @@ func TestInventoryPreview(t *testing.T) {
 			t.Fatal("preview export failed")
 		}
 	}
+	oldMode := currentGameMode
+	defer func() { currentGameMode = oldMode }()
+	rl.SetWindowSize(1280, 720)
+	state.CurrentBlock = blockLog
+	for i := 0; i < 9; i++ {
+		state.Hotbar[i] = byte(localInventory.Slots[i].ID)
+	}
+	for _, sample := range []string{"hud-theme", "creative-theme"} {
+		target := rl.LoadRenderTexture(1280, 720)
+		rl.BeginTextureMode(target)
+		drawMenuBackdrop()
+		if sample == "creative-theme" {
+			currentGameMode = ModeCreative
+			a.drawInventory(state)
+		} else {
+			currentGameMode = ModeSurvival
+			a.drawHotbar(state)
+			a.drawCrosshair()
+		}
+		rl.EndTextureMode()
+		img := rl.LoadImageFromTexture(target.Texture)
+		rl.ImageFlipVertical(img)
+		path, _ := filepath.Abs(filepath.Join("work", sample+".png"))
+		ok := rl.ExportImage(*img, path)
+		rl.UnloadImage(img)
+		rl.UnloadRenderTexture(target)
+		if !ok {
+			t.Fatal("theme preview export failed")
+		}
+	}
 }
