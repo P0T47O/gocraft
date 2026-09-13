@@ -86,6 +86,8 @@ const (
 	itemGoldIngot
 	itemDiamond
 	itemStick
+	itemRawPork
+	itemCookedPork
 )
 
 type hitInfo struct {

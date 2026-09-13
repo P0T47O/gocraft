@@ -42,46 +42,8 @@ func (e *BaseEntity) IsDirty() bool                            { return e.Dirty 
 func (e *BaseEntity) ClearDirty()                              { e.Dirty = false }
 func (e *BaseEntity) Tick(world *World)                        {} // Default empty tick
 
-type PigEntity struct {
-	BaseEntity
-	moveTimer float32
-}
-
-func (p *PigEntity) Tick(world *World) {
-	// Simple random movement logic
-	p.moveTimer -= 0.05
-	if p.moveTimer <= 0 {
-		p.moveTimer = 2.0 + float32(p.X*7+p.Z*13) // Deterministic pseudo-random based on position
-		if p.moveTimer < 2.0 {
-			p.moveTimer = 2.0
-		} else if p.moveTimer > 4.0 {
-			p.moveTimer = 4.0
-		}
-		// Change rotation using a simple hash of position instead of time.Now()
-		p.Yaw += float32(int(p.X*31+p.Z*17)%360) - 180.0
-		p.Dirty = true
-	}
-
-	// Move forward based on Yaw
-	rad := float64(p.Yaw) * math.Pi / 180.0
-	dx := math.Sin(rad) * 0.05
-	dz := math.Cos(rad) * 0.05
-
-	p.X += dx
-	p.Z += dz
-
-	// Basic Gravity (keep it on surface for now)
-	h := float64(world.HeightAt(int(p.X), int(p.Z)))
-	if p.Y > h {
-		p.Y -= 0.1
-		if p.Y < h {
-			p.Y = h
-		}
-	} else if p.Y < h {
-		p.Y = h
-	}
-	p.Dirty = true
-}
+// PigEntity is retained as a source compatibility alias; definitions select species.
+type PigEntity = MobEntity
 
 type ItemEntity struct {
 	BaseEntity
@@ -182,6 +144,7 @@ const (
 )
 
 type PlayerEntity struct {
+	AttackCooldown int `json:"-"`
 	BaseEntity
 	GameMode     byte
 	Inventory    Inventory

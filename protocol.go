@@ -7,7 +7,7 @@ import (
 	"io"
 )
 
-const protocolVersion = 3
+const protocolVersion = 4
 
 // PacketID definitions
 const (
@@ -271,6 +271,10 @@ func ReadPacket(conn io.Reader) (Packet, error) {
 
 	var p Packet
 	switch id {
+	case 0x1D:
+		p = &PacketMobState{}
+	case 0x1E:
+		p = &PacketAttackMob{}
 	case 0x1B:
 		p = &PacketContainerState{}
 	case 0x1C:

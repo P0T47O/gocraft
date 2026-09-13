@@ -210,77 +210,16 @@ func (s *InputState) RayFromCenter(camera rl.Camera3D) rl.Ray {
 	return rl.GetMouseRay(center, camera)
 }
 
-func resolveCollision(world *World, pos rl.Vector3, delta rl.Vector3) rl.Vector3 {
-	// Sweep short segments, then bisect a blocked axis to land flush with surfaces.
-	steps := int(math.Ceil(float64(max(abs32(delta.X), abs32(delta.Y), abs32(delta.Z))) / 0.2))
-	if steps < 1 {
-		return pos
-	}
-	step := rl.Vector3Scale(delta, 1/float32(steps))
-	for n := 0; n < steps; n++ {
-		for _, axis := range []int{0, 2, 1} {
-			d := step.X
-			if axis == 1 {
-				d = step.Y
-			}
-			if axis == 2 {
-				d = step.Z
-			}
-			if d == 0 {
-				continue
-			}
-			target := offsetAxis(pos, axis, d)
-			if !collides(world, target) {
-				pos = target
-				continue
-			}
-			low, high := float32(0), float32(1)
-			for j := 0; j < 10; j++ {
-				mid := (low + high) / 2
-				if collides(world, offsetAxis(pos, axis, d*mid)) {
-					high = mid
-				} else {
-					low = mid
-				}
-			}
-			pos = offsetAxis(pos, axis, d*low)
-		}
-	}
-	return pos
+func resolveCollision(world *World, pos, delta rl.Vector3) rl.Vector3 {
+	feet := pos
+	feet.Y -= playerEyeY
+	result := moveCollider(world, feet, delta, Collider{Width: playerRadius * 2, Depth: playerRadius * 2, Height: playerHeight})
+	result.Y += playerEyeY
+	return result
 }
-
 func collides(world *World, pos rl.Vector3) bool {
-	feetY := pos.Y - playerEyeY
-	minX := pos.X - playerRadius - 0.001
-	maxX := pos.X + playerRadius + 0.001
-	minZ := pos.Z - playerRadius - 0.001
-	maxZ := pos.Z + playerRadius + 0.001
-	minY := feetY
-	maxY := feetY + playerHeight
-
-	minBX := blockIndexFromCoord(minX)
-	maxBX := blockIndexFromCoord(maxX)
-	minBZ := blockIndexFromCoord(minZ)
-	maxBZ := blockIndexFromCoord(maxZ)
-	minBY := blockIndexFromCoord(minY)
-	maxBY := blockIndexFromCoord(maxY)
-
-	for x := minBX; x <= maxBX; x++ {
-		for y := minBY; y <= maxBY; y++ {
-			for z := minBZ; z <= maxBZ; z++ {
-				if isSolidBlock(world.BlockAt(x, y, z)) {
-					// Precise AABB check for centered blocks
-					bx, by, bz := float32(x), float32(y), float32(z)
-					if maxX > bx-0.5 && minX < bx+0.5 &&
-						maxY > by-0.5 && minY < by+0.5 &&
-						maxZ > bz-0.5 && minZ < bz+0.5 {
-						return true
-					}
-				}
-			}
-		}
-	}
-	return false
+	pos.Y -= playerEyeY
+	return colliderHits(world, pos, Collider{Width: playerRadius * 2, Depth: playerRadius * 2, Height: playerHeight})
 }
 
 func isSolidBlock(b byte) bool {
@@ -349,6 +288,30 @@ func HandleInput(world *World, camera *rl.Camera3D, state *InputState, client *C
 	}
 
 	hit := world.HitTest(ray, reachDist)
+	mobTarget := ""
+	nearest := float32(3.5)
+	if hit.hit {
+		nearest = min(nearest, hit.distance)
+	}
+	for _, e := range remoteEntities {
+		if e.MobKind == "" || e.MobHealth <= 0 {
+			continue
+		}
+		d := mobContent.Definitions[e.MobKind]
+		collision := rl.GetRayCollisionBox(ray, mobBox(rl.NewVector3(float32(e.X), float32(e.Y), float32(e.Z)), d.Collider))
+		if collision.Hit && collision.Distance < nearest {
+			nearest = collision.Distance
+			mobTarget = e.ID
+		}
+	}
+	if mobTarget != "" && rl.IsMouseButtonDown(rl.MouseLeftButton) {
+		state.MiningProgress = 0
+		state.MiningTarget = nil
+		if rl.IsMouseButtonPressed(rl.MouseLeftButton) && client != nil {
+			client.Send(&PacketAttackMob{Target: mobTarget})
+		}
+		return hit
+	}
 
 	// Progressive Mining Logic
 	if hit.hit && rl.IsMouseButtonDown(rl.MouseLeftButton) {

@@ -34,6 +34,8 @@ func containerSize(kind byte) int {
 }
 func smeltResult(id int32) int32 {
 	switch byte(id) {
+	case itemRawPork:
+		return int32(itemCookedPork)
 	case blockIronOre:
 		return int32(itemIronIngot)
 	case blockGoldOre:

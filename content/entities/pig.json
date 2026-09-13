@@ -1,0 +1,26 @@
+{
+  "id": "pig",
+  "health": 10,
+  "speed": 1.1,
+  "flee_speed": 2.5,
+  "collider": {
+    "Width": 0.8,
+    "Depth": 1.4,
+    "Height": 1.0,
+    "StepHeight": 1
+  },
+  "model": "pig",
+  "animation": "quadruped",
+  "behaviors": [
+    "wander",
+    "flee"
+  ],
+  "idle_ticks": 40,
+  "walk_ticks": 60,
+  "flee_ticks": 80,
+  "drop": "raw_pork",
+  "drop_min": 1,
+  "drop_max": 3,
+  "spawn_limit": 8,
+  "spawn_radius": 12
+}

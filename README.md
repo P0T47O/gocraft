@@ -149,8 +149,7 @@ menus do not pause the remote server. Update client and server together.
 
 Sprint using **Ctrl + W** or double-tap **W**. **Shift** slows movement and prevents
 walking off an edge while grounded; it does not prevent deliberate jumps.
-In water, **Space** swims up and **Shift** dives. Food, hunger and combat are not
-implemented in this stage.
+In water, **Space** swims up and **Shift** dives. Food and hunger are not implemented yet; basic mob combat is described below.
 
 ## License
 
@@ -191,7 +190,7 @@ Player saves are version 2; legacy version 1 tools become undamaged individual t
 Overflow remains in `PendingItems` and is delivered as inventory space becomes available,
 with a reminder on login. Ground entity saves are independently versioned at 8 and load
 legacy versions 6/7, splitting old tool stacks without resetting their despawn age.
-World/chunk IDs and formats stay unchanged. Network protocol is now version 3; update
+World/chunk IDs and formats stay unchanged. Network protocol is now version 4; update
 both client and server together. Inventory and dropped-item synchronization include damage.
 
 ### Chests and furnaces
@@ -216,5 +215,40 @@ existing wooden barrel textures; double chests and opening animations are not ad
 
 Server container sessions validate distance, block type, session token and inventory
 revision. Stale simultaneous clicks resynchronize instead of applying twice. Network
-protocol 3 requires updating the client and server together. Optional rendered previews:
+protocol 4 requires updating the client and server together. Optional rendered previews:
 `$env:GOCRAFT_CONTAINER_PREVIEW='1'; go test -run '^TestContainerPreview$' -count=1 .`
+
+### Data-driven mobs
+
+The placeholder pig logic is replaced by `MobEntity`, data definitions, configurable
+feet-origin collision, server AI/combat and a joint-model renderer. Player movement
+reuses the collision implementation through an eye-to-feet adapter; player controls,
+health and respawn policies remain separate. Mobs use radians and feet-center positions.
+
+Edit `content/entities/pig.json` for health, speed, collider, wander/flee timing,
+spawn limit/radius and loot count; `content/models/pig.json` for parent-relative pivots,
+part dimensions and box UVs; `content/animations/quadruped.json` for stride and joint
+phases. Files in `content/` are loaded on game startup, with embedded defaults when the
+directory is absent. Runtime definitions stay fixed for the session. Both multiplayer
+peers should use matching content and protocol 4.
+
+Run `./gocraft.exe -mob-preview` for the model workshop: 1 idle, 2 walk, 3 flee,
+4 hurt, 5 death; A/D rotate, B collision bounds, R reload files. Reload validates the
+replacement before discarding the old preview. Units are blocks, UVs are pixels at
+16 pixels per block, and animation angles are radians. Parents must precede children.
+No downloaded model or external animation pack is required; the pig reuses the
+existing temperate-pig texture. In-game missing visual resources fall back to a
+placeholder without disabling simulation.
+
+Pigs wander, stop, climb single-block obstacles, avoid high drops and unloaded terrain,
+and flee when hit. Click a nearby pig to attack; the server checks aim, range, walls,
+cooldown and tool wear. Death drops 1-3 raw porkchops once, which furnaces cook into
+cooked porkchops. Eating/hunger, breeding, advanced pathfinding and full environmental
+mob damage remain future work. Grass-surface spawning runs every ten seconds near
+connected players, with an eight-pig default cap (64 total mobs maximum).
+
+Entity save version 9 preserves mob health, motion, RNG, behavior and death/drop state.
+Old pig records in versions 6-8 migrate to the new origin/angle convention. Inventory,
+container and chunk formats remain compatible. Automated tests cover shared collision,
+steps, cliffs, attack obstruction/cooldown, single death loot, resource validation and
+save migration. Optional visual test: `GOCRAFT_MOB_PREVIEW=1 go test -run TestMobRenderPreview`.

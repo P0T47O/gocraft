@@ -232,6 +232,8 @@ func initItemRegistry() {
 	registerItem(itemGoldIngot, "Gold Ingot", "textures/item/gold_ingot.png")
 	registerItem(itemDiamond, "Diamond", "textures/item/diamond.png")
 	registerItem(itemStick, "Stick", "textures/item/stick.png")
+	registerItem(itemRawPork, "Raw Porkchop", "textures/item/porkchop.png")
+	registerItem(itemCookedPork, "Cooked Porkchop", "textures/item/cooked_porkchop.png")
 	configureTools()
 	for id, d := range Items {
 		if d != nil && d.PlaceBlock == 0 {

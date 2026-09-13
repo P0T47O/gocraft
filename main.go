@@ -70,18 +70,30 @@ var (
 	chatHistory []string
 )
 
+var mobsRenderer *MobRenderer
+
 type RemoteEntity struct {
-	ID         string
-	Type       EntityType
-	X, Y, Z    float64 // Visual position (Lerped)
-	TX, TY, TZ float64 // Target position
-	Yaw, Pitch float32
-	Metadata   int32
+	MobKind, MobState                                   string
+	TargetYaw, AnimPhase, AnimBlend, MobHurt, DeathTime float32
+	MobHealth                                           int
+	ID                                                  string
+	Type                                                EntityType
+	X, Y, Z                                             float64 // Visual position (Lerped)
+	TX, TY, TZ                                          float64 // Target position
+	Yaw, Pitch                                          float32
+	Metadata                                            int32
 }
 
 func main() {
 	flag.Parse()
+	if *mobPreview {
+		runMobPreview()
+		return
+	}
 	initBlockRegistry()
+	if err := loadRuntimeMobs(); err != nil {
+		panic(err)
+	}
 
 	// Directed Server Mode
 	if *isServer {
@@ -99,6 +111,12 @@ func main() {
 	rl.SetExitKey(0) // Disable default ESC exit to allow custom Pause Menu
 	defer rl.CloseWindow()
 
+	var mobErr error
+	mobsRenderer, mobErr = newMobRenderer(mobContent)
+	if mobErr != nil {
+		fmt.Printf("Mob visuals unavailable; using placeholder: %v\n", mobErr)
+	}
+	defer mobsRenderer.Close()
 	platform.InitGLOnce()
 	rl.SetTargetFPS(60)
 
@@ -580,6 +598,19 @@ func handlePacket(pkt Packet) {
 			client.LastSentZ = p.Z
 		}
 
+	case *PacketMobState:
+		e := remoteEntities[p.IDString]
+		if e == nil {
+			e = &RemoteEntity{ID: p.IDString, Type: EntityPig, X: p.X, Y: p.Y, Z: p.Z, Yaw: p.Yaw}
+			remoteEntities[p.IDString] = e
+		}
+		e.MobKind, e.MobState, e.MobHealth = p.Kind, p.State, p.Health
+		e.TX, e.TY, e.TZ = p.X, p.Y, p.Z
+		e.TargetYaw = p.Yaw
+		e.MobHurt = float32(p.Hurt) / 20
+		if p.Health <= 0 {
+			e.DeathTime = max(e.DeathTime, float32(p.Death)/20)
+		}
 	case *PacketEntitySpawn:
 		remoteEntities[p.EntityID] = &RemoteEntity{
 			ID:   p.EntityID,
@@ -593,6 +624,9 @@ func handlePacket(pkt Packet) {
 		delete(remoteEntities, p.EntityID)
 	case *PacketEntityMove:
 		if e, ok := remoteEntities[p.EntityID]; ok {
+			if e.MobKind != "" {
+				return
+			}
 			e.TX, e.TY, e.TZ = p.X, p.Y, p.Z
 			e.Yaw, e.Pitch = p.Yaw, p.Pitch
 		}
@@ -664,9 +698,28 @@ func updateInterpolation(dt float32) {
 		if lerpFactor > 1.0 {
 			lerpFactor = 1.0
 		}
+		oldX, oldZ := e.X, e.Z
 		e.X += (e.TX - e.X) * lerpFactor
 		e.Y += (e.TY - e.Y) * lerpFactor
 		e.Z += (e.TZ - e.Z) * lerpFactor
+		if d, ok := mobContent.Definitions[e.MobKind]; ok {
+			anim := mobContent.Animations[d.Animation]
+			distance := float32(math.Hypot(e.X-oldX, e.Z-oldZ))
+			if distance < 2 {
+				e.AnimPhase += distance / anim.Stride * 2 * math.Pi
+			}
+			target := float32(0)
+			if e.MobState == "walk" || e.MobState == "flee" {
+				target = 1
+			}
+			e.AnimBlend += (target - e.AnimBlend) * min(dt*anim.BlendSpeed, float32(1))
+			diff := float32(math.Atan2(math.Sin(float64(e.TargetYaw-e.Yaw)), math.Cos(float64(e.TargetYaw-e.Yaw))))
+			e.Yaw += diff * float32(lerpFactor)
+			e.MobHurt = max(0, e.MobHurt-dt)
+			if e.MobHealth <= 0 {
+				e.DeathTime += dt
+			}
+		}
 	}
 }
 
@@ -696,6 +749,8 @@ func drawGame() {
 			drawCharacterModel(rl.NewVector3(float32(e.X), float32(e.Y), float32(e.Z)), e.Yaw)
 		} else if e.Type == EntityItem {
 			assets.DrawItem(e)
+		} else if e.MobKind != "" && mobsRenderer != nil {
+			mobsRenderer.Draw(e, input.ShowDebug)
 		} else {
 			pos := rl.NewVector3(float32(e.X), float32(e.Y)+0.5, float32(e.Z))
 			rl.DrawCube(pos, 0.8, 0.8, 0.8, rl.Pink)

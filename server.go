@@ -20,6 +20,7 @@ var chunkDataBufPool = sync.Pool{
 }
 
 type Server struct {
+	MobSpawnTicks     int
 	Containers        map[BlockPos]*BlockContainer
 	ContainerSessions map[string]ContainerSession
 	ContainerToken    int32
@@ -68,7 +69,10 @@ type PacketWrapper struct {
 func NewServer(savePath string) *Server {
 	world := NewFlatWorld()
 	// Authoritative Load (MUST BE BEFORE STARTING WORKERS)
-	hasPos, px, py, pz, _ := LoadWorld(savePath, world)
+	hasPos, px, py, pz, loadErr := LoadWorld(savePath, world)
+	if loadErr != nil {
+		panic(fmt.Errorf("load world entities: %w", loadErr))
+	}
 
 	// Set save path for chunk loading in background workers
 	world.SavePath = savePath
@@ -104,15 +108,7 @@ func NewServer(savePath string) *Server {
 	}
 	if !hasPos && len(world.entities) == 0 {
 		// Spawn a starter pig
-		p := &PigEntity{
-			BaseEntity: BaseEntity{
-				UUID: "Piggy-01",
-				Type: EntityPig,
-				X:    8,
-				Y:    float64(world.HeightAt(8, 20)) + 1,
-				Z:    20,
-			},
-		}
+		p := newMob("pig", "Piggy-01", 8, float64(world.HeightAt(8, 20))+.501, 20)
 		s.SpawnEntity(p)
 	}
 
@@ -219,6 +215,7 @@ func (s *Server) Tick() {
 	s.processPendingChunks()
 	s.updatePlayerVitals()
 	s.UpdateEntities()
+	s.updateMobs()
 	s.tickContainers()
 
 	// Garbage Collect Chunks
@@ -668,6 +665,9 @@ func (s *Server) SpawnEntity(e Entity) {
 		Pitch:    pitch,
 		Metadata: meta,
 	})
+	if m, ok := e.(*MobEntity); ok {
+		s.Broadcast(m.snapshot())
+	}
 }
 
 // findPlayerEntity finds a PlayerEntity by UUID. Caller must hold entitiesMu (RLock or Lock).
@@ -703,6 +703,8 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 	// client := s.Clients[wrap.From]
 
 	switch p := pkt.(type) {
+	case *PacketAttackMob:
+		s.attackMob(s.findPlayerEntity(wrap.From), p.Target)
 	case *PacketContainerClick:
 		s.clickContainer(s.findPlayerEntity(wrap.From), p)
 	case *PacketRespawn:
@@ -788,6 +790,9 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 					Pitch:    epitch,
 					Metadata: meta,
 				})
+				if m, ok := e.(*MobEntity); ok {
+					client.enqueue(m.snapshot())
+				}
 			}
 		}
 		s.World.entitiesMu.RUnlock()

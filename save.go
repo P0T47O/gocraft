@@ -118,7 +118,7 @@ func SaveLevelData(savePath string, seed uint32) error {
 	return os.WriteFile(path, bytes, 0o644)
 }
 
-const entitySaveVersion = 8
+const entitySaveVersion = 9
 
 func SaveEntities(savePath string, world *World) error {
 	if err := ensureSaveDir(savePath); err != nil {
@@ -144,6 +144,16 @@ func SaveEntities(savePath string, world *World) error {
 		_ = binary.Write(&buf, binary.LittleEndian, z)
 		_ = binary.Write(&buf, binary.LittleEndian, yaw)
 		_ = binary.Write(&buf, binary.LittleEndian, pitch)
+
+		if m, ok := e.(*MobEntity); ok {
+			b, err := json.Marshal(m)
+			if err != nil {
+				return err
+			}
+			if err = WriteString(&buf, string(b)); err != nil {
+				return err
+			}
+		}
 
 		// Save ItemEntity-specific data
 		if item, ok := e.(*ItemEntity); ok {
@@ -298,7 +308,7 @@ func LoadEntities(savePath string, world *World) (bool, error) {
 		return false, errors.New("entity save magic mismatch")
 	}
 
-	if data[4] != 6 && data[4] != 7 && data[4] != entitySaveVersion {
+	if data[4] != 6 && data[4] != 7 && data[4] != 8 && data[4] != entitySaveVersion {
 		return false, errors.New("unsupported entity version")
 	}
 	buf := bytes.NewBuffer(data[5:])
@@ -329,12 +339,25 @@ func LoadEntities(savePath string, world *World) (bool, error) {
 		var e Entity
 		switch EntityType(etype) {
 		case EntityPig:
-			e = &PigEntity{
-				BaseEntity: BaseEntity{
-					UUID: uuid, Type: EntityType(etype),
-					X: x, Y: y, Z: z,
-					Yaw: yaw, Pitch: pitch,
-				},
+			if data[4] >= 9 {
+				payload, err := ReadString(buf)
+				if err != nil {
+					return false, err
+				}
+				m := &MobEntity{}
+				if err = json.Unmarshal([]byte(payload), m); err != nil {
+					return false, err
+				}
+				def, ok := mobContent.Definitions[m.Kind]
+				if !ok || m.Health < 0 || m.Health > 10000 || m.UUID != uuid || m.Type != EntityPig {
+					return false, errors.New("invalid mob save")
+				}
+				m.Health = min(m.Health, def.Health)
+				e = m
+			} else {
+				m := newMob("pig", uuid, x, y+.5, z)
+				m.Yaw = yaw * math.Pi / 180
+				e = m
 			}
 		case EntityPlayer:
 			e = &PlayerEntity{
@@ -355,7 +378,7 @@ func LoadEntities(savePath string, world *World) (bool, error) {
 			_ = binary.Read(buf, binary.LittleEndian, &count)
 			_ = binary.Read(buf, binary.LittleEndian, &age)
 			var damage int32
-			if data[4] == entitySaveVersion {
+			if data[4] >= 8 {
 				if err := binary.Read(buf, binary.LittleEndian, &damage); err != nil {
 					return false, err
 				}
@@ -382,7 +405,7 @@ func LoadEntities(savePath string, world *World) (bool, error) {
 			if !validStack(one) || item.Count <= 0 || item.Count > 64 {
 				return false, errors.New("invalid saved item")
 			}
-			if data[4] == entitySaveVersion && !validStack(item.ItemStack) {
+			if data[4] >= 8 && !validStack(item.ItemStack) {
 				return false, errors.New("invalid saved stack")
 			}
 			for item.Count > StackLimit(item.ID) {
