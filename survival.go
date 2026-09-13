@@ -131,29 +131,3 @@ func harvestTier(m ToolMaterial) int {
 	}
 	return 0
 }
-
-func configureBasicMining() {
-	for _, id := range []byte{blockLog, blockLogBirch, blockLogSpruce} {
-		d := GetBlock(id)
-		d.Hardness = 2
-		d.EffectiveTool = ToolAxe
-	}
-	for _, id := range []byte{blockPlank, blockPlankOak, blockPlankBirch, blockPlankSpruce} {
-		d := GetBlock(id)
-		d.Hardness = 2
-		d.EffectiveTool = ToolAxe
-	}
-	for _, id := range []byte{blockDirt, blockGrass, blockSand, blockGravel} {
-		d := GetBlock(id)
-		d.Hardness = 0.5
-		d.EffectiveTool = ToolShovel
-	}
-	for _, id := range []byte{blockIronOre, blockGoldOre, blockLapisOre} {
-		d := GetBlock(id)
-		d.Hardness = 3
-		d.EffectiveTool = ToolPickaxe
-		d.RequiredMaterial = MatStone
-	}
-	GetBlock(blockGoldOre).RequiredMaterial = MatIron
-	GetBlock(blockBedrock).Hardness = -1
-}

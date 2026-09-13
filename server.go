@@ -984,42 +984,12 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 					return
 				}
 
-				// 1. Determine Held Tool
-				var toolDef *BlockDef
+				heldID := byte(0)
 				slotIdx := player.SelectedSlot
-				if slotIdx >= 0 && slotIdx < 36 {
-					itemID := player.Inventory.Slots[slotIdx].ID
-					if itemID != 0 {
-						toolDef = GetBlock(byte(itemID))
-					}
+				if slotIdx >= 0 && slotIdx < 9 && player.Inventory.Slots[slotIdx].Count > 0 {
+					heldID = byte(player.Inventory.Slots[slotIdx].ID)
 				}
-
-				// 2. Check Compatibility
-				canHarvest := true
-				if blockDef.RequiredMaterial > MatNone {
-					// Requires specific tier
-					hasCorrectTool := false
-					hasCorrectTier := false
-
-					if toolDef != nil {
-						if toolDef.ToolType == blockDef.EffectiveTool {
-							hasCorrectTool = true
-						}
-						if harvestTier(toolDef.ToolMaterial) >= harvestTier(blockDef.RequiredMaterial) {
-							hasCorrectTier = true
-						}
-					}
-
-					if !hasCorrectTool || !hasCorrectTier {
-						canHarvest = false
-					}
-				} else if blockDef.EffectiveTool != ToolNone {
-					// "Soft" requirement?
-					// In MC, if effective tool is defined but material is None, usually means "Faster with tool, but drops by hand (Wood/Dirt)".
-					// But some blocks (Snow?) require shovel to drop?
-					// For now, if RequiredMaterial is None, we assume "Always Drop" unless explicitly restricted.
-					// Let's stick to "RequiredMaterial > MatNone" means "Strict"
-				}
+				canHarvest := !blockDef.NoDrop && CanHarvest(heldID, oldBlockID)
 
 				// 3. Drop Item
 				if canHarvest && player.GameMode == ModeSurvival {

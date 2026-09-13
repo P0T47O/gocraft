@@ -58,30 +58,16 @@ type InputState struct {
 
 	// Mining System
 	MiningTarget   *hitInfo // Block currently being mined (can be nil)
-	MiningProgress float32  // 0.0 to 1.0
-	LastMiningTime float64  // Time of last frame's mining logic
-	LastBreakTime  float64  // Time of last block break (Creative delay)
+	MiningTool     byte
+	MiningBlock    byte
+	MiningProgress float32 // 0.0 to 1.0
+	LastMiningTime float64 // Time of last frame's mining logic
+	LastBreakTime  float64 // Time of last block break (Creative delay)
 
 	// Crafting UI State
 	CraftingScroll   int   // Number of recipe rows scrolled down
 	RecipeSelected   int32 // Result ID, stable across ingredient variants
 	RecipesReadyOnly bool
-}
-
-// Block hardness values (seconds to break with hand/wrong tool)
-// We'll calculate speed based on tool later, for now this is base time
-var BlockHardness = map[byte]float32{
-	blockDirt:        0.75,
-	blockGrass:       0.9,
-	blockStone:       4.0, // Hard to break by hand
-	blockLog:         3.0,
-	blockLeaves:      0.3,
-	blockSand:        0.6,
-	blockGlass:       0.4,
-	blockPlank:       2.0,
-	blockCobblestone: 3.5,
-	blockTorch:       0.0, // Instabreak
-	blockCactus:      0.6,
 }
 
 func NewInputState() *InputState {
@@ -369,52 +355,32 @@ func HandleInput(world *World, camera *rl.Camera3D, state *InputState, client *C
 			state.MiningTarget = nil
 			return hit
 		}
-		hardness := def.Hardness
-		if hardness <= 0 {
-			hardness = 0.05 // Minimum hardness to prevent div/0 or instant break if not intended
-		}
-
-		// Creative Mode Instabreak with delay
+		seconds := MiningSeconds(state.Hotbar[state.SelectedSlot], blockType)
 		if currentGameMode == ModeCreative {
 			if rl.GetTime()-state.LastBreakTime < 0.15 {
-				hardness = 100000.0 // Prevent break
-			} else {
-				hardness = 0.0
+				return hit
 			}
-		}
-
-		// 2. Check tool speed
-		heldItem := state.Hotbar[state.SelectedSlot]
-		speedMultiplier := GetMiningSpeedMultiplier(heldItem, blockType)
-
-		// 3. Determine Effectiveness Factor (MC Logic)
-		// Correct Tool: Time = Hardness * 1.5 / Speed => Progress += Speed / (Hardness * 1.5)
-		// Incorrect Tool: Time = Hardness * 5.0 / Speed => Progress += Speed / (Hardness * 5.0)
-		isCorrect := IsCorrectTool(heldItem, blockType)
-		factor := float32(5.0)
-		if isCorrect {
-			factor = 1.5
+			seconds = 0
 		}
 
 		// 4. Accumulate Progress
 		isNewTarget := state.MiningTarget == nil ||
 			state.MiningTarget.x != hit.x ||
 			state.MiningTarget.y != hit.y ||
-			state.MiningTarget.z != hit.z
+			state.MiningTarget.z != hit.z ||
+			state.MiningTool != state.Hotbar[state.SelectedSlot] || state.MiningBlock != blockType
 
 		if isNewTarget {
 			state.MiningTarget = &hit
+			state.MiningTool = state.Hotbar[state.SelectedSlot]
+			state.MiningBlock = blockType
 			state.MiningProgress = 0
 		}
 
-		// Add progress
-		if hardness <= 0 {
-			state.MiningProgress = 1.0 // Instabreak
-		} else {
-			// Effective hardness = Base Hardness * Factor
-			// Progress per second = Speed / Effective Hardness
-			damagePerSecond := speedMultiplier / (hardness * factor)
-			state.MiningProgress += rl.GetFrameTime() * damagePerSecond
+		if seconds == 0 {
+			state.MiningProgress = 1
+		} else if seconds > 0 {
+			state.MiningProgress += rl.GetFrameTime() / seconds
 		}
 
 		// 5. Break Block if Done

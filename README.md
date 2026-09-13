@@ -159,3 +159,15 @@ This project is licensed under the GNU General Public License v3.0 - see the [LI
 ### Third-Party Licenses
 
 - **Raylib**: Licensed under the zlib License. See [LICENSE_raylib.txt](LICENSE_raylib.txt) for details.
+
+### Mining rules
+
+Mining profiles live in `mining_data.go`; tools use the item registry directly.
+Registration rejects physical blocks without an explicit profile. Client timing and
+server drops share harvest eligibility, with tool speed separate from harvest tier.
+Wood/dirt can be collected by hand; stone materials require a sufficient pickaxe.
+Glass, ice, leaves and tall grass have no ordinary drops for now (silk touch,
+shears and random plant loot are not implemented). Iron/gold/lapis ores and glowstone
+retain their existing self-drops until their resource/processing systems are added.
+Mining duration is still client-driven; server-authoritative mining sessions remain
+future work for multiplayer. Existing block IDs and saves are unchanged.

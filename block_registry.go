@@ -27,6 +27,8 @@ type BlockDef struct {
 	IsCollidable  bool
 
 	// Mining / Drops
+	NoDrop           bool
+	MiningConfigured bool
 	Hardness         float32
 	EffectiveTool    ToolType
 	RequiredMaterial ToolMaterial // Minimum tier required (e.g. Iron Pickaxe for Diamond Ore)
@@ -77,29 +79,20 @@ func initBlockRegistry() {
 	defer configureBasicMining()
 	// Define and register all block types
 	RegisterBlock(&BlockDef{
-		ID:            blockGrass,
-		Name:          "Grass Block",
-		Textures:      blockFaces{Top: "textures/block/grass_block_top.png", Bottom: "textures/block/dirt.png", North: "textures/block/grass_block_side.png", South: "textures/block/grass_block_side.png", East: "textures/block/grass_block_side.png", West: "textures/block/grass_block_side.png"},
-		RenderType:    RenderTypeCube,
-		IsOpaque:      true,
-		IsCollidable:  true,
-		Hardness:      0.6,
-		EffectiveTool: ToolShovel,
-		DropItem:      blockDirt, // Grass drops Dirt
-		DropCount:     1,
+		ID:           blockGrass,
+		Name:         "Grass Block",
+		Textures:     blockFaces{Top: "textures/block/grass_block_top.png", Bottom: "textures/block/dirt.png", North: "textures/block/grass_block_side.png", South: "textures/block/grass_block_side.png", East: "textures/block/grass_block_side.png", West: "textures/block/grass_block_side.png"},
+		RenderType:   RenderTypeCube,
+		IsOpaque:     true,
+		IsCollidable: true,
 	})
 	RegisterBlock(&BlockDef{
-		ID:               blockStone,
-		Name:             "Stone",
-		Textures:         blockFaces{Top: "textures/block/stone.png", Bottom: "textures/block/stone.png", North: "textures/block/stone.png", South: "textures/block/stone.png", East: "textures/block/stone.png", West: "textures/block/stone.png"},
-		RenderType:       RenderTypeCube,
-		IsOpaque:         true,
-		IsCollidable:     true,
-		Hardness:         1.5,
-		EffectiveTool:    ToolPickaxe,
-		RequiredMaterial: MatWood,
-		DropItem:         blockCobblestone, // Stone drops Cobblestone
-		DropCount:        1,
+		ID:           blockStone,
+		Name:         "Stone",
+		Textures:     blockFaces{Top: "textures/block/stone.png", Bottom: "textures/block/stone.png", North: "textures/block/stone.png", South: "textures/block/stone.png", East: "textures/block/stone.png", West: "textures/block/stone.png"},
+		RenderType:   RenderTypeCube,
+		IsOpaque:     true,
+		IsCollidable: true,
 	})
 	RegisterBlock(&BlockDef{
 		ID:           blockDirt,
@@ -168,17 +161,12 @@ func initBlockRegistry() {
 		IsCollidable:  false,
 	})
 	RegisterBlock(&BlockDef{
-		ID:               blockCoalOre,
-		Name:             "Coal Ore",
-		Textures:         blockFaces{Top: "textures/block/coal_ore.png", Bottom: "textures/block/coal_ore.png", North: "textures/block/coal_ore.png", South: "textures/block/coal_ore.png", East: "textures/block/coal_ore.png", West: "textures/block/coal_ore.png"},
-		RenderType:       RenderTypeCube,
-		IsOpaque:         true,
-		IsCollidable:     true,
-		Hardness:         3.0,
-		EffectiveTool:    ToolPickaxe,
-		RequiredMaterial: MatWood,
-		DropItem:         itemCoal,
-		DropCount:        1,
+		ID:           blockCoalOre,
+		Name:         "Coal Ore",
+		Textures:     blockFaces{Top: "textures/block/coal_ore.png", Bottom: "textures/block/coal_ore.png", North: "textures/block/coal_ore.png", South: "textures/block/coal_ore.png", East: "textures/block/coal_ore.png", West: "textures/block/coal_ore.png"},
+		RenderType:   RenderTypeCube,
+		IsOpaque:     true,
+		IsCollidable: true,
 	})
 	RegisterBlock(&BlockDef{
 		ID:           blockIronOre,
@@ -197,17 +185,12 @@ func initBlockRegistry() {
 		IsCollidable: true,
 	})
 	RegisterBlock(&BlockDef{
-		ID:               blockDiamondOre,
-		Name:             "Diamond Ore",
-		Textures:         blockFaces{Top: "textures/block/diamond_ore.png", Bottom: "textures/block/diamond_ore.png", North: "textures/block/diamond_ore.png", South: "textures/block/diamond_ore.png", East: "textures/block/diamond_ore.png", West: "textures/block/diamond_ore.png"},
-		RenderType:       RenderTypeCube,
-		IsOpaque:         true,
-		IsCollidable:     true,
-		Hardness:         3.0,
-		EffectiveTool:    ToolPickaxe,
-		RequiredMaterial: MatIron,
-		DropItem:         itemDiamond,
-		DropCount:        1,
+		ID:           blockDiamondOre,
+		Name:         "Diamond Ore",
+		Textures:     blockFaces{Top: "textures/block/diamond_ore.png", Bottom: "textures/block/diamond_ore.png", North: "textures/block/diamond_ore.png", South: "textures/block/diamond_ore.png", East: "textures/block/diamond_ore.png", West: "textures/block/diamond_ore.png"},
+		RenderType:   RenderTypeCube,
+		IsOpaque:     true,
+		IsCollidable: true,
 	})
 	RegisterBlock(&BlockDef{
 		ID:           blockLapisOre,
@@ -259,17 +242,12 @@ func initBlockRegistry() {
 		IsCollidable: true,
 	})
 	RegisterBlock(&BlockDef{
-		ID:               blockCraftingTable,
-		Name:             "Crafting Table",
-		Textures:         blockFaces{Top: "textures/block/crafting_table_top.png", Bottom: "textures/block/oak_planks.png", North: "textures/block/crafting_table_front.png", South: "textures/block/crafting_table_side.png", East: "textures/block/crafting_table_side.png", West: "textures/block/crafting_table_side.png"},
-		RenderType:       RenderTypeCube,
-		IsOpaque:         true,
-		IsCollidable:     true,
-		Hardness:         2.5,
-		EffectiveTool:    ToolAxe,
-		RequiredMaterial: MatNone,
-		DropItem:         blockCraftingTable,
-		DropCount:        1,
+		ID:           blockCraftingTable,
+		Name:         "Crafting Table",
+		Textures:     blockFaces{Top: "textures/block/crafting_table_top.png", Bottom: "textures/block/oak_planks.png", North: "textures/block/crafting_table_front.png", South: "textures/block/crafting_table_side.png", East: "textures/block/crafting_table_side.png", West: "textures/block/crafting_table_side.png"},
+		RenderType:   RenderTypeCube,
+		IsOpaque:     true,
+		IsCollidable: true,
 	})
 	RegisterBlock(&BlockDef{
 		ID:           blockObsidian,
