@@ -7,6 +7,8 @@ import (
 	"io"
 )
 
+const protocolVersion = 2
+
 // PacketID definitions
 const (
 	IDLogin           = 0x01
@@ -184,6 +186,7 @@ type PacketInventoryUpdate struct {
 	SlotID int32 // 0-8: Hotbar, 9-35: Inventory
 	ItemID int32
 	Count  int32
+	Damage int32
 }
 
 func (p *PacketInventoryUpdate) ID() int32 { return IDInventoryUpdate }
@@ -191,6 +194,7 @@ func (p *PacketInventoryUpdate) Encode(w *bytes.Buffer) error {
 	WriteVarInt(w, p.SlotID)
 	WriteVarInt(w, p.ItemID)
 	WriteVarInt(w, p.Count)
+	WriteVarInt(w, p.Damage)
 	return nil
 }
 func (p *PacketInventoryUpdate) Decode(r *bytes.Buffer) error {
@@ -204,7 +208,8 @@ func (p *PacketInventoryUpdate) Decode(r *bytes.Buffer) error {
 	if p.Count, err = ReadVarInt(r); err != nil {
 		return err
 	}
-	return nil
+	p.Damage, err = ReadVarInt(r)
+	return err
 }
 
 type Packet interface {

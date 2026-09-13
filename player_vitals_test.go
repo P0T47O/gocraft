@@ -152,7 +152,7 @@ func TestDeathDropsOnceBlocksActionsAndRespawns(t *testing.T) {
 	count := 0
 	for _, e := range w.entities {
 		if d, ok := e.(*ItemEntity); ok {
-			count += d.Count
+			count += int(d.Count)
 		}
 	}
 	if count != 15 || !p.dead() || p.CursorItem.ID != 0 || p.Inventory.Slots[0].ID != 0 {

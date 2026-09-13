@@ -90,7 +90,7 @@ func (s *Server) hurtPlayer(p *PlayerEntity, amount int, cause string) {
 		p.CursorItem = Item{}
 		for i, item := range items {
 			if item.ID != 0 && item.Count > 0 {
-				s.SpawnEntity(&ItemEntity{BaseEntity: BaseEntity{UUID: fmt.Sprintf("death-%s-%d-%d", p.UUID, time.Now().UnixNano(), i), Type: EntityItem, X: p.X, Y: p.Y - 1, Z: p.Z}, ItemID: byte(item.ID), Count: int(item.Count), PickupDelay: 1.5, Vy: 0.1})
+				s.SpawnEntity(&ItemEntity{BaseEntity: BaseEntity{UUID: fmt.Sprintf("death-%s-%d-%d", p.UUID, time.Now().UnixNano(), i), Type: EntityItem, X: p.X, Y: p.Y - 1, Z: p.Z}, ItemStack: item, PickupDelay: 1.5, Vy: 0.1})
 			}
 		}
 		s.SendInventory(p)

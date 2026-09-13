@@ -118,6 +118,8 @@ func SaveLevelData(savePath string, seed uint32) error {
 	return os.WriteFile(path, bytes, 0o644)
 }
 
+const entitySaveVersion = 8
+
 func SaveEntities(savePath string, world *World) error {
 	if err := ensureSaveDir(savePath); err != nil {
 		return err
@@ -125,7 +127,7 @@ func SaveEntities(savePath string, world *World) error {
 
 	var buf bytes.Buffer
 	buf.WriteString(entityMagic)
-	buf.WriteByte(saveVersion)
+	buf.WriteByte(entitySaveVersion)
 
 	world.entitiesMu.RLock()
 	defer world.entitiesMu.RUnlock()
@@ -145,9 +147,10 @@ func SaveEntities(savePath string, world *World) error {
 
 		// Save ItemEntity-specific data
 		if item, ok := e.(*ItemEntity); ok {
-			buf.WriteByte(item.ItemID)
+			buf.WriteByte(byte(item.ID))
 			_ = binary.Write(&buf, binary.LittleEndian, int32(item.Count))
 			_ = binary.Write(&buf, binary.LittleEndian, item.Age)
+			_ = binary.Write(&buf, binary.LittleEndian, item.Damage)
 		}
 	}
 
@@ -275,7 +278,9 @@ func LoadWorld(savePath string, world *World) (bool, float64, float64, float64, 
 	// Chunks are loaded on demand by generation workers, not all at startup.
 	world.SavePath = savePath
 	// 3. Load Entities
-	_, _ = LoadEntities(savePath, world)
+	if _, err := LoadEntities(savePath, world); err != nil && !os.IsNotExist(err) {
+		return false, 0, 0, 0, err
+	}
 
 	return hasPos, posX, posY, posZ, nil
 }
@@ -293,15 +298,24 @@ func LoadEntities(savePath string, world *World) (bool, error) {
 		return false, errors.New("entity save magic mismatch")
 	}
 
+	if data[4] != 6 && data[4] != 7 && data[4] != entitySaveVersion {
+		return false, errors.New("unsupported entity version")
+	}
 	buf := bytes.NewBuffer(data[5:])
-	count, _ := ReadUint32(buf)
+	count, err := ReadUint32(buf)
+	if err != nil || count > uint32(len(data)/35) {
+		return false, errors.New("invalid entity count")
+	}
 
 	world.entitiesMu.Lock()
 	defer world.entitiesMu.Unlock()
-	world.entities = nil // Clear existing entities for full reload
+	loaded := make([]Entity, 0, count)
 
 	for i := uint32(0); i < count; i++ {
-		uuid, _ := ReadString(buf)
+		uuid, err := ReadString(buf)
+		if err != nil || buf.Len() < 33 {
+			return false, errors.New("truncated entity")
+		}
 		etype, _ := buf.ReadByte()
 		var x, y, z float64
 		var yaw, pitch float32
@@ -331,21 +345,29 @@ func LoadEntities(savePath string, world *World) (bool, error) {
 				},
 			}
 		case EntityItem:
+			if buf.Len() < 9 {
+				return false, errors.New("truncated item")
+			}
 			// Read ItemEntity-specific data
 			itemID, _ := buf.ReadByte()
 			var count int32
 			var age float32
 			_ = binary.Read(buf, binary.LittleEndian, &count)
 			_ = binary.Read(buf, binary.LittleEndian, &age)
+			var damage int32
+			if data[4] == entitySaveVersion {
+				if err := binary.Read(buf, binary.LittleEndian, &damage); err != nil {
+					return false, err
+				}
+			}
 			e = &ItemEntity{
 				BaseEntity: BaseEntity{
 					UUID: uuid, Type: EntityType(etype),
 					X: x, Y: y, Z: z,
 					Yaw: yaw, Pitch: pitch,
 				},
-				ItemID: itemID,
-				Count:  int(count),
-				Age:    age,
+				ItemStack: ItemStack{ID: int32(itemID), Count: count, Damage: damage},
+				Age:       age,
 			}
 		default:
 			e = &BaseEntity{
@@ -354,9 +376,30 @@ func LoadEntities(savePath string, world *World) (bool, error) {
 				Yaw: yaw, Pitch: pitch,
 			}
 		}
-		world.entities = append(world.entities, e)
+		if item, ok := e.(*ItemEntity); ok {
+			one := item.ItemStack
+			one.Count = 1
+			if !validStack(one) || item.Count <= 0 || item.Count > 64 {
+				return false, errors.New("invalid saved item")
+			}
+			if data[4] == entitySaveVersion && !validStack(item.ItemStack) {
+				return false, errors.New("invalid saved stack")
+			}
+			for item.Count > StackLimit(item.ID) {
+				extra := *item
+				extra.UUID = fmt.Sprintf("%s-migrated-%d", item.UUID, item.Count)
+				extra.Count = StackLimit(item.ID)
+				item.Count -= extra.Count
+				loaded = append(loaded, &extra)
+			}
+		}
+		loaded = append(loaded, e)
 	}
 
+	if buf.Len() != 0 {
+		return false, errors.New("unexpected entity data")
+	}
+	world.entities = loaded
 	return true, nil
 }
 

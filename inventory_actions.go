@@ -17,18 +17,11 @@ func (inv *Inventory) Click(index, button int, cursor *Item) {
 		for pass := 0; pass < 2; pass++ {
 			for i := start; i < end; i++ {
 				dst := &inv.Slots[i]
-				if (pass == 0 && dst.ID != slot.ID) || (pass == 1 && dst.ID != 0) {
+				if (pass == 0 && dst.ID == 0) || (pass == 1 && dst.ID != 0) {
 					continue
 				}
-				n := min(slot.Count, int32(MaxStackSize)-dst.Count)
-				if n <= 0 {
-					continue
-				}
-				dst.ID = slot.ID
-				dst.Count += n
-				slot.Count -= n
-				if slot.Count == 0 {
-					*slot = Item{}
+				MoveStack(dst, slot, slot.Count)
+				if slot.ID == 0 {
 					return
 				}
 			}
@@ -38,31 +31,18 @@ func (inv *Inventory) Click(index, button int, cursor *Item) {
 	switch button {
 	case 0:
 		if cursor.ID == 0 {
-			*cursor = *slot
-			*slot = Item{}
-		} else if slot.ID == cursor.ID {
-			n := min(cursor.Count, int32(MaxStackSize)-slot.Count)
-			slot.Count += n
-			cursor.Count -= n
+			MoveStack(cursor, slot, slot.Count)
+		} else if slot.ID == 0 || CanStack(*slot, *cursor) {
+			MoveStack(slot, cursor, cursor.Count)
 		} else {
 			*slot, *cursor = *cursor, *slot
 		}
 	case 1:
-		if cursor.ID == 0 && slot.ID != 0 {
-			n := (slot.Count + 1) / 2
-			*cursor = Item{ID: slot.ID, Count: n}
-			slot.Count -= n
-		} else if cursor.ID != 0 && (slot.ID == 0 || slot.ID == cursor.ID) && slot.Count < MaxStackSize {
-			slot.ID = cursor.ID
-			slot.Count++
-			cursor.Count--
+		if cursor.ID == 0 {
+			MoveStack(cursor, slot, (slot.Count+1)/2)
+		} else {
+			MoveStack(slot, cursor, 1)
 		}
-	}
-	if slot.Count == 0 {
-		*slot = Item{}
-	}
-	if cursor.Count == 0 {
-		*cursor = Item{}
 	}
 }
 
@@ -85,7 +65,7 @@ func (inv *Inventory) Craft(r *Recipe, count int) int {
 	completed := 0
 	for ; completed < count; completed++ {
 		next := *inv
-		if !next.ConsumeItems(r.Ingredients) || next.Add(r.Result.ID, r.Result.Count) != 0 {
+		if !next.ConsumeItems(r.Ingredients) || next.AddStack(r.Result) != 0 {
 			break
 		}
 		*inv = next

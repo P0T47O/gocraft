@@ -15,7 +15,7 @@ type survivalPlayerSave struct {
 }
 
 func saveSurvivalPlayers(root string, world *World) error {
-	data := survivalPlayerSave{Version: 1, Players: make(map[string]PlayerEntity)}
+	data := survivalPlayerSave{Version: 2, Players: make(map[string]PlayerEntity)}
 	world.entitiesMu.RLock()
 	for _, e := range world.entities {
 		if p, ok := e.(*PlayerEntity); ok {
@@ -63,7 +63,7 @@ func loadSurvivalPlayers(root string, world *World) error {
 	if err = json.Unmarshal(b, &data); err != nil {
 		return err
 	}
-	if data.Version != 1 {
+	if data.Version != 1 && data.Version != 2 {
 		return fmt.Errorf("unsupported player save version %d", data.Version)
 	}
 	for name, p := range data.Players {
@@ -75,11 +75,31 @@ func loadSurvivalPlayers(root string, world *World) error {
 				return fmt.Errorf("invalid vitals for %q", name)
 			}
 		}
-		for _, item := range append(p.Inventory.Slots[:], p.CursorItem) {
-			if item.ID < 0 || item.ID > 255 || item.Count < 0 || item.Count > MaxStackSize || (item.ID == 0) != (item.Count == 0) {
+		if data.Version == 1 {
+			for _, stack := range append(p.Inventory.Slots[:], p.CursorItem) {
+				if stack.ID < 0 || stack.ID > 255 || stack.Count < 0 || stack.Count > 64 || (stack.ID == 0) != (stack.Count == 0) {
+					return fmt.Errorf("invalid legacy inventory for %q", name)
+				}
+				if stack.ID != 0 && Items[stack.ID] == nil {
+					return fmt.Errorf("unknown legacy item")
+				}
+			}
+			migratePlayerItems(&p)
+		}
+		for _, stack := range append(p.Inventory.Slots[:], p.CursorItem) {
+			if !validStack(stack) {
 				return fmt.Errorf("invalid inventory for %q", name)
 			}
 		}
+		for _, stack := range p.PendingItems {
+			one := stack
+			one.Count = 1
+			if stack.Count < 1 || stack.Count > 64 || !validStack(one) {
+				return fmt.Errorf("invalid migration overflow")
+			}
+		}
+		data.Players[name] = p
+
 	}
 	// The old entity file contains player positions but no inventories.
 	for name, saved := range data.Players {

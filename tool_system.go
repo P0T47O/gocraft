@@ -22,7 +22,7 @@ const (
 
 // Tool properties live only in the block/item registry.
 func GetMiningSpeedMultiplier(toolID byte, blockID byte) float32 {
-	tool, block := GetBlock(toolID), GetBlock(blockID)
+	tool, block := GetItem(toolID), GetBlock(blockID)
 	if block.EffectiveTool == ToolNone || tool.ToolType != block.EffectiveTool {
 		return 1
 	}
@@ -43,7 +43,7 @@ func GetMiningSpeedMultiplier(toolID byte, blockID byte) float32 {
 
 // CanHarvest is independent of whether the block has an ordinary drop.
 func CanHarvest(toolID, blockID byte) bool {
-	block, tool := GetBlock(blockID), GetBlock(toolID)
+	block, tool := GetBlock(blockID), GetItem(toolID)
 	return block.RequiredMaterial == MatNone ||
 		(block.EffectiveTool == tool.ToolType && harvestTier(tool.ToolMaterial) >= harvestTier(block.RequiredMaterial))
 }

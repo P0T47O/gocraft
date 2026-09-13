@@ -8,6 +8,7 @@ import (
 )
 
 func TestSurvivalInventoryRoundTrip(t *testing.T) {
+	initBlockRegistry()
 	root := t.TempDir()
 	w := NewClientWorld()
 	defer w.Close()
@@ -87,7 +88,7 @@ func TestBasicMiningCraftingAndPlacement(t *testing.T) {
 			drop = i
 		}
 	}
-	if drop == nil || drop.ItemID != blockLog || drop.Count != 1 {
+	if drop == nil || drop.ID != int32(blockLog) || drop.Count != 1 {
 		t.Fatal("missing log drop")
 	}
 	drop.X = p.X

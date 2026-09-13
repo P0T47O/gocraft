@@ -101,6 +101,19 @@ func (a *RenderAssets) drawInventoryItem(item Item, r rl.Rectangle, s float32) {
 		return
 	}
 	a.drawIcon(byte(item.ID), r.X+3*s, r.Y+3*s, r.Width-6*s)
+	if max := GetItem(byte(item.ID)).MaxDurability; max > 0 && item.Damage > 0 {
+		fraction := float32(max-item.Damage) / float32(max)
+		bar := rl.NewRectangle(r.X+5*s, r.Y+r.Height-7*s, r.Width-10*s, 3*s)
+		rl.DrawRectangleRec(bar, rl.Black)
+		bar.Width *= fraction
+		color := invAccent
+		if fraction < .25 {
+			color = rl.NewColor(235, 85, 75, 255)
+		} else if fraction < .5 {
+			color = rl.NewColor(230, 185, 65, 255)
+		}
+		rl.DrawRectangleRec(bar, color)
+	}
 	if item.Count > 1 {
 		label := fmt.Sprint(item.Count)
 		fs := int32(14 * s)
@@ -152,7 +165,7 @@ func (a *RenderAssets) drawSurvivalInventory(state *InputState) {
 			rl.DrawRectangleRec(rl.NewRectangle(rect.X, rect.Y, 3*l.S, rect.Height), invAccent)
 		}
 		a.drawInventoryItem(r.Result, rl.NewRectangle(rect.X+7*l.S, rect.Y+6*l.S, 46*l.S, 46*l.S), l.S)
-		inventoryText(GetBlock(byte(r.Result.ID)).Name, rect.X+64*l.S, rect.Y+11*l.S, int32(15*l.S), invText)
+		inventoryText(GetItemVisual(byte(r.Result.ID)).Name, rect.X+64*l.S, rect.Y+11*l.S, int32(15*l.S), invText)
 		status := "Missing materials"
 		color := invMuted
 		if !recipeAvailable(state, r) {
@@ -180,13 +193,13 @@ func (a *RenderAssets) drawSurvivalInventory(state *InputState) {
 	inventoryBox(l.Rect(342, 84, 628, 174), invPanel, invLine)
 	if chosen != nil {
 		a.drawInventoryItem(chosen.Result, l.Rect(354, 96, 48, 48), l.S)
-		l.Text(GetBlock(byte(chosen.Result.ID)).Name, 416, 99, 21, invText)
+		l.Text(GetItemVisual(byte(chosen.Result.ID)).Name, 416, 99, 21, invText)
 		l.Text(fmt.Sprintf("Makes %d  /  %s", chosen.Result.Count, map[bool]string{true: "Workbench recipe", false: "Hand recipe"}[chosen.Station != 0]), 416, 128, 13, invMuted)
 		for i, ing := range chosen.Ingredients {
 			x := float32(354 + i*306)
 			inventoryBox(l.Rect(x, 156, 298, 48), invBackground, invLine)
 			a.drawInventoryItem(Item{ID: ing.ID, Count: 1}, l.Rect(x+4, 160, 38, 38), l.S)
-			l.Text(GetBlock(byte(ing.ID)).Name, x+50, 161, 13, invText)
+			l.Text(GetItemVisual(byte(ing.ID)).Name, x+50, 161, 13, invText)
 			have := inv.CountItem(ing.ID)
 			color := invAccent
 			if have < ing.Count {
@@ -246,7 +259,10 @@ func (a *RenderAssets) drawSurvivalInventory(state *InputState) {
 		a.drawInventoryItem(state.CursorItem, rl.NewRectangle(mouse.X-25*l.S, mouse.Y-25*l.S, 50*l.S, 50*l.S), l.S)
 	} else if hover >= 0 && inv.Slots[hover].ID != 0 {
 		item := inv.Slots[hover]
-		name := GetBlock(byte(item.ID)).Name
+		name := GetItem(byte(item.ID)).Name
+		if max := GetItem(byte(item.ID)).MaxDurability; max > 0 {
+			name += fmt.Sprintf("  %d / %d", max-item.Damage, max)
+		}
 		fs := int32(16 * l.S)
 		width := max(float32(rl.MeasureText(name, fs))+24*l.S, 160*l.S)
 		x := min(mouse.X+16*l.S, float32(rl.GetScreenWidth())-width-8)

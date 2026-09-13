@@ -28,7 +28,7 @@ func TestInventoryPreview(t *testing.T) {
 	localInventory.Slots[0] = Item{ID: int32(blockPlankOak), Count: 5}
 	localInventory.Slots[1] = Item{ID: int32(blockLog), Count: 61}
 	localInventory.Slots[2] = Item{ID: int32(itemStick), Count: 2}
-	localInventory.Slots[3] = Item{ID: int32(itemWoodShovel), Count: 1}
+	localInventory.Slots[3] = Item{ID: int32(itemWoodShovel), Count: 1, Damage: 40}
 	localInventory.Slots[4] = Item{ID: int32(blockSand), Count: 7}
 	localInventory.Slots[5] = Item{ID: int32(blockSandstone), Count: 26}
 	state := &InputState{InventoryOpen: true, RecipeSelected: int32(itemWoodPickaxe)}

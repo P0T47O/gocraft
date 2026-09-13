@@ -544,7 +544,7 @@ func (s *InputState) UpdateInventorySelection(client *Client) {
 				if slotIndex >= 0 && slotIndex < len(allBlocks) {
 					blockID := allBlocks[slotIndex]
 					if blockID != 0 {
-						s.CursorItem = Item{ID: int32(blockID), Count: MaxStackSize}
+						s.CursorItem = Item{ID: int32(blockID), Count: StackLimit(int32(blockID))}
 						// If connected, maybe we should tell server we picked this up?
 						// Server thinks we have nothing.
 						// We need to sync Cursor to server.
@@ -555,7 +555,7 @@ func (s *InputState) UpdateInventorySelection(client *Client) {
 							client.Send(&PacketInventoryUpdate{
 								SlotID: -1,
 								ItemID: int32(blockID),
-								Count:  MaxStackSize,
+								Count:  StackLimit(int32(blockID)),
 							})
 						}
 					}

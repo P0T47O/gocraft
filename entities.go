@@ -85,8 +85,7 @@ func (p *PigEntity) Tick(world *World) {
 
 type ItemEntity struct {
 	BaseEntity
-	ItemID      byte
-	Count       int
+	ItemStack
 	Vx, Vy, Vz  float64
 	PickupDelay float32 // Seconds
 	Age         float32 // Seconds
@@ -145,13 +144,13 @@ func (i *ItemEntity) Tick(world *World) {
 
 	// Merge with nearby items (only when on ground and after pickup delay)
 	// OPTIMIZE: O(N^2) complexity where N is entities in world. Use spatial partition (chunk-based lists).
-	if i.PickupDelay <= 0 && i.Vy == 0 && i.Count < MaxStackSize {
+	if i.PickupDelay <= 0 && i.Vy == 0 && i.Count < StackLimit(i.ID) {
 		for _, e := range world.entities {
 			other, ok := e.(*ItemEntity)
 			if !ok || other == i || other.Dead {
 				continue
 			}
-			if other.ItemID != i.ItemID {
+			if !CanStack(other.ItemStack, i.ItemStack) {
 				continue
 			}
 			// Distance check (radius 1 block)
@@ -161,14 +160,12 @@ func (i *ItemEntity) Tick(world *World) {
 			distSq := dx*dx + dy*dy + dz*dz
 			if distSq < 1.0 { // Within 1 block
 				// Merge
-				space := MaxStackSize - i.Count
-				if other.Count <= space {
-					i.Count += other.Count
+				MoveStack(&i.ItemStack, &other.ItemStack, other.Count)
+				if other.Count == 0 {
 					other.Dead = true
-				} else {
-					i.Count = MaxStackSize
-					other.Count -= space
 				}
+				other.Dirty = true
+
 				i.Dirty = true
 				break // Only merge one per tick
 			}
@@ -189,6 +186,7 @@ type PlayerEntity struct {
 	GameMode     byte
 	Inventory    Inventory
 	SelectedSlot int
+	PendingItems []ItemStack   `json:",omitempty"`
 	CursorItem   Item          // Held on mouse
 	Vitals       *PlayerVitals `json:",omitempty"`
 }

@@ -24,7 +24,7 @@ func (a *RenderAssets) DrawItem(e *RemoteEntity) {
 		count = 1
 	}
 
-	def := GetBlock(itemID)
+	def := GetItemVisual(itemID)
 	if def == nil {
 		return
 	}
@@ -79,7 +79,7 @@ func (a *RenderAssets) DrawItem(e *RemoteEntity) {
 }
 
 func (a *RenderAssets) drawBlockItem(block byte, position rl.Vector3, scale float32, rotation float32) {
-	def := GetBlock(block)
+	def := GetItemVisual(block)
 	if def == nil {
 		return
 	}
@@ -129,7 +129,7 @@ func (a *RenderAssets) drawBlockItem(block byte, position rl.Vector3, scale floa
 // initCrossItemModels pre-generates meshes for cross-type items (flowers, etc.)
 func (a *RenderAssets) initCrossItemModels() {
 	for _, block := range allBlocks {
-		def := GetBlock(block)
+		def := GetItemVisual(block)
 		if def == nil || def.RenderType != RenderTypeCross {
 			continue
 		}
@@ -143,7 +143,7 @@ func (a *RenderAssets) initCrossItemModels() {
 
 // generateCrossItemMesh creates a single mesh with all pixel cubes for a cross item
 func (a *RenderAssets) generateCrossItemMesh(block byte) rl.Model {
-	def := GetBlock(block)
+	def := GetItemVisual(block)
 	if def == nil {
 		return rl.Model{}
 	}

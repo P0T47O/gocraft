@@ -426,7 +426,7 @@ func (a *RenderAssets) setTextureForPath(path string, tex rl.Texture2D) {
 
 func (a *RenderAssets) loadBlockTextures() {
 	for i := 0; i < 256; i++ {
-		def := Blocks[i]
+		def := GetItemVisual(byte(i))
 		if def == nil || def.ID == blockAir {
 			continue
 		}
@@ -758,7 +758,7 @@ func (a *RenderAssets) getFaceModel(face string, path string) rl.Model {
 
 func (a *RenderAssets) initFaceModels() {
 	for i := 0; i < 256; i++ {
-		def := Blocks[i]
+		def := GetItemVisual(byte(i))
 		if def == nil || def.ID == blockAir {
 			continue
 		}
@@ -786,7 +786,7 @@ func (a *RenderAssets) makeIcon(block byte) rl.RenderTexture2D {
 		rl.BeginTextureMode(rt)
 		rl.ClearBackground(rl.Blank)
 		rl.EnableDepthTest()
-		def := GetBlock(block)
+		def := GetItemVisual(block)
 		if def.RenderType == RenderTypeCross {
 			// Render flat 2D sprite for cross type
 			texPath := def.Textures.North

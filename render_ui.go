@@ -57,7 +57,7 @@ func (a *RenderAssets) drawHotbar(state *InputState) {
 		inventoryText(fmt.Sprint(i+1), r.X+3*scale, r.Y+3*scale, int32(10*scale), invMuted)
 	}
 	if state.CurrentBlock != blockAir {
-		label := GetBlock(state.CurrentBlock).Name
+		label := GetItemVisual(state.CurrentBlock).Name
 		fs := int32(15 * scale)
 		tw := float32(rl.MeasureText(label, fs))
 		inventoryBox(rl.NewRectangle(float32(rl.GetScreenWidth())/2-tw/2-10*scale, y-30*scale, tw+20*scale, 23*scale), invBackground, invLine)

@@ -171,3 +171,25 @@ shears and random plant loot are not implemented). Iron/gold/lapis ores and glow
 retain their existing self-drops until their resource/processing systems are added.
 Mining duration is still client-driven; server-authoritative mining sessions remain
 future work for multiplayer. Existing block IDs and saves are unchanged.
+
+### Item definitions and durability
+
+Physical blocks live in `block_registry.go`; `item_registry.go` owns item definitions
+(stack limits, maximum durability, tools and block-placement mappings). `ItemStack`
+holds ID, count and damage. Inventory, cursor and dropped entities share that state;
+`MoveStack`, `CanStack` and `StackLimit` centralize transfer and stacking rules.
+The renderer caches standalone item visuals without putting tools in the block registry.
+
+Tools stack to one. Wood/stone/iron/diamond/gold tools have 59/131/250/1561/32 uses.
+Each successful survival break of a nonzero-hardness block consumes one use, including
+using an ineffective tool. Instant blocks and creative mode consume none. Exhausted
+tools disappear; inventory/hotbar bars and hover text show remaining durability.
+Q drops the selected instance, preserving its damage. Food and enchantments are not
+implemented yet.
+
+Player saves are version 2; legacy version 1 tools become undamaged individual tools.
+Overflow remains in `PendingItems` and is delivered as inventory space becomes available,
+with a reminder on login. Ground entity saves are independently versioned at 8 and load
+legacy versions 6/7, splitting old tool stacks without resetting their despawn age.
+World/chunk IDs and formats stay unchanged. Network protocol is now version 2; update
+both client and server together. Inventory and dropped-item synchronization include damage.

@@ -612,13 +612,13 @@ func handlePacket(pkt Packet) {
 	case *PacketInventoryUpdate:
 		if p.SlotID == -1 {
 			// Update Cursor Item (Held on mouse)
-			input.CursorItem = Item{ID: p.ItemID, Count: p.Count}
+			input.CursorItem = Item{ID: p.ItemID, Count: p.Count, Damage: p.Damage}
 		} else if p.SlotID >= 0 && p.SlotID < 36 {
 			// Update the authoritative inventory
 			if client != nil {
-				client.Inventory.Slots[p.SlotID] = Item{ID: p.ItemID, Count: p.Count}
+				client.Inventory.Slots[p.SlotID] = Item{ID: p.ItemID, Count: p.Count, Damage: p.Damage}
 			} else {
-				localInventory.Slots[p.SlotID] = Item{ID: p.ItemID, Count: p.Count}
+				localInventory.Slots[p.SlotID] = Item{ID: p.ItemID, Count: p.Count, Damage: p.Damage}
 			}
 			// Sync Hotbar input state
 			if p.SlotID < 9 {

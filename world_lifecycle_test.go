@@ -196,7 +196,7 @@ func TestServerLoginSeedChunkAndShutdown(t *testing.T) {
 		}
 		defer conn.Close()
 		conn.SetDeadline(time.Now().Add(8 * time.Second))
-		if err := WritePacket(conn, &PacketLogin{Username: "LifecycleTest", ProtocolVersion: 1}); err != nil {
+		if err := WritePacket(conn, &PacketLogin{Username: "LifecycleTest", ProtocolVersion: protocolVersion}); err != nil {
 			t.Fatal(err)
 		}
 		pkt, err := ReadPacket(conn)

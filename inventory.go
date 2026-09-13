@@ -3,47 +3,40 @@ package main
 // MaxStackSize defines the maximum number of items in a single stack
 const MaxStackSize = 64
 
-type Item struct {
-	ID    int32
-	Count int32
+type ItemStack struct {
+	Damage int32 `json:",omitempty"`
+	ID     int32
+	Count  int32
 }
+
+// Item remains an alias during migration of recipe and UI names.
+type Item = ItemStack
 
 type Inventory struct {
 	Slots [36]Item // 0-8: Hotbar, 9-35: Inventory
 }
 
 func (inv *Inventory) Add(id int32, count int32) int32 {
-	if id <= 0 || count <= 0 {
-		return count
+	return inv.AddStack(ItemStack{ID: id, Count: count})
+}
+
+func (inv *Inventory) AddStack(stack ItemStack) int32 {
+	if stack.ID <= 0 || stack.ID > 255 || stack.Count <= 0 {
+		return stack.Count
 	}
-	// 1. Try to stack
-	for i := 0; i < 36; i++ {
-		if inv.Slots[i].ID == id && inv.Slots[i].Count < MaxStackSize {
-			space := MaxStackSize - inv.Slots[i].Count
-			if count <= space {
-				inv.Slots[i].Count += count
-				return 0
+	for pass := 0; pass < 2; pass++ {
+		for i := range inv.Slots {
+			dst := &inv.Slots[i]
+			if (pass == 0 && !CanStack(*dst, stack)) || (pass == 1 && dst.ID != 0) {
+				continue
 			}
-			inv.Slots[i].Count += space
-			count -= space
-		}
-	}
-	// 2. Try empty slots
-	for i := 0; i < 36; i++ {
-		if inv.Slots[i].ID == 0 {
-			inv.Slots[i].ID = id
-			n := count
-			if n > MaxStackSize {
-				n = MaxStackSize
-			}
-			inv.Slots[i].Count = n
-			count -= n
-			if count == 0 {
+			MoveStack(dst, &stack, stack.Count)
+			if stack.Count == 0 {
 				return 0
 			}
 		}
 	}
-	return count // Return remaining
+	return stack.Count
 }
 
 // Consume attempts to remove 'count' of 'id' from the inventory.

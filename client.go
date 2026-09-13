@@ -58,7 +58,7 @@ func ConnectTCP(addr string, name string) (*Client, error) {
 
 	// Send Login
 	login := &PacketLogin{
-		ProtocolVersion: 1,
+		ProtocolVersion: protocolVersion,
 		Username:        name,
 	}
 	c.Send(login)

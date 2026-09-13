@@ -79,7 +79,7 @@ func TestServerMiningDrops(t *testing.T) {
 			for _, e := range w.entities {
 				if item, ok := e.(*ItemEntity); ok {
 					count++
-					if item.ItemID != tc.drop || item.Count != 1 {
+					if item.ID != int32(tc.drop) || item.Count != 1 {
 						t.Fatalf("unexpected drop %+v", item)
 					}
 				}

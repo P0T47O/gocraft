@@ -333,6 +333,7 @@ func (s *Server) Tick() {
 }
 
 func (s *Server) SendInventory(player *PlayerEntity) {
+	player.claimPendingItems()
 	// Sync entire inventory to client
 	// We MUST send empty slots (ID=0) too, otherwise client won't know items were consumed!
 	for i, item := range player.Inventory.Slots {
@@ -340,6 +341,7 @@ func (s *Server) SendInventory(player *PlayerEntity) {
 			SlotID: int32(i),
 			ItemID: item.ID,
 			Count:  item.Count,
+			Damage: item.Damage,
 		}
 		s.BroadcastTo(player.UUID, p)
 	}
@@ -380,7 +382,7 @@ func (s *Server) UpdateEntities() {
 
 				if distSq < 2.25 {
 					// Try add to inventory
-					rem := player.Inventory.Add(int32(item.ItemID), int32(item.Count))
+					rem := player.Inventory.AddStack(item.ItemStack)
 					if rem < int32(item.Count) {
 						// Some or all picked up
 						// Sync Inventory
@@ -389,9 +391,9 @@ func (s *Server) UpdateEntities() {
 						if rem == 0 {
 							item.Dead = true
 						} else {
-							item.Count = int(rem)
+							item.Count = rem
 							// Update count for others
-							meta := int32(item.ItemID) | (int32(item.Count) << 8)
+							meta := item.ID | (item.Count << 8) | (item.Damage << 16)
 							s.Broadcast(&PacketEntityMeta{
 								EntityID: item.GetUUID(),
 								Metadata: meta,
@@ -449,7 +451,7 @@ func (s *Server) UpdateEntities() {
 
 			// Update metadata for items (count changed)
 			if item, ok := e.(*ItemEntity); ok {
-				meta := int32(item.ItemID) | (int32(item.Count) << 8)
+				meta := item.ID | (item.Count << 8) | (item.Damage << 16)
 				lastMeta, hasLast := s.LastSentMeta[e.GetUUID()]
 				if !hasLast || lastMeta != meta {
 					s.Broadcast(&PacketEntityMeta{
@@ -558,7 +560,9 @@ func (s *Server) handleNewConnection(conn net.Conn) {
 		return
 	}
 	login, ok := pkt.(*PacketLogin)
-	if !ok {
+	if !ok || login.ProtocolVersion != protocolVersion {
+		_ = WritePacket(conn, &PacketChat{Message: "Protocol mismatch: update both client and server."})
+		conn.Close()
 		return
 	}
 	_ = conn.SetReadDeadline(time.Time{})
@@ -641,7 +645,7 @@ func (s *Server) SpawnEntity(e Entity) {
 
 	meta := int32(0)
 	if item, ok := e.(*ItemEntity); ok {
-		meta = int32(item.ItemID) | (int32(item.Count) << 8)
+		meta = item.ID | (item.Count << 8) | (item.Damage << 16)
 	}
 
 	s.Broadcast(&PacketEntitySpawn{
@@ -754,7 +758,7 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 
 			meta := int32(0)
 			if item, ok := e.(*ItemEntity); ok {
-				meta = int32(item.ItemID) | (int32(item.Count) << 8)
+				meta = item.ID | (item.Count << 8) | (item.Damage << 16)
 			}
 
 			s.ClientsMu.RLock()
@@ -805,7 +809,14 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 			player.Vitals.grace = 60
 			s.sendVitals(player)
 			s.SendInventory(player)
-			s.BroadcastTo(p.Username, &PacketInventoryUpdate{SlotID: -1, ItemID: player.CursorItem.ID, Count: player.CursorItem.Count})
+			if len(player.PendingItems) > 0 {
+				var count int32
+				for _, stack := range player.PendingItems {
+					count += stack.Count
+				}
+				s.SendTo(p.Username, &PacketChat{Message: fmt.Sprintf("%d migrated items are safe in storage; free inventory slots to receive them.", count)})
+			}
+			s.BroadcastTo(p.Username, &PacketInventoryUpdate{SlotID: -1, ItemID: player.CursorItem.ID, Count: player.CursorItem.Count, Damage: player.CursorItem.Damage})
 			s.BroadcastTo(p.Username, &PacketSlotChange{Slot: int32(player.SelectedSlot)})
 			s.BroadcastTo(p.Username, &PacketGameMode{Mode: player.GameMode})
 		}
@@ -1019,8 +1030,7 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 								Y:    float64(p.Y) + 0.3,
 								Z:    float64(p.Z) + 0.5,
 							},
-							ItemID:      dropID,
-							Count:       count,
+							ItemStack:   ItemStack{ID: int32(dropID), Count: int32(count)},
 							Vx:          vx,
 							Vy:          vy,
 							Vz:          vz,
@@ -1030,6 +1040,11 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 						s.SpawnEntity(item)
 					}
 				}
+				if player.GameMode == ModeSurvival && blockDef.Hardness > 0 && slotIdx >= 0 && slotIdx < 9 {
+					player.Inventory.Slots[slotIdx].Wear(1)
+					s.SendInventory(player)
+				}
+
 			}
 		}
 
@@ -1066,14 +1081,19 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 				s.SendInventory(player)
 				return
 			}
+			incoming := Item{ID: p.ItemID, Count: p.Count, Damage: p.Damage}
+			if !validStack(incoming) {
+				s.SendInventory(player)
+				return
+			}
 			// Handle Cursor Update (Slot -1)
 			if p.SlotID == -1 {
 				// Only allow arbitrary cursor setting in Creative Mode?
 				// For now let's allow it generally or check GameMode if strict.
 				// Since we use this for robust sync, let's allow it.
-				player.CursorItem = Item{ID: p.ItemID, Count: p.Count}
+				player.CursorItem = Item{ID: p.ItemID, Count: p.Count, Damage: p.Damage}
 			} else if p.SlotID >= 0 && p.SlotID < 36 {
-				player.Inventory.Slots[p.SlotID] = Item{ID: p.ItemID, Count: p.Count}
+				player.Inventory.Slots[p.SlotID] = Item{ID: p.ItemID, Count: p.Count, Damage: p.Damage}
 				// fmt.Printf("Server: Updated slot %d for %s to %d:%d\n", p.SlotID, wrap.From, p.ItemID, p.Count)
 			}
 		}
@@ -1096,10 +1116,13 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 		if player != nil && !p.IsCreative {
 			player.Inventory.Click(int(p.SlotID), int(p.Button), &player.CursorItem)
 			s.SendInventory(player)
-			s.SendTo(wrap.From, &PacketInventoryUpdate{SlotID: -1, ItemID: player.CursorItem.ID, Count: player.CursorItem.Count})
+			s.SendTo(wrap.From, &PacketInventoryUpdate{SlotID: -1, ItemID: player.CursorItem.ID, Count: player.CursorItem.Count, Damage: player.CursorItem.Damage})
 		}
 
 	case *PacketPlayerAction:
+		if p.ActionType != 0 {
+			return
+		}
 		// 1. Find player pos/rot
 		s.World.entitiesMu.RLock()
 		player := s.findPlayerEntity(wrap.From)
@@ -1118,14 +1141,25 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 			count = 1
 		}
 
-		if player != nil && player.GameMode == ModeSurvival {
-			if !player.Inventory.Consume(int32(itemID), int32(count)) {
-				// Failed to consume, cannot drop
-				fmt.Printf("Player %s tried to drop Item %d without valid count.\n", wrap.From, itemID)
-				s.SendInventory(player) // Sync back to fix client state
+		dropped := ItemStack{ID: int32(itemID), Count: int32(count)}
+		if player.GameMode == ModeSurvival {
+			if player.SelectedSlot < 0 || player.SelectedSlot >= 9 {
 				return
 			}
-			s.SendInventory(player) // Sync successful removal
+			slot := &player.Inventory.Slots[player.SelectedSlot]
+			if slot.ID != int32(itemID) || slot.Count < int32(count) {
+				s.SendInventory(player)
+				return
+			}
+			dropped = ItemStack{}
+			MoveStack(&dropped, slot, int32(count))
+
+			s.SendInventory(player)
+		} else {
+			dropped.Count = min(dropped.Count, StackLimit(dropped.ID))
+			if dropped.Count <= 0 {
+				return
+			}
 		}
 
 		// Calculate Toss Velocity (based on Camera Forward)
@@ -1152,8 +1186,7 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 				Yaw:   0,
 				Pitch: 0,
 			},
-			ItemID:      itemID,
-			Count:       count,
+			ItemStack:   dropped,
 			Vx:          dirX * speed,
 			Vy:          dirY * speed, // Follow look direction exactly
 			Vz:          dirZ * speed,
@@ -1425,40 +1458,12 @@ func (s *Server) handleCommand(player string, cmd string) {
 		}
 
 		if pEnt != nil {
-			remaining := int32(count)
-			itemID := int32(id)
-
-			// 1. Try to stack
-			for i := 0; i < 36 && remaining > 0; i++ {
-				slot := &pEnt.Inventory.Slots[i]
-				if slot.ID == itemID && slot.Count < 64 {
-					space := int32(64) - slot.Count
-					toAdd := remaining
-					if toAdd > space {
-						toAdd = space
-					}
-					slot.Count += toAdd
-					remaining -= toAdd
-					// Send Update
-					s.SendTo(player, &PacketInventoryUpdate{SlotID: int32(i), ItemID: slot.ID, Count: slot.Count})
-				}
+			if id <= 0 || id > 255 || Items[id] == nil || count < 1 || count > 2304 {
+				s.World.entitiesMu.Unlock()
+				return
 			}
-
-			// 2. Fill empty slots
-			for i := 0; i < 36 && remaining > 0; i++ {
-				slot := &pEnt.Inventory.Slots[i]
-				if slot.ID == 0 { // Empty
-					toAdd := remaining
-					if toAdd > 64 {
-						toAdd = 64
-					}
-					slot.ID = itemID
-					slot.Count = toAdd
-					remaining -= toAdd
-					// Send Update
-					s.SendTo(player, &PacketInventoryUpdate{SlotID: int32(i), ItemID: slot.ID, Count: slot.Count})
-				}
-			}
+			remaining := pEnt.Inventory.Add(int32(id), int32(count))
+			s.SendInventory(pEnt)
 
 			if remaining < int32(count) {
 				s.SendTo(player, &PacketChat{Message: fmt.Sprintf("Given %d of block %d", int32(count)-remaining, id)})
