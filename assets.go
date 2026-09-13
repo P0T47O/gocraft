@@ -37,6 +37,8 @@ var allBlocks = []byte{
 	blockTorch,
 	blockBedrock,
 	blockCraftingTable,
+	blockChest,
+	blockFurnace,
 
 	// Liquids
 	blockWater,

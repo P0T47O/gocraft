@@ -191,5 +191,30 @@ Player saves are version 2; legacy version 1 tools become undamaged individual t
 Overflow remains in `PendingItems` and is delivered as inventory space becomes available,
 with a reminder on login. Ground entity saves are independently versioned at 8 and load
 legacy versions 6/7, splitting old tool stacks without resetting their despawn age.
-World/chunk IDs and formats stay unchanged. Network protocol is now version 2; update
+World/chunk IDs and formats stay unchanged. Network protocol is now version 3; update
 both client and server together. Inventory and dropped-item synchronization include damage.
+
+### Chests and furnaces
+
+Craft a 27-slot chest from 8 matching planks, or a furnace from 8 cobblestone,
+at a workbench. Right-click to open; Shift-right-click places against the block.
+Left-click moves stacks, right-click splits/places one, and Shift-click transfers
+between the container and inventory. Furnace input accepts smeltable items, fuel
+accepts supported fuels, and the output slot only permits extraction.
+
+Furnaces smelt iron/gold ore into ingots, sand into glass and cobblestone into stone.
+Each item takes 10 seconds. Coal burns for 8 items, a coal block for 80, wood/logs
+for 1.5 and sticks for 0.5. Active fuel continues burning if the output is blocked;
+new fuel is only ignited when there is room to smelt. Furnaces run while the world
+simulation runs, including with the window closed or distant chunks unloaded.
+Singleplayer pause and exiting the world stop progress; offline time is not simulated.
+
+`containers.json` stores per-position contents and furnace timers. Existing worlds
+need no conversion. Breaking a container drops its contents (including worn tools),
+closes viewers and discards remaining furnace heat. Chest blocks currently reuse
+existing wooden barrel textures; double chests and opening animations are not added.
+
+Server container sessions validate distance, block type, session token and inventory
+revision. Stale simultaneous clicks resynchronize instead of applying twice. Network
+protocol 3 requires updating the client and server together. Optional rendered previews:
+`$env:GOCRAFT_CONTAINER_PREVIEW='1'; go test -run '^TestContainerPreview$' -count=1 .`

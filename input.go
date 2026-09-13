@@ -26,20 +26,22 @@ const (
 )
 
 type InputState struct {
-	CurrentIndex    int
-	CurrentBlock    byte
-	InventoryOpen   bool
-	SelectedSlot    int
-	Hotbar          [9]byte
-	SkipCamera      bool
-	Yaw             float32
-	Pitch           float32
-	Sensitivity     float32
-	MoveSpeed       float32
-	CursorItem      Item // Held item on mouse cursor
-	InventoryPage   int
-	ShowDebug       bool
-	CraftingStation byte // 0: None, 1: Workbench
+	ClosedContainerToken int32
+	Container            *PacketContainerState
+	CurrentIndex         int
+	CurrentBlock         byte
+	InventoryOpen        bool
+	SelectedSlot         int
+	Hotbar               [9]byte
+	SkipCamera           bool
+	Yaw                  float32
+	Pitch                float32
+	Sensitivity          float32
+	MoveSpeed            float32
+	CursorItem           Item // Held item on mouse cursor
+	InventoryPage        int
+	ShowDebug            bool
+	CraftingStation      byte // 0: None, 1: Workbench
 
 	// Survival Mode Physics
 	VelocityY       float32 // Vertical velocity
@@ -96,6 +98,9 @@ func (s *InputState) InitFromCamera(camera rl.Camera3D) {
 }
 
 func (s *InputState) ToggleInventory() {
+	if s.Container != nil && (rl.IsKeyPressed(rl.KeyE) || rl.IsKeyPressed(rl.KeyEscape)) {
+		s.closeContainerUI()
+	}
 	if rl.IsKeyPressed(rl.KeyE) {
 		s.InventoryOpen = !s.InventoryOpen
 		s.SkipCamera = true
@@ -412,7 +417,7 @@ func HandleInput(world *World, camera *rl.Camera3D, state *InputState, client *C
 	if hit.hit && rl.IsMouseButtonPressed(rl.MouseRightButton) {
 		// 1. Check for Block Interaction (Server Authoritative)
 		blockID := world.BlockAt(hit.x, hit.y, hit.z)
-		if blockID == blockCraftingTable {
+		if (blockID == blockCraftingTable || containerSize(blockID) > 0) && !rl.IsKeyDown(rl.KeyLeftShift) {
 			if client != nil {
 				client.Send(&PacketBlockInteract{
 					X:      int32(hit.x),
@@ -478,6 +483,10 @@ func (s *InputState) UpdateInventoryPage() {
 }
 
 func (s *InputState) UpdateInventorySelection(client *Client) {
+	if s.Container != nil {
+		s.updateContainerInput()
+		return
+	}
 	// Sync Hotbar Logic (always active)
 	if client != nil {
 		for i := 0; i < 9; i++ {

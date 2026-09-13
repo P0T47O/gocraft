@@ -56,6 +56,8 @@ const (
 	blockDandelion
 	blockTallGrass
 	blockCraftingTable
+	blockChest
+	blockFurnace
 )
 
 const (

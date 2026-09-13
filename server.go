@@ -20,16 +20,19 @@ var chunkDataBufPool = sync.Pool{
 }
 
 type Server struct {
-	World       *World // The authoritative world
-	Paused      atomic.Bool
-	Clients     map[string]*ClientConnection
-	ClientsMu   sync.RWMutex
-	PacketCh    chan PacketWrapper
-	Shutdown    chan bool
-	Done        chan bool
-	stopOnce    sync.Once
-	networkWG   sync.WaitGroup
-	connections map[net.Conn]bool // Includes sockets still waiting for login; ClientsMu protects it.
+	Containers        map[BlockPos]*BlockContainer
+	ContainerSessions map[string]ContainerSession
+	ContainerToken    int32
+	World             *World // The authoritative world
+	Paused            atomic.Bool
+	Clients           map[string]*ClientConnection
+	ClientsMu         sync.RWMutex
+	PacketCh          chan PacketWrapper
+	Shutdown          chan bool
+	Done              chan bool
+	stopOnce          sync.Once
+	networkWG         sync.WaitGroup
+	connections       map[net.Conn]bool // Includes sockets still waiting for login; ClientsMu protects it.
 
 	// Initial player state (Loaded from save)
 	InitialPosX, InitialPosY, InitialPosZ float64
@@ -96,6 +99,9 @@ func NewServer(savePath string) *Server {
 		connections:   make(map[net.Conn]bool),
 	}
 
+	if err := s.loadContainers(); err != nil {
+		panic(err)
+	}
 	if !hasPos && len(world.entities) == 0 {
 		// Spawn a starter pig
 		p := &PigEntity{
@@ -155,6 +161,9 @@ func (s *Server) Start() {
 
 func (s *Server) Save() {
 	fmt.Println("Server: Saving world state...")
+	if err := s.saveContainers(); err != nil {
+		fmt.Printf("Container save failed: %v\n", err)
+	}
 	if err := saveSurvivalPlayers(s.SavePath, s.World); err != nil {
 		fmt.Printf("Player save failed: %v\n", err)
 	}
@@ -210,6 +219,7 @@ func (s *Server) Tick() {
 	s.processPendingChunks()
 	s.updatePlayerVitals()
 	s.UpdateEntities()
+	s.tickContainers()
 
 	// Garbage Collect Chunks
 	// Radius 24 (generous buffer)
@@ -693,11 +703,14 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 	// client := s.Clients[wrap.From]
 
 	switch p := pkt.(type) {
+	case *PacketContainerClick:
+		s.clickContainer(s.findPlayerEntity(wrap.From), p)
 	case *PacketRespawn:
 		if player := s.findPlayerEntity(wrap.From); player != nil {
 			s.respawnPlayer(player)
 		}
 	case *PacketLogin:
+		delete(s.ContainerSessions, wrap.From)
 		fmt.Printf("Client %s logged in on protocol %d (Seed: %d)\n", p.Username, p.ProtocolVersion, s.World.seed)
 		// Update packet with server seed so client can sync if desired
 		p.Seed = s.World.seed
@@ -883,6 +896,14 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 		}
 
 	case *PacketBlockInteract:
+		pos := BlockPos{p.X, p.Y, p.Z}
+		if !s.containerReach(s.findPlayerEntity(wrap.From), pos) {
+			return
+		}
+		if containerSize(s.World.BlockAt(int(p.X), int(p.Y), int(p.Z))) > 0 {
+			s.openContainer(s.findPlayerEntity(wrap.From), pos)
+			return
+		}
 		// Check for specific block interactions (e.g. Workbench)
 		blockID := s.World.BlockAt(int(p.X), int(p.Y), int(p.Z))
 
@@ -1048,6 +1069,9 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 			}
 		}
 
+		if p.BlockID == blockAir {
+			s.breakContainer(BlockPos{p.X, p.Y, p.Z})
+		}
 		// Apply block change to World
 		// Validation logic would go here
 		fmt.Printf("Server: Block set at %d %d %d\n", p.X, p.Y, p.Z)

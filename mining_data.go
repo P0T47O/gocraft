@@ -11,12 +11,13 @@ func configureBasicMining() {
 		}
 	}
 	set(2, ToolAxe, MatNone, false, blockLog, blockLogBirch, blockLogSpruce, blockPlank, blockPlankOak, blockPlankBirch, blockPlankSpruce)
-	set(2.5, ToolAxe, MatNone, false, blockCraftingTable)
+	set(2.5, ToolAxe, MatNone, false, blockCraftingTable, blockChest)
 	set(.5, ToolShovel, MatNone, false, blockDirt, blockSand, blockGravel)
 	set(.6, ToolShovel, MatNone, false, blockGrass)
 	set(.2, ToolShovel, MatWood, false, blockSnow)
 	set(1.5, ToolPickaxe, MatWood, false, blockStone)
 	set(2, ToolPickaxe, MatWood, false, blockCobblestone)
+	set(3.5, ToolPickaxe, MatWood, false, blockFurnace)
 	set(.8, ToolPickaxe, MatWood, false, blockSandstone)
 	set(3, ToolPickaxe, MatWood, false, blockCoalOre)
 	set(3, ToolPickaxe, MatStone, false, blockIronOre, blockLapisOre)

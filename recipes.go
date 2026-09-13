@@ -223,6 +223,11 @@ func InitRecipes() {
 		Result:  Item{ID: int32(itemDiamondShovel), Count: 1},
 		Station: blockCraftingTable,
 	})
+	RegisterRecipe(&Recipe{Ingredients: []Item{{ID: int32(blockCobblestone), Count: 8}}, Result: Item{ID: int32(blockFurnace), Count: 1}, Station: blockCraftingTable})
+	for _, id := range []byte{blockPlank, blockPlankOak, blockPlankBirch, blockPlankSpruce} {
+		RegisterRecipe(&Recipe{Ingredients: []Item{{ID: int32(id), Count: 8}}, Result: Item{ID: int32(blockChest), Count: 1}, Station: blockCraftingTable})
+	}
+
 }
 
 // GetCraftableRecipes returns recipes that can be crafted with the given inventory

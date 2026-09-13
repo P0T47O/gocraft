@@ -319,6 +319,7 @@ func updateGame() {
 
 		if rl.IsKeyPressed(rl.KeyEscape) {
 			if input.InventoryOpen {
+				input.closeContainerUI()
 				input.InventoryOpen = false
 				input.CraftingStation = 0
 				input.SkipCamera = true
@@ -501,6 +502,7 @@ func handlePacket(pkt Packet) {
 		input.Vitals = *p
 		input.VitalsReady = true
 		if input.isDead() {
+			input.closeContainerUI()
 			input.InventoryOpen = false
 			input.CraftingStation = 0
 			input.MiningProgress = 0
@@ -517,8 +519,29 @@ func handlePacket(pkt Packet) {
 			input.SkipCamera = true
 			rl.DisableCursor()
 		}
+	case *PacketContainerState:
+		if p.Token <= input.ClosedContainerToken {
+			return
+		}
+		if p.State.Kind == 0 {
+			if input.Container != nil && input.Container.Token == p.Token {
+				input.Container = nil
+				input.InventoryOpen = false
+				input.SkipCamera = true
+				if !isPaused {
+					rl.DisableCursor()
+				}
+			}
+		} else {
+			input.Container = p
+			input.InventoryOpen = true
+			input.CraftingStation = 0
+			input.SkipCamera = true
+			rl.EnableCursor()
+		}
 	case *PacketOpenWindow:
 		if p.WindowType == 1 { // Workbench
+			input.closeContainerUI()
 			input.InventoryOpen = true
 			input.CraftingStation = blockCraftingTable
 			input.SkipCamera = true

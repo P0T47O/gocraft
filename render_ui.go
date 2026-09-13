@@ -66,6 +66,10 @@ func (a *RenderAssets) drawHotbar(state *InputState) {
 }
 
 func (a *RenderAssets) drawInventory(state *InputState) {
+	if state.Container != nil {
+		a.drawContainer(state)
+		return
+	}
 	if currentGameMode == ModeSurvival {
 		a.drawSurvivalInventory(state)
 		return

@@ -411,5 +411,7 @@ func initBlockRegistry() {
 		IsCollidable:  false,
 	})
 
+	RegisterBlock(&BlockDef{ID: blockChest, Name: "Chest", Textures: blockFaces{Top: "textures/block/barrel_top.png", Bottom: "textures/block/barrel_bottom.png", North: "textures/block/barrel_side.png", South: "textures/block/barrel_side.png", East: "textures/block/barrel_side.png", West: "textures/block/barrel_side.png"}, IsOpaque: true, IsCollidable: true})
+	RegisterBlock(&BlockDef{ID: blockFurnace, Name: "Furnace", Textures: blockFaces{Top: "textures/block/furnace_top.png", Bottom: "textures/block/furnace_top.png", North: "textures/block/furnace_front.png", South: "textures/block/furnace_side.png", East: "textures/block/furnace_side.png", West: "textures/block/furnace_side.png"}, IsOpaque: true, IsCollidable: true})
 	initItemRegistry()
 }
