@@ -7,41 +7,18 @@ type terrainColumn struct {
 	height, biomeID int
 	top, filler     byte
 	ocean           bool
+	environment     environmentSample
+	slope           float32
 }
 
 func sampleTerrainColumn(seed uint32, x, z int) terrainColumn {
-	rawHeight, cont := terrainShapeSample(seed, x, z)
-	h := max(2, min(chunkHeight-1, rawHeight))
-	xf, zf := float32(x), float32(z)
-	cont += noise2(seed+99, xf*0.1, zf*0.1) * 0.15
-	c := terrainColumn{height: h, biomeID: getBiome(seed, x, z), top: blockGrass, filler: blockDirt, ocean: cont < -0.25}
-	if c.biomeID == BiomeDesert {
-		c.top = blockSand
-	}
-	if c.biomeID == BiomeIceSpikes {
-		c.top = blockSnow
-	}
-	if h >= seaLevel-2 && h <= seaLevel+2 {
-		if c.biomeID == BiomeBeach || c.biomeID == BiomeSnowyBeach || (!c.ocean && cont < -0.1) {
-			c.top = blockSand
-		}
-		if c.biomeID == BiomeStoneBeach {
-			c.top = blockGravel
-		}
-	}
-	if c.ocean {
-		c.top = blockSand
-		if seaLevel-h > 6 {
-			c.top = blockGravel
-		}
-		c.filler = c.top
-	} else if c.top == blockSand {
-		c.filler = blockSandstone
-	}
-	if c.top == blockGrass && h < seaLevel {
-		c.top = blockDirt
-	}
-	return c
+	e := sampleEnvironment(seed, x, z)
+	// Central differences of unquantized height avoid voxel stair-step artifacts.
+	dx := (sampleEnvironment(seed, x+2, z).elevation - sampleEnvironment(seed, x-2, z).elevation) / 4
+	dz := (sampleEnvironment(seed, x, z+2).elevation - sampleEnvironment(seed, x, z-2).elevation) / 4
+	slope := float32(math.Sqrt(float64(dx*dx + dz*dz)))
+	top, filler := surfaceFromEnvironment(seed, x, z, e, slope)
+	return terrainColumn{height: e.height, biomeID: e.biome, top: top, filler: filler, ocean: isOceanBiome(e.biome), environment: e, slope: slope}
 }
 
 func (c terrainColumn) topY() int { return max(c.height, int(seaLevel)) }
@@ -57,7 +34,7 @@ func (c terrainColumn) blockAt(seed uint32, x, y, z int) byte {
 		if y >= seaLevel {
 			return blockAir
 		}
-		if y == seaLevel-1 && (c.biomeID == BiomeFrozenOcean || c.biomeID == BiomeIceSpikes || c.biomeID == BiomeSnowyTundra) {
+		if y == seaLevel-1 && (c.biomeID == BiomeFrozenOcean || c.biomeID == BiomeTaiga || c.biomeID == BiomeSnowyBeach || c.biomeID == BiomeSnowyTundra) {
 			return blockIce
 		}
 		return blockWater

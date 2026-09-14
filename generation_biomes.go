@@ -1,0 +1,146 @@
+package main
+
+import "math"
+
+const BiomeExtremeHills = 19
+const (
+	regionPlains = iota
+	regionForest
+	regionDesert
+	regionTaiga
+	regionSnow
+	regionMountain
+	regionCount
+)
+
+var regionBiomes = [regionCount]int{BiomePlains, BiomeForest, BiomeDesert, BiomeTaiga, BiomeSnowyTundra, BiomeExtremeHills}
+
+type environmentSample struct {
+	height, biome                          int
+	elevation, land, temperature, humidity float32
+	weights                                [regionCount]float32
+}
+
+// Gradient noise avoids interpolated random-height plateaus. Independent salts
+// and world coordinates keep results independent of chunk order.
+func terrainNoise(seed uint32, x, z float64, salt uint64) float32 {
+	ix, iz := int(math.Floor(x)), int(math.Floor(z))
+	tx, tz := x-float64(ix), z-float64(iz)
+	fade := func(t float64) float64 { return t * t * t * (t*(t*6-15) + 10) }
+	dot := func(dx, dz int) float64 {
+		index := generationHash(seed, ix+dx, 0, iz+dz, salt) % trigTableSize
+		return float64(trigCos[index])*(tx-float64(dx)) + float64(trigSin[index])*(tz-float64(dz))
+	}
+	u, v := fade(tx), fade(tz)
+	a, b, c, d := dot(0, 0), dot(1, 0), dot(0, 1), dot(1, 1)
+	return float32(((a+(b-a)*u)*(1-v) + (c+(d-c)*u)*v) * 1.4)
+}
+
+// Continuous weights, not dominant biome IDs, drive the generation pipeline.
+func sampleEnvironment(seed uint32, x, z int) environmentSample {
+	xf, zf := float64(x), float64(z)
+	wx := xf + float64(terrainNoise(seed, xf/600, zf/600, 1))*65
+	wz := zf + float64(terrainNoise(seed, xf/600, zf/600, 2))*65
+	t := terrainNoise(seed, wx/1000, wz/1000, 10)
+	h := terrainNoise(seed, wx/900, wz/900, 11)
+	continental := terrainNoise(seed, wx/1600, wz/1600, 12)
+	land := smoothstep(-.35, .20, continental)
+	cold := 1 - smoothstep(-.35, -.10, t)
+	dry := smoothstep(.08, .35, t) * (1 - smoothstep(-.25, .05, h))
+	wood := smoothstep(-.22, .22, h)
+	mountains := smoothstep(-.12, .65, terrainNoise(seed, wx/850, wz/850, 13))
+	w := [regionCount]float32{}
+	w[regionTaiga], w[regionSnow] = cold*wood, cold*(1-wood)
+	w[regionDesert] = (1 - cold) * dry
+	rest := (1 - cold) * (1 - dry)
+	w[regionMountain] = rest * mountains
+	w[regionForest] = rest * (1 - mountains) * wood
+	w[regionPlains] = rest * (1 - mountains) * (1 - wood)
+	rolling := terrainNoise(seed, wx/180, wz/180, 20)
+	detail := terrainNoise(seed, wx/43, wz/43, 21)
+	ridgeField := terrainNoise(seed, wx/260, wz/260, 22)
+	ridge := 1 - float32(math.Sqrt(float64(ridgeField*ridgeField+.025)))
+	valleys := terrainNoise(seed, wx/115, wz/115, 23)
+	shapes := [regionCount]float32{
+		72 + rolling*5 + detail*.6,
+		75 + rolling*9 + detail*1.2,
+		73 + terrainNoise(seed, wx/95, wz/170, 24)*7 + detail*.5,
+		76 + rolling*10 + detail,
+		73 + rolling*6 + detail*.5,
+		82 + ridge*ridge*64 + valleys*13 + detail*3,
+	}
+	landHeight := float32(0)
+	best := 0
+	for i := range w {
+		landHeight += w[i] * shapes[i]
+		if w[i] > w[best] {
+			best = i
+		}
+	}
+	elevation := lerp(35+rolling*6, landHeight, land)
+	biome := regionBiomes[best]
+	if elevation < seaLevel-2 {
+		biome = BiomeOcean
+		if cold > .5 {
+			biome = BiomeFrozenOcean
+		}
+	} else if elevation < seaLevel+2 {
+		biome = BiomeBeach
+		if cold > .5 {
+			biome = BiomeSnowyBeach
+		}
+	}
+	return environmentSample{height: int(elevation), elevation: elevation, biome: biome, land: land, temperature: t, humidity: h, weights: w}
+}
+
+// Correlated surface patches rather than independent per-voxel dithering.
+// Rock exposure follows slope, never a fixed altitude contour.
+func surfaceFromEnvironment(seed uint32, x, z int, e environmentSample, slope float32) (byte, byte) {
+	patch := terrainNoise(seed, float64(x)/19, float64(z)/19, 40) * .16
+	snow := e.weights[regionTaiga] + e.weights[regionSnow]
+	if e.height < seaLevel-2 {
+		if e.height < seaLevel-8 {
+			return blockGravel, blockGravel
+		}
+		return blockSand, blockSand
+	}
+	coast := 1 - smoothstep(0, 5, abs(e.elevation-seaLevel))
+	sand := max(e.weights[regionDesert], coast*(1-snow))
+	rock := smoothstep(.38, .95, slope) * smoothstep(.1, .55, e.weights[regionMountain])
+	if rock > .5+patch {
+		return blockStone, blockStone
+	}
+	if snow > .5+patch {
+		return blockSnow, blockDirt
+	}
+	if sand > .5+patch {
+		return blockSand, blockSandstone
+	}
+	if e.height < seaLevel {
+		return blockDirt, blockDirt
+	}
+	return blockGrass, blockDirt
+}
+
+func vegetationAt(seed uint32, x, z int, c terrainColumn) byte {
+	r := (hash2(seed+4, x, z) + 1) * .5
+	if c.top == blockSand && c.environment.weights[regionDesert] > .65 {
+		return vegetationBlock(BiomeDesert, c.top, r)
+	}
+	if c.top != blockGrass {
+		return blockAir
+	}
+	patch := (terrainNoise(seed, float64(x)/28, float64(z)/28, 41) + 1) * .5
+	fertility := (1 - c.environment.weights[regionDesert]) * (1 - smoothstep(.3, .8, c.slope))
+	density := patch * fertility * (.18 - .08*c.environment.weights[regionForest])
+	if r > 1-density {
+		if patch > .68 && r > .97 {
+			if terrainNoise(seed, float64(x)/60, float64(z)/60, 42) > 0 {
+				return blockRose
+			}
+			return blockDandelion
+		}
+		return blockTallGrass
+	}
+	return blockAir
+}

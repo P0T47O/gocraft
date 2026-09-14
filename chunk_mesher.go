@@ -143,7 +143,7 @@ func (a *RenderAssets) getBiomeBaseColor(biomeID int, isWater bool) (float32, fl
 	// Water Colors
 	if isWater {
 		switch biomeID {
-		case BiomeFrozenOcean, BiomeSnowyTundra, BiomeIceSpikes:
+		case BiomeFrozenOcean, BiomeSnowyTundra, BiomeIceSpikes, BiomeTaiga, BiomeSnowyBeach:
 			return 60, 100, 190 // Frozen/Cold
 		case BiomeDesert:
 			return 60, 200, 230 // Desert (Cyan-ish)
@@ -160,8 +160,10 @@ func (a *RenderAssets) getBiomeBaseColor(biomeID int, isWater bool) (float32, fl
 	switch biomeID {
 	case BiomeDesert, BiomeSavanna:
 		return 191, 183, 85 // Brownish (Dry)
-	case BiomeTaiga, BiomeSnowyTundra, BiomeIceSpikes, BiomeFrozenOcean:
+	case BiomeTaiga, BiomeSnowyTundra, BiomeIceSpikes, BiomeFrozenOcean, BiomeSnowyBeach:
 		return 128, 180, 151 // Cold Blue-Green
+	case BiomeExtremeHills:
+		return 112, 158, 112 // Muted mountain foliage
 	case BiomeDeepForest:
 		// User requested to treat as Temperate (Forest)
 		return 121, 192, 90

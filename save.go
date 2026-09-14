@@ -84,7 +84,7 @@ func SaveGame(savePath string, world *World, state *InputState, camera rl.Camera
 
 	// Save Level Metadata
 	if err := SaveLevelData(savePath, world.seed); err != nil {
-		fmt.Printf("Error saving level data: %v\n", err)
+		return err
 	}
 
 	if err := SaveWorldChunks(savePath, world); err != nil {
@@ -115,7 +115,7 @@ func SaveLevelData(savePath string, seed uint32) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, bytes, 0o644)
+	return writeSaveFile(path, bytes)
 }
 
 const entitySaveVersion = 9
@@ -165,7 +165,7 @@ func SaveEntities(savePath string, world *World) error {
 	}
 
 	path := filepath.Join(savePath, entityFile)
-	return os.WriteFile(path, buf.Bytes(), 0o644)
+	return writeSaveFile(path, buf.Bytes())
 }
 
 func SavePlayerState(savePath string, x, y, z float32, selectedSlot int, hotbar []byte, seed uint32) error {
@@ -184,7 +184,7 @@ func SavePlayerState(savePath string, x, y, z float32, selectedSlot int, hotbar 
 	writeUint32(&buf, seed)
 
 	path := filepath.Join(savePath, playerFile)
-	return os.WriteFile(path, buf.Bytes(), 0o644)
+	return writeSaveFile(path, buf.Bytes())
 }
 
 func SaveWorldChunks(savePath string, world *World) error {
@@ -490,17 +490,7 @@ func saveChunkFile(root string, x, y, z int, blocks *[chunkWidth][chunkHeight][c
 	writeUint32(&header, uint32(len(payload)))
 
 	path := filepath.Join(root, chunkDir, fmt.Sprintf("%d_%d_%d.bin", x, y, z))
-	f, err := os.Create(path)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	if _, err := f.Write(header.Bytes()); err != nil {
-		return err
-	}
-	_, err = f.Write(compressed)
-	return err
+	return writeSaveFile(path, append(header.Bytes(), compressed...))
 }
 
 func loadChunkFile(root string, x, y, z int, blocks *[chunkWidth][chunkHeight][chunkWidth]byte, meta *[chunkWidth][chunkHeight][chunkWidth]byte) error {

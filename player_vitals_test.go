@@ -234,6 +234,66 @@ func TestDestroyedSpawnGetsSafeLanding(t *testing.T) {
 	}
 }
 
+func TestDistantRespawnSearchSurvivesChunkGC(t *testing.T) {
+	w := lifeTestWorld(t)
+	s, p := lifeTestPlayer(w)
+	s.SavePath = t.TempDir()
+	s.PendingChunks = make(map[chunkKey][]string)
+	c := w.getChunkIfGenerated(0, 0)
+	c.blocks = [chunkWidth][chunkHeight][chunkWidth]byte{}
+	p.X, p.Z = 1600, 1600
+	p.Vitals.Health = 0
+	client := &ClientConnection{LastChunkX: 100, LastChunkZ: 100, Send: make(chan Packet, 128), done: make(chan struct{}), KnownChunks: make(map[chunkKey]bool)}
+	s.Clients[p.UUID] = client
+	s.respawnPlayer(p)
+	if !p.dead() || !p.Vitals.respawnRequested {
+		t.Fatal("expected loading respawn")
+	}
+	pins := s.pendingRespawnChunks()
+	if len(pins) != 9 {
+		t.Fatalf("search should pin nine chunks, got %d", len(pins))
+	}
+	for key := range pins {
+		if w.chunks[key] == nil {
+			t.Fatal("search did not request chunk")
+		}
+	}
+	s.Tick()
+	for key := range pins {
+		if w.chunks[key] == nil {
+			t.Fatalf("GC discarded pending respawn chunk %v", key)
+		}
+		lifecycleChunk(w, key) // Simulate completed async loads, all empty.
+	}
+	s.Tick()
+	for key := range pins {
+		if w.chunks[key] == nil {
+			t.Fatalf("GC discarded loaded spawn chunk %v", key)
+		}
+	}
+	s.respawnPlayer(p) // No dry ground: fallback must now be able to complete.
+	pos := rl.NewVector3(float32(p.X), float32(p.Y), float32(p.Z))
+	if p.dead() || !feetSupported(w, pos) || collides(w, pos) {
+		t.Fatal("distant respawn did not finish safely")
+	}
+	if len(s.pendingRespawnChunks()) != 0 {
+		t.Fatal("completed respawn retained pins")
+	}
+	if client.LastChunkX != 0 || client.LastChunkZ != 0 {
+		t.Fatal("client chunk center not moved")
+	}
+}
+
+func TestDisconnectedRespawnDoesNotPinChunks(t *testing.T) {
+	w := lifeTestWorld(t)
+	s, p := lifeTestPlayer(w)
+	p.Vitals.Health = 0
+	p.Vitals.respawnRequested = true
+	if len(s.pendingRespawnChunks()) != 0 {
+		t.Fatal("offline player retained chunks")
+	}
+}
+
 func TestRecoveryAndPausedOrOfflinePlayers(t *testing.T) {
 	w := lifeTestWorld(t)
 	s, p := lifeTestPlayer(w)

@@ -681,23 +681,27 @@ func WriteVarInt(w *bytes.Buffer, val int32) error {
 }
 
 func ReadVarInt(r *bytes.Buffer) (int32, error) {
+	return readVarInt(r.ReadByte)
+}
+
+func readVarInt(readByte func() (byte, error)) (int32, error) {
 	var val uint32
-	var cnt int
-	for {
-		b, err := r.ReadByte()
+	for cnt := 0; cnt < 5; cnt++ {
+		b, err := readByte()
 		if err != nil {
 			return 0, err
 		}
-		val |= uint32(b&0x7F) << (7 * cnt)
-		cnt++
-		if (b & 0x80) == 0 {
-			break
-		}
-		if cnt > 5 {
+		// Only four payload bits remain in the fifth byte. Check BEFORE
+		// shifting, including the continuation bit, so overflow cannot vanish.
+		if cnt == 4 && b&0xF0 != 0 {
 			return 0, fmt.Errorf("VarInt too big")
 		}
+		val |= uint32(b&0x7F) << (7 * cnt)
+		if (b & 0x80) == 0 {
+			return int32(val), nil
+		}
 	}
-	return int32(val), nil
+	return 0, fmt.Errorf("VarInt too big")
 }
 
 func WriteString(w *bytes.Buffer, s string) error {
@@ -719,29 +723,16 @@ func ReadString(r *bytes.Buffer) (string, error) {
 		return "", fmt.Errorf("string length out of range: %d", length)
 	}
 	b := make([]byte, length)
-	_, err = r.Read(b)
+	_, err = io.ReadFull(r, b)
 	return string(b), err
 }
 
 func ReadVarIntFromReader(r io.Reader) (int32, error) {
-	var val uint32
-	var cnt int
 	var b [1]byte
-	for {
-		_, err := r.Read(b[:])
-		if err != nil {
-			return 0, err
-		}
-		val |= uint32(b[0]&0x7F) << (7 * cnt)
-		cnt++
-		if (b[0] & 0x80) == 0 {
-			break
-		}
-		if cnt > 5 {
-			return 0, fmt.Errorf("VarInt too big")
-		}
-	}
-	return int32(val), nil
+	return readVarInt(func() (byte, error) {
+		_, err := io.ReadFull(r, b[:])
+		return b[0], err
+	})
 }
 
 type PacketPlayerAction struct {

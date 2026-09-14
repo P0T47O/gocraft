@@ -102,7 +102,7 @@ func CreateNewSave(name string, seed int64) (string, error) {
 		return "", err
 	}
 
-	err = os.WriteFile(filepath.Join(path, levelFile), bytes, 0o644)
+	err = writeSaveFile(filepath.Join(path, levelFile), bytes)
 	return path, err
 }
 

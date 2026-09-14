@@ -460,7 +460,7 @@ func requestMissingChunks() {
 	pPos := camera.Position
 	cx := int(math.Floor(float64(pPos.X) / 16.0))
 	cz := int(math.Floor(float64(pPos.Z) / 16.0))
-	renderRadius := 16
+	renderRadius := worldRenderRadius
 	maxRequestsPerFrame := 32 // Increased for faster loading
 
 	requestCount := 0

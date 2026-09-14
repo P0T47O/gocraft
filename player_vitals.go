@@ -24,6 +24,7 @@ type PlayerVitals struct {
 	dryTicks               int
 	lastY                  float64
 	grace                  int
+	respawnRequested       bool // Server-owned: pin search chunks until respawn completes.
 }
 
 func (p *PlayerEntity) initVitals() {
@@ -201,6 +202,27 @@ func (s *Server) updatePlayerVitals() {
 
 // Search actual loaded blocks near the saved anchor, never teleport into a
 // procedural approximation of an edited or still-loading chunk.
+func (s *Server) pendingRespawnChunks() map[chunkKey]bool {
+	keys := make(map[chunkKey]bool)
+	s.World.entitiesMu.RLock()
+	defer s.World.entitiesMu.RUnlock()
+	s.ClientsMu.RLock()
+	defer s.ClientsMu.RUnlock()
+	for _, e := range s.World.entities {
+		p, ok := e.(*PlayerEntity)
+		if !ok || !p.dead() || !p.Vitals.respawnRequested || s.Clients[p.UUID] == nil {
+			continue
+		}
+		x, z := int(math.Floor(p.Vitals.SpawnX+.5)), int(math.Floor(p.Vitals.SpawnZ+.5))
+		for cx := divFloor(x-16, chunkWidth); cx <= divFloor(x+16, chunkWidth); cx++ {
+			for cz := divFloor(z-16, chunkWidth); cz <= divFloor(z+16, chunkWidth); cz++ {
+				keys[chunkKey{X: cx, Z: cz}] = true
+			}
+		}
+	}
+	return keys
+}
+
 func (s *Server) safeRespawn(v *PlayerVitals) (float64, float64, float64, bool) {
 	ax, az := int(math.Floor(v.SpawnX+0.5)), int(math.Floor(v.SpawnZ+0.5))
 	pending := false
@@ -251,6 +273,7 @@ func (s *Server) respawnPlayer(p *PlayerEntity) {
 	if !p.dead() {
 		return
 	}
+	p.Vitals.respawnRequested = true
 	x, y, z, ok := s.safeRespawn(p.Vitals)
 	if !ok {
 		s.sendVitals(p)

@@ -10,10 +10,13 @@ type meshTintCache struct {
 
 func (a *RenderAssets) buildMeshTintCache(seed uint32, baseX, baseZ int) *meshTintCache {
 	c := &meshTintCache{}
-	var biomes [chunkWidth + 2][chunkWidth + 2]int
+	var colors [chunkWidth + 2][chunkWidth + 2][2]rl.Color
 	for x := -1; x <= chunkWidth; x++ {
 		for z := -1; z <= chunkWidth; z++ {
-			biomes[x+1][z+1] = getBiome(seed, baseX+x, baseZ+z)
+			e := sampleEnvironment(seed, baseX+x, baseZ+z)
+			for pass := 0; pass < 2; pass++ {
+				colors[x+1][z+1][pass] = a.environmentColor(e, pass == 1)
+			}
 			c.climate[x+1][z+1] = a.getClimateColor(seed, baseX+x, baseZ+z)
 		}
 	}
@@ -23,10 +26,10 @@ func (a *RenderAssets) buildMeshTintCache(seed uint32, baseX, baseZ int) *meshTi
 				var r, g, b float32
 				for dx := -1; dx <= 1; dx++ {
 					for dz := -1; dz <= 1; dz++ {
-						cr, cg, cb := a.getBiomeBaseColor(biomes[x+dx+1][z+dz+1], pass == 1)
-						r += cr
-						g += cg
-						b += cb
+						col := colors[x+dx+1][z+dz+1][pass]
+						r += float32(col.R)
+						g += float32(col.G)
+						b += float32(col.B)
 					}
 				}
 				color := rl.NewColor(uint8(r/9), uint8(g/9), uint8(b/9), 255)
@@ -39,4 +42,15 @@ func (a *RenderAssets) buildMeshTintCache(seed uint32, baseX, baseZ int) *meshTi
 		}
 	}
 	return c
+}
+
+func (a *RenderAssets) environmentColor(e environmentSample, water bool) rl.Color {
+	var r, g, b float32
+	for i, w := range e.weights {
+		cr, cg, cb := a.getBiomeBaseColor(regionBiomes[i], water)
+		r += cr * w
+		g += cg * w
+		b += cb * w
+	}
+	return rl.NewColor(uint8(r), uint8(g), uint8(b), 255)
 }

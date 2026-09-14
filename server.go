@@ -232,6 +232,9 @@ func (s *Server) Tick() {
 	s.ClientsMu.RUnlock()
 
 	if len(playerPositions) > 0 {
+		// A dead player's camera may be far from their spawn anchor. Generation
+		// for safeRespawn must survive GC until the client can finish respawning.
+		respawnChunks := s.pendingRespawnChunks()
 		// Define unload callback to notify clients (Optional, but good for sync)
 		onUnload := func(cx, cz int) {
 			s.Broadcast(&PacketUnloadChunk{CX: int32(cx), CZ: int32(cz)})
@@ -259,6 +262,9 @@ func (s *Server) Tick() {
 
 		toRemove := make([]chunkKey, 0)
 		for key := range s.World.chunks {
+			if respawnChunks[key] {
+				continue
+			}
 			// Check if chunk is far from ALL players
 			keep := false
 			for _, pos := range playerPositions {
@@ -305,6 +311,8 @@ func (s *Server) Tick() {
 			if chunk.dirty {
 				if err := SaveChunk(s.SavePath, chunk, key.X, key.Z); err != nil {
 					fmt.Printf("Error saving chunk %d,%d during unload: %v\n", key.X, key.Z, err)
+					// Keep dirty data resident so a later tick/save can retry.
+					continue
 				}
 			}
 

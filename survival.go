@@ -31,24 +31,7 @@ func saveSurvivalPlayers(root string, world *World) error {
 		return err
 	}
 	path := filepath.Join(root, "players.json")
-	f, err := os.CreateTemp(root, "players-*.tmp")
-	if err != nil {
-		return err
-	}
-	temp := f.Name()
-	defer os.Remove(temp)
-	if _, err = f.Write(b); err != nil {
-		f.Close()
-		return err
-	}
-	if err = f.Sync(); err != nil {
-		f.Close()
-		return err
-	}
-	if err = f.Close(); err != nil {
-		return err
-	}
-	return os.Rename(temp, path)
+	return writeSaveFile(path, b)
 }
 
 func loadSurvivalPlayers(root string, world *World) error {

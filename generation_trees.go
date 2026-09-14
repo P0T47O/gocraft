@@ -15,22 +15,10 @@ func sampleTreeAnchor(seed uint32, x, z int) (treeAnchor, bool) {
 		(c.top != blockGrass && c.top != blockDirt && c.top != blockSnow) {
 		return a, false
 	}
-	chance := float32(0.005)
-	switch c.biomeID {
-	case BiomeForest:
-		chance = 0.010
-	case BiomeDeepForest:
-		chance = 0.04
-	case BiomeBirchForest:
-		chance = 0.012
-		a.log, a.leaves = blockLogBirch, blockLeavesBirch
-	case BiomeTaiga:
-		chance = 0.015
+	w := c.environment.weights
+	chance := (.0005*w[regionPlains] + .012*w[regionForest] + .015*w[regionTaiga] + .001*w[regionMountain]) * (1 - smoothstep(.25, .65, c.slope))
+	if w[regionTaiga] > w[regionForest]+w[regionPlains] {
 		a.log, a.leaves, a.spruce = blockLogSpruce, blockLeavesSpruce, true
-	case BiomePlains, BiomeSavanna:
-		chance = 0.0005
-	case BiomeDesert, BiomeIceSpikes, BiomeSnowyTundra:
-		return a, false
 	}
 	density := fbm2(seed+99, float32(x)*0.02, float32(z)*0.02)
 	if density < -0.1 {

@@ -1070,7 +1070,7 @@ in vec2 vertexTexCoord;
 in vec4 vertexColor;
 out vec2 fragTexCoord;
 out vec4 fragColor;
-out float fragDist;
+out vec2 fragOffset;
 uniform mat4 mvp;
 uniform mat4 matModel;
 uniform vec3 viewPos;
@@ -1079,19 +1079,19 @@ void main()
     fragTexCoord = vertexTexCoord;
     fragColor = vertexColor;
     vec4 worldPos = matModel * vec4(vertexPosition, 1.0);
-    fragDist = length(worldPos.xyz - viewPos);
+    fragOffset = worldPos.xz - viewPos.xz;
     gl_Position = mvp * vec4(vertexPosition, 1.0);
 }`
 	fragment := `#version 330
 in vec2 fragTexCoord;
 in vec4 fragColor;
-in float fragDist;
+in vec2 fragOffset;
 out vec4 finalColor;
 uniform sampler2D texture0;
 uniform vec4 colDiffuse;
 uniform vec4 fogColor;
-uniform float fogDensity;
-uniform int fogMode; // 0: linear, 1: exp, 2: exp2
+uniform float fogStart;
+uniform float fogEnd;
 
 void main()
 {
@@ -1099,19 +1099,8 @@ void main()
     vec4 color = texelColor * colDiffuse * fragColor;
     if (color.a < 0.5) discard;
 
-    float fogFactor = 0.0;
-    if (fogMode == 0) {
-        float fogStart = 160.0; // Increased from 48.0
-        float fogEnd = 240.0;   // Increased from 160.0 to match 16 chunks * 16 blocks = 256
-        fogFactor = (fogEnd - fragDist) / (fogEnd - fogStart);
-    } else if (fogMode == 1) {
-        fogFactor = exp(-fragDist * fogDensity);
-    } else if (fogMode == 2) {
-        fogFactor = exp(-pow(fragDist * fogDensity, 2.0));
-    }
-    fogFactor = clamp(fogFactor, 0.0, 1.0);
-    
-    finalColor = mix(fogColor, color, fogFactor);
+    float fogAmount = smoothstep(fogStart, fogEnd, length(fragOffset));
+    finalColor = vec4(mix(color.rgb, fogColor.rgb, fogAmount), color.a);
 }`
 	return rl.LoadShaderFromMemory(vertex, fragment)
 }

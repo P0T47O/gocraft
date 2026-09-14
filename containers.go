@@ -327,23 +327,7 @@ func (s *Server) saveContainers() error {
 	if err = os.MkdirAll(s.SavePath, 0755); err != nil {
 		return err
 	}
-	f, err := os.CreateTemp(s.SavePath, "containers-*.tmp")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(f.Name())
-	if _, err = f.Write(b); err != nil {
-		f.Close()
-		return err
-	}
-	if err = f.Sync(); err != nil {
-		f.Close()
-		return err
-	}
-	if err = f.Close(); err != nil {
-		return err
-	}
-	return os.Rename(f.Name(), filepath.Join(s.SavePath, "containers.json"))
+	return writeSaveFile(filepath.Join(s.SavePath, "containers.json"), b)
 }
 func (s *Server) loadContainers() error {
 	b, err := os.ReadFile(filepath.Join(s.SavePath, "containers.json"))

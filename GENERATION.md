@@ -1,23 +1,63 @@
 # World generation
 
+## Classic biome baseline
+
+The current generator is inspired by the Java release-1.0 era, not a port of
+Minecraft's algorithm or a seed-compatible implementation. It generates plains,
+mixed oak/birch forest, desert, snowy spruce taiga, snowy plains, and extreme
+hills, with ocean/frozen ocean and sandy/snowy shoreline transitions. Older
+experimental biome constants remain internal but are not selected by this path.
+
+`generation_biomes.go` now implements a continuous region model, replacing the
+earlier threshold-and-height-offset generator. Salted gradient noise determines
+climate, continentalness and mountain regions. Six nonnegative weights sum to
+one; the dominant biome ID is only a label. Each region has its own height
+profile (rolling plains/forest, dunes, cold hills, and ridged mountains), blended
+before voxel quantization. Mountain foothills follow broad region weights while
+ridge and valley fields shape the interior; no clamped mountain height offset.
+
+Surface materials use these weights plus correlated 19-block patches. Desert
+and snow boundaries can contain both materials rather than changing at the
+biome label. Central differences of unquantized height determine slope. Rock
+exposure follows slope and mountain weight, with no fixed Y=94 cutoff; high
+gentle ground stays vegetated. Deserts have sand over sandstone.
+Cold land uses full snow blocks (thin snow layers are not implemented), and
+cold coastal water freezes. Forests mix oak with occasional birch; taiga uses
+spruce; desert and snowy-plain interiors are treeless, while mixed edges may
+carry neighboring vegetation. Tree density fades using the same region weights
+and slope. Foliage/water tint also blends weights. Grass and flowers use
+spatial patches, while desert decoration uses cacti and dead bushes.
+
+This is a first subset: no swamp, mushroom island, river network, structures,
+thin snow, or new biome-specific animal spawn rules are implemented here.
+The heightfield does not reproduce original extreme-hills overhangs. Existing
+caves and ore generation are unchanged. Tree crowns still use simple templates.
+
+No old-generator compatibility is maintained during this development phase.
+Create a new world to inspect the new generator. Existing saves are not deleted
+or migrated automatically.
+
+`TestGenerationClassicBiomeCoverage` samples five seeds on a 64-block grid over
+[-4096,4096] in X/Z, checks every selected biome, surfaces, ice, classification
+agreement, sampled adjacent-column continuity and mountain/plains separation.
+These distribution checks are fixtures, not claims about every possible seed.
+
 Newly generated chunks now use a shared terrain column sample for terrain height,
 surface/filler materials, sea filling, ice, and procedural terrain queries.
 Height means the first voxel above the solid surface; solid terrain ends at
-height minus one. Height is clamped to 2 through chunkHeight minus one, preserving
+height minus one. The bounded profiles leave building headroom, preserving
 bedrock at Y=0. Water fills up to Y=61 wherever terrain is below sea level.
 Procedural queries outside the world height return air.
 
-The four terrain/climate noise octaves are normalized to [-1,1] before spline
-evaluation. Previously their summed amplitude reached 1.875, causing some seeds
-(including 12345 near spawn) to clip broad regions at the world's Y=255 ceiling.
-New terrain leaves building headroom. This also changes new biome distributions.
+The old height spline and duplicate biome classifier have been removed. Legacy
+value noise remains for some decoration rolls, not the new terrain shape.
 
 Trees use deterministic world-coordinate anchors, including a two-block halo
 outside each chunk. Anchors use the terrain surface, unaffected by earlier trees.
 Each intersecting tree is replayed in ascending world X/Z order. Logs take
 precedence over leaves, and the first anchor wins equal-priority overlaps.
 Only air/leaves can be replaced; trees do not overwrite hills or water.
-Flowers are tested before tall grass, making both roses and dandelions reachable.
+Flower patches are tested before tall grass, making both flower types reachable.
 
 Caves intersect two smooth, continuous 3D world-coordinate noise fields. They
 preserve Y=0 through Y=3, the upper eight terrain layers, all ocean columns, and
@@ -42,6 +82,19 @@ player edits. The existing terrain/biome noise still uses float32 coordinates,
 so precision at extremely distant coordinates remains limited.
 
 ## Headless verification
+
+Optional reproducible diagnostic maps, using the real production sampler:
+
+```powershell
+$env:GOCRAFT_REVIEW_DIR = 'work/generation-review'
+go test -run TestGenerationReviewMaps -v .
+Remove-Item Env:GOCRAFT_REVIEW_DIR
+```
+
+Exports surface, hillshaded height and slope PNGs for seed 42, selecting a
+strong inland mountain and sampling a 1536-block region. These are CPU maps,
+not in-game screenshots. Transition tests check mixed sand/grass and exposed
+rock alongside high grass. Visual review remains necessary in addition to tests.
 
 With Go 1.21 or newer, run from the repository root:
 

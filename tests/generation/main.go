@@ -42,14 +42,6 @@ func run() error {
 			keep = d.Recv == nil
 		case *ast.GenDecl:
 			keep = d.Tok == token.CONST || d.Tok == token.VAR
-			// The biome value type belongs to the generation algorithm.
-			if d.Tok == token.TYPE {
-				for _, s := range d.Specs {
-					if s.(*ast.TypeSpec).Name.Name == "BiomeParams" {
-						keep = true
-					}
-				}
-			}
 		}
 		if keep {
 			if err := format.Node(&out, fset, decl); err != nil {
@@ -80,7 +72,7 @@ func run() error {
 	if err := os.WriteFile(filepath.Join(dir, "world_gen.go"), out.Bytes(), 0600); err != nil {
 		return err
 	}
-	for _, name := range []string{"generation_terrain.go", "generation_trees.go", "generation_test.go"} {
+	for _, name := range []string{"generation_biomes.go", "generation_terrain.go", "generation_trees.go", "generation_test.go", "generation_biomes_test.go", "generation_review_test.go"} {
 		data, err := os.ReadFile(name)
 		if err != nil {
 			return err

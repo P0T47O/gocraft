@@ -243,8 +243,7 @@ func generateChunkData(seed uint32, cx, cz int, chunk *Chunk) {
 				continue
 			}
 			wx, wz := cx*chunkWidth+x, cz*chunkWidth+z
-			r := (hash2(seed+4, wx, wz) + 1) * 0.5
-			b := vegetationBlock(col.biomeID, col.top, r)
+			b := vegetationAt(seed, wx, wz, col)
 			if b != blockAir {
 				blocks[x][y][z] = b
 				heightMap[x][z] = max(heightMap[x][z], int16(y+1))
@@ -270,82 +269,7 @@ func blockAtProcedural(seed uint32, x, y, z int) byte {
 	return sampleTerrainColumn(seed, x, z).blockAt(seed, x, y, z)
 }
 
-// Terrain Parameters
-const (
-	seaLevel            = 62.0
-	continentalBaseFreq = 1.0 / 1200.0
-	erosionBaseFreq     = 1.0 / 600.0
-	weirdnessBaseFreq   = 1.0 / 400.0 // Peaks & Valleys
-	warpFreq            = 1.0 / 400.0
-	warpAmp             = 25.0
-	detailFreq          = 1.0 / 50.0
-)
-
-// Spline function to calculate target height based on noise parameters
-func calculateSplineHeight(c, e, pv float32) float32 {
-	// 1. Continentalness Base (Ocean vs Land)
-	// Deep Ocean -> Shelf -> Coast -> Inland
-	offshore := lerp(seaLevel-45.0, seaLevel-10.0, smoothstep(-1.1, -0.4, c))
-	inland := lerp(seaLevel+2.0, seaLevel+30.0, smoothstep(0.0, 1.0, c))
-
-	base := lerp(offshore, inland, smoothstep(-0.15, 0.15, c))
-
-	// 2. Erosion (Roughness)
-	// -1.0 (Rough/Mountain) -> 1.0 (Flat/Plains)
-	// Invert for calculation: 0.0 (Mountain) .. 1.0 (Flat)
-	erosionFactor := (e + 1.0) * 0.5
-
-	// 3. Weirdness / Peaks & Valleys (PV)
-	// User Logic:
-	// - Negative PV: Jagged, sharp peaks.
-	// - Positive PV: Shattered, steep terrain (Plateaus/Badlands style).
-	// - Near Zero: Rivers / Valleys.
-
-	var terrainShape float32
-
-	if pv < 0 {
-		// NEGATIVE WEIRDNESS: Jagged Peaks
-		// Logic: Deep valleys at 0, Sharp peaks at -1
-		// Use squared/cubed magnitude to sharpen
-		val := abs(pv)
-		// Sharp peak shape: Rise slowly then spike
-		peak := val * val * val    // 0.1->0.001, 0.9->0.73
-		terrainShape = peak * 70.0 // Very high peaks
-	} else {
-		// POSITIVE WEIRDNESS: Shattered / Plateau
-		// Logic: Rise quickly to a plateau/terrace
-		// Reduce plateau height to 35.0 (was 50.0) to make them less dominant
-		val := pv
-		// Smoothstep to create a "cliff" effect: 0..0.2 low, 0.2..0.8 steep rise, 0.8..1.0 high flat
-		plateau := smoothstep(0.1, 0.4, val)*0.7 + smoothstep(0.6, 0.9, val)*0.3
-		terrainShape = plateau * 35.0
-	}
-
-	// River / Valley carving (PV near 0)
-	// If erosion is high (Flat areas), PV~0 creates rivers
-	riverDepth := float32(0.0)
-	// Ease the river condition slightly to ensure they appear
-	if abs(pv) < 0.1 && erosionFactor > 0.3 {
-		// Carve down to slightly below sea level
-		t := 1.0 - (abs(pv) / 0.1) // 1.0 at center, 0.0 at edge
-		riverDepth = -15.0 * t
-	}
-
-	// 4. Final Blend based on Erosion
-	// Dampen terrainShape based on Erosion.
-	// Previous: smoothstep(0.2, 0.8, erosionFactor)
-	// New: smoothstep(0.0, 0.5, erosionFactor)
-	// This means anything with Erosion Factor > 0.5 (e > 0.0) is effectively FULL Plains.
-	// Erosion Factor < 0.0 (e < -1.0) is full Mountain.
-	dampener := 1.0 - smoothstep(0.0, 0.5, erosionFactor)
-
-	// Even in plains, allow slight rolling (pv * 5)
-	plainsRolling := pv * 5.0
-
-	finalOffset := lerp(plainsRolling, terrainShape, dampener)
-
-	return base + finalOffset + riverDepth
-}
+const seaLevel = 62.0
 
 func terrainHeight(seed uint32, x, z int) int {
 	return sampleTerrainColumn(seed, x, z).height
@@ -357,43 +281,8 @@ func rawTerrainHeight(seed uint32, x, z int) int {
 }
 
 func terrainShapeSample(seed uint32, x, z int) (int, float32) {
-	xf := float32(x)
-	zf := float32(z)
-
-	// 1. Domain Warping
-	qX := fbm2(seed, xf*warpFreq, zf*warpFreq)
-	qZ := fbm2(seed+1, xf*warpFreq, zf*warpFreq)
-	warpX := xf + qX*warpAmp
-	warpZ := zf + qZ*warpAmp
-
-	// 2. Sample Noise Channels
-	// Continentalness (Large Scale)
-	cont := fbm2(seed+2, warpX*continentalBaseFreq, warpZ*continentalBaseFreq)
-
-	// Erosion (Medium Scale)
-	erosion := fbm2(seed+3, warpX*erosionBaseFreq, warpZ*erosionBaseFreq)
-
-	// Weirdness / Peaks&Valleys (Small Scale)
-	pv := fbm2(seed+4, warpX*weirdnessBaseFreq, warpZ*weirdnessBaseFreq)
-
-	// 3. Compute Target Height via Spline
-	targetHeight := calculateSplineHeight(cont, erosion, pv)
-
-	// 4. Add Micro-Detail
-	detail := fbm2(seed+5, xf*0.03, zf*0.03) * 3.0
-
-	finalHeight := targetHeight + detail
-
-	// 5. Clamping Strictness
-	// Only clamp deeply inland areas to ensure buildable flat lands
-	// Allow coast and near-coast to slope naturally
-	if cont > 0.3 {
-		if finalHeight < seaLevel {
-			finalHeight = seaLevel
-		}
-	}
-
-	return int(finalHeight), cont
+	e := sampleEnvironment(seed, x, z)
+	return e.height, e.land
 }
 
 const (
@@ -415,141 +304,18 @@ const (
 	BiomeIceSpikes   = 18
 )
 
-type BiomeParams struct {
-	ID          int
-	Temperature float32 // -1.0 (Cold) to 1.0 (Hot)
-	Humidity    float32 // -1.0 (Dry) to 1.0 (Wet)
-	Scale       float32
-	Effect      string
-}
-
-// Noise Frequencies for Biomes (Low frequency for large zones)
-const (
-	tempFreq = 1.0 / 800.0
-	humFreq  = 1.0 / 800.0
-)
-
 func getClimate(seed uint32, x, z int) (float32, float32) {
-	xf := float32(x)
-	zf := float32(z)
-	temp := fbm2(seed+10, xf*tempFreq, zf*tempFreq)
-	hum := fbm2(seed+11, xf*humFreq, zf*humFreq)
-	// Clamp roughly to -1..1 or just return raw?
-	// Raw is fine, typical range -1.2 to 1.2
-	return temp, hum
+	e := sampleEnvironment(seed, x, z)
+	return e.temperature, e.humidity
 }
 
 func getBiome(seed uint32, x, z int) int {
-	xf := float32(x)
-	zf := float32(z)
-
-	// 1. Continentalness (Controls Ocean/Land)
-	cont := fbm2(seed+2, xf*continentalBaseFreq, zf*continentalBaseFreq)
-	// Cont: -1.0 (Deep Ocean) .. 1.0 (Inland)
-
-	// 2. Temperature (Controls Cold/Hot)
-	temp := fbm2(seed+10, xf*tempFreq, zf*tempFreq)
-
-	// 3. Humidity (Controls Dry/Wet)
-	hum := fbm2(seed+11, xf*humFreq, zf*humFreq)
-
-	// --- Ocean Logic ---
-	if cont < -0.25 {
-		if cont < -0.6 {
-			// Deep Ocean
-			return BiomeDeepOcean
-		}
-		if temp < -0.5 {
-			return BiomeFrozenOcean
-		}
-		return BiomeOcean
-	}
-
-	// --- Land Logic (Temperature/Humidity Grid) ---
-
-	// Normalize Temp/Hum roughly to -1..1 range if noise is standard
-	// Our fbm2 returns roughly -1..1 or slightly more.
-
-	if temp < -0.4 {
-		// COLD BIOMES
-		if hum < -0.4 {
-			return BiomeIceSpikes
-		} else if hum > 0.4 {
-			return BiomeTaiga
-		}
-		return BiomeSnowyTundra
-	} else if temp > 0.4 {
-		// HOT BIOMES
-		if hum < -0.4 {
-			return BiomeDesert
-		} else if hum > 0.4 {
-			return BiomeDeepForest // Jungle
-		}
-		return BiomeSavanna // or Plains
-	} else {
-		// TEMPERATE BIOMES
-		if hum < -0.3 {
-			return BiomePlains
-		} else if hum > 0.6 {
-			// Prefer Birch in slightly wetter temperate, Oak in mid
-			return BiomeBirchForest
-		}
-		return BiomeForest
-	}
-}
-
-// classifyBiomeFromNoise determines biome from pre-computed noise values,
-// avoiding redundant fbm2 calls when noise is already available.
-func classifyBiomeFromNoise(cont, temp, hum float32) int {
-	if cont < -0.25 {
-		if cont < -0.6 {
-			return BiomeDeepOcean
-		}
-		if temp < -0.5 {
-			return BiomeFrozenOcean
-		}
-		return BiomeOcean
-	}
-	if temp < -0.4 {
-		if hum < -0.4 {
-			return BiomeIceSpikes
-		} else if hum > 0.4 {
-			return BiomeTaiga
-		}
-		return BiomeSnowyTundra
-	} else if temp > 0.4 {
-		if hum < -0.4 {
-			return BiomeDesert
-		} else if hum > 0.4 {
-			return BiomeDeepForest
-		}
-		return BiomeSavanna
-	} else {
-		if hum < -0.3 {
-			return BiomePlains
-		} else if hum > 0.6 {
-			return BiomeBirchForest
-		}
-		return BiomeForest
-	}
+	return sampleEnvironment(seed, x, z).biome
 }
 
 // Helper to determine if a biome is generally water/ocean
 func isOceanBiome(biome int) bool {
 	return biome == BiomeOcean || biome == BiomeDeepOcean || biome == BiomeFrozenOcean
-}
-
-// Keep oceanWeight for terrain spline (using Continentalness directly there instead of biome ID)
-// But biomeValue was used.
-// We should update biomeValue to return just continentalness for terrain shape calculation
-// OR update terrainHeight to use continentalness directly.
-// Let's repurpose biomeValue to actually return Continentalness for now to minimize diffs in terrainHeight,
-// but `getBiome` will be used for block placement.
-func getContinentalness(seed uint32, x, z int) float32 {
-	xf := float32(x)
-	zf := float32(z)
-	cont := fbm2(seed+2, xf*continentalBaseFreq, zf*continentalBaseFreq)
-	return cont
 }
 
 func fbm2(seed uint32, x, z float32) float32 {
