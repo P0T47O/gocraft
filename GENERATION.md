@@ -39,7 +39,10 @@ Rivers carve the already-blended heightfield along a warped gradient-noise
 contour at a 900-block scale. Gradient normalization approximates distance in
 blocks; a separate noise varies channel width. Broad valley shoulders increase
 with terrain height, while squared blending preserves the outer foothills.
-The core riverbed is Y=57, and water uses the existing Y=61 surface. Ordinary
+The channel bed varies around Y=58, and water uses the existing Y=61 surface.
+A separate low, irregular shelf separates the waterline from the outer valley;
+signed contour distance and a broad noise vary the width on each bank separately.
+This replaces the earlier symmetric single-curve bowl. Ordinary
 riverbeds use gravel over dirt; desert beds use sand, and cold channels freeze.
 The ocean/shore labels remain distinct from inland carved river labels. Trees
 cannot anchor below sea level; slope and surface rules govern banks.

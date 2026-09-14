@@ -11,7 +11,7 @@ import (
 	"github.com/go-gl/mathgl/mgl32"
 )
 
-const worldRenderRadius = 16
+const worldRenderRadius = defaultRenderDistance
 
 // Leave most of the view clear, with a soft fade before the circular chunk
 // boundary. The margin covers chunk-grid rounding and camera motion in a chunk.
@@ -188,7 +188,7 @@ func (w *World) Draw(assets *RenderAssets, camera rl.Camera3D) {
 		skyColor := rl.NewColor(180, 210, 255, 255) // Nice sky blue
 		platform.Uniform4f(platform.GetUniformLocation(sid, "fogColor"), float32(skyColor.R)/255.0, float32(skyColor.G)/255.0, float32(skyColor.B)/255.0, 1.0)
 
-		fogStart, fogEnd := worldFogRange(worldRenderRadius)
+		fogStart, fogEnd := worldFogRange(renderDistance())
 		platform.Uniform1f(platform.GetUniformLocation(sid, "fogStart"), fogStart)
 		platform.Uniform1f(platform.GetUniformLocation(sid, "fogEnd"), fogEnd)
 
@@ -204,7 +204,7 @@ func (w *World) Draw(assets *RenderAssets, camera rl.Camera3D) {
 	cx := int(math.Floor(float64(camera.Position.X) / float64(chunkWidth)))
 	cz := int(math.Floor(float64(camera.Position.Z) / float64(chunkWidth)))
 	r.visible = r.visible[:0]
-	for _, offset := range r.radiusOffsets(worldRenderRadius) {
+	for _, offset := range r.radiusOffsets(renderDistance()) {
 		chunkX, chunkZ := cx+offset.dx, cz+offset.dz
 		chunk := w.getChunkIfGenerated(chunkX, chunkZ)
 		if chunk == nil {

@@ -223,3 +223,19 @@ This project is licensed under the GNU General Public License v3.0 - see the [LI
 - **Raylib**: Licensed under the zlib License. See [LICENSE_raylib.txt](LICENSE_raylib.txt).
 - **mathgl**: Licensed under the BSD-2-Clause License.
 - **klauspost/compress**: Licensed under the BSD-3-Clause / Apache 2.0 License.
+# Render distance
+
+Settings includes a render-distance slider (8–32 chunks, default 24). Changes
+are saved in settings.json and applied to client chunk requests, visibility,
+fog and client unloading. The server accepts bounded requests through the
+maximum supported range and keeps an additional unloading margin. Its initial
+prefetch remains 16 chunks; client requests fill the selected distance.
+Higher settings increase mesh memory, loading time and draw cost; 32 chunks
+cover roughly four times the area of 16. River generation changes require new
+chunks/a new world; existing saved terrain is not regenerated.
+# Code navigation
+
+- [Feature-to-file index](CODE_INDEX.md): entry points, subsystem ownership and tests.
+- [Generated symbol index](CODE_SYMBOLS.md): types and functions grouped by file.
+- Update after structural changes: `go run ./tools/codeindex -write`.
+- Check before committing: `go run ./tools/codeindex -check`.

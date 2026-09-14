@@ -96,12 +96,23 @@ func sampleEnvironment(seed uint32, x, z int) environmentSample {
 	// Carve after the regional height blend, never switch entire biome profiles.
 	// Sea-level water is deliberate: this is not a flow/erosion simulation.
 	baseElevation := elevation
-	distance := riverDistance(seed, wx, wz)
+	signedDistance := riverSignedDistance(seed, wx, wz)
+	distance := abs(signedDistance)
 	channelWidth := 4 + terrainNoise(seed, wx/170, wz/170, 61)*2
-	width := float32(24) + max(float32(0), elevation-seaLevel)*1.5
-	bank := 1 - smoothstep(channelWidth, width, distance)
-	bank *= bank // Keep outer foothills intact; concentrate carving near the channel.
-	elevation = min(elevation, lerp(seaLevel-5, elevation, 1-bank))
+	side := float32(1)
+	if signedDistance < 0 {
+		side = -1
+	}
+	asymmetry := side * terrainNoise(seed, wx/230, wz/230, 62)
+	terraceWidth := channelWidth + 9 + 7*(1+asymmetry)
+	width := (terraceWidth + 18 + max(float32(0), elevation-seaLevel)*1.4) * (1 + .3*asymmetry)
+	bank := 1 - smoothstep(terraceWidth, width, distance)
+	bank *= bank
+	// A low irregular shelf interrupts the old single bowl-shaped bank.
+	shelf := float32(seaLevel+1.8) + terrainNoise(seed, wx/35, wz/35, 63)*1.2
+	bed := float32(seaLevel-4) + terrainNoise(seed, wx/55, wz/55, 64)*1.2
+	channel := lerp(bed, shelf, smoothstep(channelWidth*.4, channelWidth+5, distance))
+	elevation = min(elevation, lerp(channel, elevation, 1-bank))
 	if baseElevation >= seaLevel-2 && bank > 0 && elevation < seaLevel {
 		biome = BiomeRiver
 		if cold > .5 {
@@ -113,13 +124,13 @@ func sampleEnvironment(seed uint32, x, z int) environmentSample {
 
 // Distance to a continuous, warped noise contour, approximately in blocks.
 // Gradient normalization keeps channel width less sensitive to noise steepness.
-func riverDistance(seed uint32, x, z float64) float32 {
+func riverSignedDistance(seed uint32, x, z float64) float32 {
 	field := func(x, z float64) float32 { return terrainNoise(seed, x/900, z/900, 60) + .12 }
 	v := field(x, z)
 	dx := (field(x+2, z) - field(x-2, z)) / 4
 	dz := (field(x, z+2) - field(x, z-2)) / 4
 	gradient := max(float32(.00015), float32(math.Sqrt(float64(dx*dx+dz*dz))))
-	return abs(v) / gradient
+	return v / gradient
 }
 
 // Correlated surface patches rather than independent per-voxel dithering.

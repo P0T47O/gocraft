@@ -250,6 +250,10 @@ func drawSettingsMenu(l SurvivalLayout, fromPause bool) {
 		}
 	}
 	l.Text("CONTROLS", 28, 328, 14, invAccent)
+	l.Text(fmt.Sprintf("RENDER DISTANCE: %d CHUNKS (%d BLOCKS)", settings.RenderDistance, settings.RenderDistance*chunkWidth), 354, 494, 12, invMuted)
+	distance := float32(settings.RenderDistance)
+	ui.DrawSlider(l.Rect(354, 514, 600, 24), &distance, minRenderDistance, maxRenderDistance, "render_distance")
+	settings.RenderDistance = clampRenderDistance(int(distance + .5))
 	for i, line := range []string{"WASD  Move", "Space  Jump / swim up", "Ctrl + W  Sprint", "Shift  Sneak / dive", "E  Inventory", "Esc  Pause / back"} {
 		l.Text(line, 28, 364+float32(i)*26, 14, invMuted)
 	}

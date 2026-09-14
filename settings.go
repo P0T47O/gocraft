@@ -14,6 +14,25 @@ type GameSettings struct {
 	ResolutionWidth  int
 	ResolutionHeight int
 	PlayerName       string
+	RenderDistance   int // Chunks; client-pull streaming supports live changes.
+}
+
+const minRenderDistance = 8
+const maxRenderDistance = 32
+const defaultRenderDistance = 24
+
+func renderDistance() int {
+	if currentSettings == nil {
+		return defaultRenderDistance
+	}
+	return clampRenderDistance(currentSettings.RenderDistance)
+}
+
+func clampRenderDistance(v int) int {
+	if v == 0 {
+		return defaultRenderDistance
+	}
+	return max(minRenderDistance, min(maxRenderDistance, v))
 }
 
 var currentSettings *GameSettings
@@ -32,6 +51,7 @@ func LoadSettings() *GameSettings {
 		ResolutionWidth:  1280,
 		ResolutionHeight: 720,
 		PlayerName:       "Player",
+		RenderDistance:   defaultRenderDistance,
 	}
 
 	data, err := os.ReadFile(settingsFile)
@@ -43,6 +63,7 @@ func LoadSettings() *GameSettings {
 		fmt.Println("No settings file found, using defaults.")
 	}
 
+	settings.RenderDistance = clampRenderDistance(settings.RenderDistance)
 	currentSettings = settings
 	return settings
 }
