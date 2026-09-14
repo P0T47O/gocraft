@@ -3,6 +3,8 @@ package main
 import "math"
 
 const BiomeExtremeHills = 19
+const BiomeRiver = 20
+const BiomeFrozenRiver = 21
 const (
 	regionPlains = iota
 	regionForest
@@ -19,6 +21,7 @@ type environmentSample struct {
 	height, biome                          int
 	elevation, land, temperature, humidity float32
 	weights                                [regionCount]float32
+	riverBank                              float32
 }
 
 // Gradient noise avoids interpolated random-height plateaus. Independent salts
@@ -90,7 +93,33 @@ func sampleEnvironment(seed uint32, x, z int) environmentSample {
 			biome = BiomeSnowyBeach
 		}
 	}
-	return environmentSample{height: int(elevation), elevation: elevation, biome: biome, land: land, temperature: t, humidity: h, weights: w}
+	// Carve after the regional height blend, never switch entire biome profiles.
+	// Sea-level water is deliberate: this is not a flow/erosion simulation.
+	baseElevation := elevation
+	distance := riverDistance(seed, wx, wz)
+	channelWidth := 4 + terrainNoise(seed, wx/170, wz/170, 61)*2
+	width := float32(24) + max(float32(0), elevation-seaLevel)*1.5
+	bank := 1 - smoothstep(channelWidth, width, distance)
+	bank *= bank // Keep outer foothills intact; concentrate carving near the channel.
+	elevation = min(elevation, lerp(seaLevel-5, elevation, 1-bank))
+	if baseElevation >= seaLevel-2 && bank > 0 && elevation < seaLevel {
+		biome = BiomeRiver
+		if cold > .5 {
+			biome = BiomeFrozenRiver
+		}
+	}
+	return environmentSample{height: int(elevation), elevation: elevation, biome: biome, land: land, temperature: t, humidity: h, weights: w, riverBank: bank}
+}
+
+// Distance to a continuous, warped noise contour, approximately in blocks.
+// Gradient normalization keeps channel width less sensitive to noise steepness.
+func riverDistance(seed uint32, x, z float64) float32 {
+	field := func(x, z float64) float32 { return terrainNoise(seed, x/900, z/900, 60) + .12 }
+	v := field(x, z)
+	dx := (field(x+2, z) - field(x-2, z)) / 4
+	dz := (field(x, z+2) - field(x, z-2)) / 4
+	gradient := max(float32(.00015), float32(math.Sqrt(float64(dx*dx+dz*dz))))
+	return abs(v) / gradient
 }
 
 // Correlated surface patches rather than independent per-voxel dithering.
@@ -98,13 +127,19 @@ func sampleEnvironment(seed uint32, x, z int) environmentSample {
 func surfaceFromEnvironment(seed uint32, x, z int, e environmentSample, slope float32) (byte, byte) {
 	patch := terrainNoise(seed, float64(x)/19, float64(z)/19, 40) * .16
 	snow := e.weights[regionTaiga] + e.weights[regionSnow]
+	if (e.biome == BiomeRiver || e.biome == BiomeFrozenRiver) && e.height < seaLevel {
+		if e.weights[regionDesert] > .5+patch {
+			return blockSand, blockSandstone
+		}
+		return blockGravel, blockDirt
+	}
 	if e.height < seaLevel-2 {
 		if e.height < seaLevel-8 {
 			return blockGravel, blockGravel
 		}
 		return blockSand, blockSand
 	}
-	coast := 1 - smoothstep(0, 5, abs(e.elevation-seaLevel))
+	coast := (1 - smoothstep(0, 5, abs(e.elevation-seaLevel))) * (1 - e.riverBank)
 	sand := max(e.weights[regionDesert], coast*(1-snow))
 	rock := smoothstep(.38, .95, slope) * smoothstep(.1, .55, e.weights[regionMountain])
 	if rock > .5+patch {

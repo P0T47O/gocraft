@@ -72,7 +72,7 @@ func run() error {
 	if err := os.WriteFile(filepath.Join(dir, "world_gen.go"), out.Bytes(), 0600); err != nil {
 		return err
 	}
-	for _, name := range []string{"generation_biomes.go", "generation_terrain.go", "generation_trees.go", "generation_test.go", "generation_biomes_test.go", "generation_review_test.go"} {
+	for _, name := range []string{"generation_biomes.go", "generation_terrain.go", "generation_trees.go", "generation_test.go", "generation_biomes_test.go", "generation_review_test.go", "generation_river_test.go"} {
 		data, err := os.ReadFile(name)
 		if err != nil {
 			return err

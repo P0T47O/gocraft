@@ -34,7 +34,7 @@ func (c terrainColumn) blockAt(seed uint32, x, y, z int) byte {
 		if y >= seaLevel {
 			return blockAir
 		}
-		if y == seaLevel-1 && (c.biomeID == BiomeFrozenOcean || c.biomeID == BiomeTaiga || c.biomeID == BiomeSnowyBeach || c.biomeID == BiomeSnowyTundra) {
+		if y == seaLevel-1 && (c.biomeID == BiomeFrozenOcean || c.biomeID == BiomeFrozenRiver || c.biomeID == BiomeTaiga || c.biomeID == BiomeSnowyBeach || c.biomeID == BiomeSnowyTundra) {
 			return blockIce
 		}
 		return blockWater

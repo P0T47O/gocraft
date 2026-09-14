@@ -23,11 +23,11 @@ func TestGenerationClassicBiomeCoverage(t *testing.T) {
 					if c.environment.weights[regionTaiga]+c.environment.weights[regionSnow] > .8 && c.top != blockSnow {
 						t.Fatal("missing snow")
 					}
-				case BiomeFrozenOcean:
+				case BiomeFrozenOcean, BiomeFrozenRiver:
 					if c.blockAt(seed, x, int(seaLevel)-1, z) != blockIce {
 						t.Fatal("missing ice")
 					}
-				case BiomeOcean, BiomeBeach, BiomeForest, BiomePlains, BiomeExtremeHills:
+				case BiomeOcean, BiomeRiver, BiomeBeach, BiomeForest, BiomePlains, BiomeExtremeHills:
 				default:
 					t.Fatalf("unexpected later-era biome %d", c.biomeID)
 				}

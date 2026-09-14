@@ -28,10 +28,27 @@ carry neighboring vegetation. Tree density fades using the same region weights
 and slope. Foliage/water tint also blends weights. Grass and flowers use
 spatial patches, while desert decoration uses cacti and dead bushes.
 
-This is a first subset: no swamp, mushroom island, river network, structures,
+This is a first subset: no swamp, mushroom island, hydrological river network, structures,
 thin snow, or new biome-specific animal spawn rules are implemented here.
 The heightfield does not reproduce original extreme-hills overhangs. Existing
 caves and ore generation are unchanged. Tree crowns still use simple templates.
+
+### River channels
+
+Rivers carve the already-blended heightfield along a warped gradient-noise
+contour at a 900-block scale. Gradient normalization approximates distance in
+blocks; a separate noise varies channel width. Broad valley shoulders increase
+with terrain height, while squared blending preserves the outer foothills.
+The core riverbed is Y=57, and water uses the existing Y=61 surface. Ordinary
+riverbeds use gravel over dirt; desert beds use sand, and cold channels freeze.
+The ocean/shore labels remain distinct from inland carved river labels. Trees
+cannot anchor below sea level; slope and surface rules govern banks.
+
+This is a deterministic channel feature, NOT drainage simulation: contours can
+form loops or inland closed segments; there is no guarantee every channel
+reaches an ocean, no flow direction, and no altitude-varying water surface.
+Existing diagnostic maps and `TestGenerationRiversAndFrozenWater` exercise the
+real sampler, including river water/ice and chunk/procedural agreement.
 
 No old-generator compatibility is maintained during this development phase.
 Create a new world to inspect the new generator. Existing saves are not deleted
