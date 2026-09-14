@@ -16,6 +16,7 @@ var (
 	glEnable          = opengl32.NewProc("glEnable")
 	glDisable         = opengl32.NewProc("glDisable")
 	glBindTexture     = opengl32.NewProc("glBindTexture")
+	glTexParameteri   = opengl32.NewProc("glTexParameteri")
 	glPolygonOffset   = opengl32.NewProc("glPolygonOffset")
 
 	// Extensions (Loaded at Runtime)
@@ -86,6 +87,14 @@ func getProc(name string) uintptr {
 }
 
 // Wrappers
+// Limit atlas sampling before mip levels can combine different tiles.
+// Called on the render thread during texture initialization.
+func SetTextureMaxLevel(texture uint32, level int) {
+	glBindTexture.Call(GL_TEXTURE_2D, uintptr(texture))
+	glTexParameteri.Call(GL_TEXTURE_2D, 0x813D, uintptr(level)) // GL_TEXTURE_MAX_LEVEL
+	glBindTexture.Call(GL_TEXTURE_2D, 0)
+}
+
 func GenBuffer() uint32 {
 	var id uint32
 	syscall.Syscall(glGenBuffers, 2, 1, uintptr(unsafe.Pointer(&id)), 0)

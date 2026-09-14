@@ -41,7 +41,7 @@ func (a *RenderAssets) generateAtlas() {
 	count := len(paths)
 	cols := 0
 	rows := 0
-	size := 16 // Standard block size
+	size := atlasCellSize // Aligned tiles plus extruded edges for mip isolation.
 
 	// Simple sqrt approximation for grid
 	side := 1
@@ -127,13 +127,20 @@ func (a *RenderAssets) generateAtlas() {
 		// Calculate pos
 		col := i % cols
 		row := i / cols
-		x := int32(col * size)
-		y := int32(row * size)
+		x := int32(col*size + atlasPadding)
+		y := int32(row*size + atlasPadding)
 
 		// Draw to atlas
-		src := rl.NewRectangle(0, 0, float32(img.Width), float32(img.Height))
-		dst := rl.NewRectangle(float32(x), float32(y), float32(img.Width), float32(img.Height))
-		rl.ImageDraw(atlasImg, img, src, dst, rl.White)
+		colors := rl.LoadImageColors(img)
+		if len(colors) >= atlasTileSize*atlasTileSize {
+			for py := 0; py < size; py++ {
+				for px := 0; px < size; px++ {
+					color := colors[atlasSourceCoordinate(py)*atlasTileSize+atlasSourceCoordinate(px)]
+					rl.ImageDrawPixel(atlasImg, int32(col*size+px), int32(row*size+py), color)
+				}
+			}
+		}
+		rl.UnloadImageColors(colors)
 
 		// Calculate UV (normalized 0-1)
 		uvX := float32(x) / float32(atlasWidth)
@@ -147,7 +154,7 @@ func (a *RenderAssets) generateAtlas() {
 	}
 
 	tex := rl.LoadTextureFromImage(atlasImg)
-	rl.SetTextureFilter(tex, rl.FilterPoint)
+	configureWorldTexture(&tex, true)
 	rl.UnloadImage(atlasImg)
 
 	a.atlas = &TextureAtlas{

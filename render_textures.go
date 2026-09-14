@@ -105,7 +105,7 @@ func (a *RenderAssets) loadTexture(path string) rl.Texture2D {
 	}
 
 	if tex.ID != 0 {
-		rl.SetTextureFilter(tex, rl.FilterPoint)
+		configureWorldTexture(&tex, false)
 	}
 	a.textures[path] = tex
 	return tex

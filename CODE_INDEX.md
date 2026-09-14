@@ -57,6 +57,7 @@
 | 地形颜色缓存 | [mesh_tint.go](mesh_tint.go) |
 | 资源持有、初始化与释放 | [render_assets.go](render_assets.go) |
 | 纹理加载、材质、透明像素处理 | [render_textures.go](render_textures.go) |
+| 世界纹理 mipmap、图集留白与层级限制 | [render_filter.go](render_filter.go)、[render_filter_test.go](render_filter_test.go)、[render_atlas.go](render_atlas.go) |
 | 动画纹理及模型纹理切换 | [render_animation.go](render_animation.go) |
 | 面模型、面网格模板 | [render_faces.go](render_faces.go) |
 | 物品图标、图集、着色器 | [render_icons.go](render_icons.go)、[render_atlas.go](render_atlas.go)、[render_shaders.go](render_shaders.go) |

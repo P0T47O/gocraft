@@ -47,7 +47,7 @@ func (a *RenderAssets) loadAnimatedTexture(path string) rl.Texture2D {
 		rl.ImageCrop(frame, rec)
 		tex := rl.LoadTextureFromImage(frame)
 		if tex.ID != 0 {
-			rl.SetTextureFilter(tex, rl.FilterPoint)
+			configureWorldTexture(&tex, false)
 			frameList = append(frameList, tex)
 		}
 		rl.UnloadImage(frame)

@@ -188,7 +188,7 @@
 
 ## [platform/gl.go](platform/gl.go)
 
-函数/方法：`InitGL`、`getProc`、`GenBuffer`、`BindBuffer`、`BufferData`、`GenVertexArray`、`BindVertexArray`、`EnableVertexAttribArray`、`VertexAttribPointer`、`DrawElements`、`DeleteBuffer`、`DeleteVertexArray`、`UseProgram`、`UniformMatrix4fv`、`GetUniformLocation`、`ActiveTexture`、`Uniform4f`、`Uniform3f`、`Uniform1f`、`Uniform1i`、`BindTexture`、`PolygonOffset`、`Enable`、`Disable`
+函数/方法：`InitGL`、`getProc`、`SetTextureMaxLevel`、`GenBuffer`、`BindBuffer`、`BufferData`、`GenVertexArray`、`BindVertexArray`、`EnableVertexAttribArray`、`VertexAttribPointer`、`DrawElements`、`DeleteBuffer`、`DeleteVertexArray`、`UseProgram`、`UniformMatrix4fv`、`GetUniformLocation`、`ActiveTexture`、`Uniform4f`、`Uniform3f`、`Uniform1f`、`Uniform1i`、`BindTexture`、`PolygonOffset`、`Enable`、`Disable`
 
 ## [platform/mesh.go](platform/mesh.go)
 
@@ -275,6 +275,10 @@
 ## [render_faces.go](render_faces.go)
 
 函数/方法：`*RenderAssets.makeFace`、`*RenderAssets.initFaceMeshes`、`*RenderAssets.getFaceModel`、`*RenderAssets.initFaceModels`
+
+## [render_filter.go](render_filter.go)
+
+函数/方法：`configureWorldTexture`、`atlasSourceCoordinate`
 
 ## [render_icons.go](render_icons.go)
 
