@@ -51,13 +51,16 @@ func SaveChunk(savePath string, chunk *Chunk, chunkX, chunkZ int) error {
 	return nil
 }
 
-// TryLoadChunk attempts to load a chunk from disk.
-// Returns true if loaded successfully, false if file doesn't exist.
+// TryLoadChunk attempts to load a chunk from disk. A missing file is the only
+// condition that permits procedural generation. Existing but unreadable or
+// corrupt data is a fatal integrity error so it cannot be silently overwritten.
 func TryLoadChunk(savePath string, chunk *Chunk, chunkX, chunkZ int) bool {
 	err := loadChunkFile(savePath, chunkX, 0, chunkZ, &chunk.blocks, &chunk.meta)
 	if err != nil {
-		// File doesn't exist or error - needs generation
-		return false
+		if errors.Is(err, os.ErrNotExist) {
+			return false
+		}
+		panic(fmt.Errorf("load chunk %d,%d from %q: %w", chunkX, chunkZ, savePath, err))
 	}
 	// Successfully loaded from disk
 	chunk.generated = true
