@@ -8,7 +8,7 @@ import (
 )
 
 type ChunkMesh struct {
-	glMesh   *platform.Mesh
+	gpuMesh  platform.MeshHandle
 	material rl.Material
 }
 
@@ -17,9 +17,6 @@ type meshShaderState struct {
 	ready             bool
 }
 
-// meshRenderState is owned by the render thread. reset must be called at frame
-// boundaries and after any Raylib/external GL drawing; uniforms are valid only
-// for the shared view-projection matrix between resets.
 type meshRenderState struct {
 	shaders                   map[uint32]*meshShaderState
 	shader, texture           uint32
@@ -35,7 +32,7 @@ func (s *meshRenderState) reset() {
 }
 
 func (s *meshRenderState) draw(m *ChunkMesh, shader uint32, viewProj mgl32.Mat4, overrideTextureID uint32) {
-	if m == nil || m.glMesh == nil {
+	if m == nil || m.gpuMesh == nil {
 		return
 	}
 	if !s.shaderBound || s.shader != shader {
@@ -59,8 +56,6 @@ func (s *meshRenderState) draw(m *ChunkMesh, shader uint32, viewProj mgl32.Mat4,
 	}
 	if !uniforms.ready {
 		platform.UniformMatrix4fv(uniforms.mvp, 1, false, &viewProj[0])
-		// Chunk vertices are world-space. Raylib torch models can overwrite
-		// matModel on the same shader, so restore identity after each reset.
 		if uniforms.model != -1 {
 			identity := mgl32.Ident4()
 			platform.UniformMatrix4fv(uniforms.model, 1, false, &identity[0])
@@ -81,19 +76,17 @@ func (s *meshRenderState) draw(m *ChunkMesh, shader uint32, viewProj mgl32.Mat4,
 		platform.BindTexture(platform.GL_TEXTURE_2D, texture)
 		s.texture, s.textureBound = texture, true
 	}
-	m.glMesh.Draw()
+	m.gpuMesh.Draw()
 }
 
-// Draw is a standalone draw with no assumptions about caller-owned GL state.
-// World.Draw shares one meshRenderState across its meshes instead.
 func (m *ChunkMesh) Draw(shader uint32, viewProj mgl32.Mat4, overrideTextureID uint32) {
 	var state meshRenderState
 	state.draw(m, shader, viewProj, overrideTextureID)
 }
 
 func (m *ChunkMesh) unload() {
-	if m.glMesh != nil {
-		m.glMesh.Unload()
-		m.glMesh = nil
+	if m.gpuMesh != nil {
+		m.gpuMesh.Unload()
+		m.gpuMesh = nil
 	}
 }
