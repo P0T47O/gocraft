@@ -87,7 +87,7 @@ func updateGame() {
 		return
 	}
 
-	dt := rl.GetFrameTime()
+	dt := gameFrameTime()
 	assets.Update(dt)
 
 	// Packet Loop
@@ -152,7 +152,7 @@ Loop:
 	// 5 seconds interval? Or every frame?
 	// Every frame is fine, UnloadChunks is efficient enough (iterates map).
 	// But let's do it every 60 frames to be safe on CPU.
-	if rl.GetFrameTime() > 0 { // Just using valid time check, effectively always
+	if dt > 0 {
 		pPos := camera.Position
 		cx := int(math.Floor(float64(pPos.X) / 16.0))
 		cz := int(math.Floor(float64(pPos.Z) / 16.0))
