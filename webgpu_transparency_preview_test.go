@@ -133,6 +133,7 @@ func TestWebGPUTransparencyPreview(t *testing.T) {
 						if top := int(chunk.heightMap[x][z]); top > maxTop {
 							maxTop = top
 						}
+					}
 				}
 			}
 		}
