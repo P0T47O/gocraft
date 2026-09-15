@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"gocraft/platform"
 	"sync"
 	"unsafe"
@@ -40,7 +39,11 @@ func (mb *meshBuilder) addFaceSmooth(v []float32, n rl.Vector3, t []float32, col
 	}
 	mb.texcoords = append(mb.texcoords, t...)
 	base := uint32(mb.vertCount)
-	mb.indices = append(mb.indices, base, base+1, base+2, base, base+2, base+3)
+	if flipLightDiagonal(colors) {
+		mb.indices = append(mb.indices, base, base+1, base+3, base+1, base+2, base+3)
+	} else {
+		mb.indices = append(mb.indices, base, base+1, base+2, base, base+2, base+3)
+	}
 	mb.vertCount += 4
 }
 
@@ -274,51 +277,6 @@ func (a *RenderAssets) applyAO(block byte, col rl.Color, ao float32, useGrass bo
 		uint8(float32(col.B)*f),
 		col.A,
 	)
-}
-
-func (a *RenderAssets) applyAOSmooth(block byte, col rl.Color, aos []float32, useGrass bool, light byte, tints []rl.Color) []rl.Color {
-	if len(aos) < 4 || len(tints) < 4 {
-		// Defensive return + log (or panic with info)
-		fmt.Printf("applyAOSmooth: Invalid slice length! aos=%d, tints=%d\n", len(aos), len(tints))
-		return []rl.Color{col, col, col, col}
-	}
-	res := make([]rl.Color, 4)
-	lightF := 0.1 + (float32(light)/15.0)*0.9
-
-	for i := 0; i < 4; i++ {
-		c := col
-		// Apply Tint
-		if tints[i].A > 0 {
-			c = rl.NewColor(
-				uint8(float32(c.R)*float32(tints[i].R)/255.0),
-				uint8(float32(c.G)*float32(tints[i].G)/255.0),
-				uint8(float32(c.B)*float32(tints[i].B)/255.0),
-				c.A,
-			)
-			if block == blockWater {
-				c.A = 200
-			}
-		}
-
-		// Apply AO
-		ao := aos[i]
-		if block == blockGlass || block == blockIce {
-			ao = 0
-		}
-		f := 1.0 - ao*0.6
-		if f < 0.4 {
-			f = 0.4
-		}
-		f *= lightF
-
-		res[i] = rl.NewColor(
-			uint8(float32(c.R)*f),
-			uint8(float32(c.G)*f),
-			uint8(float32(c.B)*f),
-			c.A,
-		)
-	}
-	return res
 }
 
 func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16, baseX, baseZ int, yMin, yMax int, getBlock BlockGetter, getLight LightGetter, getMeta MetaGetter, seed uint32, cachedTints ...*meshTintCache) map[string]map[string][]*MeshBuildData {
@@ -848,15 +806,7 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 
 				// TOP (Y+)
 				if a.shouldDrawFace(block, getBlock(wx, y+1, wz)) {
-					sx0, sx1 := isOccluding(wx-1, y+1, wz), isOccluding(wx+1, y+1, wz)
-					sz0, sz1 := isOccluding(wx, y+1, wz-1), isOccluding(wx, y+1, wz+1)
-					c00, c01 := isOccluding(wx-1, y+1, wz-1), isOccluding(wx-1, y+1, wz+1)
-					c10, c11 := isOccluding(wx+1, y+1, wz-1), isOccluding(wx+1, y+1, wz+1)
-					ao0 := float32(cornerAO(sx0, sz1, c01)) / 3.0
-					ao1 := float32(cornerAO(sx1, sz1, c11)) / 3.0
-					ao2 := float32(cornerAO(sx1, sz0, c10)) / 3.0
-					ao3 := float32(cornerAO(sx0, sz0, c00)) / 3.0
-					aos := []float32{ao0, ao1, ao2, ao3}
+					aos, lights := sampleFaceLighting(wx, y, wz, lightTop, getBlock, getLight)
 
 					// Top of Grass Block
 					// Only use Tint if it's Grass Block Top
@@ -894,12 +844,12 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 						t3 := getCornerColor(-1, -1)
 
 						tints := []rl.Color{t0, t1, t2, t3}
-						colors = a.applyAOSmooth(block, white, aos, true, getLight(wx, y+1, wz), tints)
+						colors = a.applyAOSmooth(block, white, aos, lights, tints)
 					} else {
 						// Standard Block (Flat Tint)
 						// Make 4 copies of tint
 						tints := []rl.Color{tintColor, tintColor, tintColor, tintColor}
-						colors = a.applyAOSmooth(block, white, aos, true, getLight(wx, y+1, wz), tints)
+						colors = a.applyAOSmooth(block, white, aos, lights, tints)
 					}
 
 					usePath := textures.Top
@@ -923,24 +873,7 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 				}
 				// BOTTOM (Y-)
 				if a.shouldDrawFace(block, getBlock(wx, y-1, wz)) {
-					// Neighbors at Y-1
-					sx0, sx1 := isOccluding(wx-1, y-1, wz), isOccluding(wx+1, y-1, wz)
-					sz0, sz1 := isOccluding(wx, y-1, wz-1), isOccluding(wx, y-1, wz+1)
-					c00, c01 := isOccluding(wx-1, y-1, wz-1), isOccluding(wx-1, y-1, wz+1)
-					c10, c11 := isOccluding(wx+1, y-1, wz-1), isOccluding(wx+1, y-1, wz+1)
-
-					// 4 Corners: 00(BL), 01(TL), 10(BR), 11(TR) relative to the face plane?
-					// Verts are: SW, NW, NE, SE (standard quad winding)
-					// SW (X-1, Z+1) -> sx0, sz1, c01
-					ao0 := float32(cornerAO(sx0, sz1, c01)) / 3.0
-					// NW (X-1, Z-1) -> sx0, sz0, c00
-					ao1 := float32(cornerAO(sx0, sz0, c00)) / 3.0
-					// NE (X+1, Z-1) -> sx1, sz0, c10
-					ao2 := float32(cornerAO(sx1, sz0, c10)) / 3.0
-					// SE (X+1, Z+1) -> sx1, sz1, c11
-					ao3 := float32(cornerAO(sx1, sz1, c11)) / 3.0
-
-					aos := []float32{ao0, ao1, ao2, ao3}
+					aos, lights := sampleFaceLighting(wx, y, wz, lightBottom, getBlock, getLight)
 
 					bottomTintCol := tintColor
 					if block == blockGrass {
@@ -949,7 +882,7 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 					// Replicate tint 4 times
 					tints := []rl.Color{bottomTintCol, bottomTintCol, bottomTintCol, bottomTintCol}
 
-					colors := a.applyAOSmooth(block, bottomTint, aos, false, getLight(wx, y-1, wz), tints)
+					colors := a.applyAOSmooth(block, bottomTint, aos, lights, tints)
 
 					usePath := textures.Bottom
 					uvRect, inAtlas := a.getAtlasUV(textures.Bottom)
@@ -972,30 +905,14 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 				}
 				// NORTH (Z-)
 				if a.shouldDrawFace(block, getBlock(wx, y, wz-1)) {
-					// Neighbors at Z-1
-					sx0, sx1 := isOccluding(wx-1, y, wz-1), isOccluding(wx+1, y, wz-1)
-					sy0, sy1 := isOccluding(wx, y-1, wz-1), isOccluding(wx, y+1, wz-1)
-					c00, c01 := isOccluding(wx-1, y-1, wz-1), isOccluding(wx-1, y+1, wz-1)
-					c10, c11 := isOccluding(wx+1, y-1, wz-1), isOccluding(wx+1, y+1, wz-1)
-
-					// Verts: TL(X-1, Y+1), TR(X+1, Y+1), BR(X+1, Y-1), BL(X-1, Y-1)
-					// TL: sx0, sy1, c01
-					ao0 := float32(cornerAO(sx0, sy1, c01)) / 3.0
-					// TR: sx1, sy1, c11
-					ao1 := float32(cornerAO(sx1, sy1, c11)) / 3.0
-					// BR: sx1, sy0, c10
-					ao2 := float32(cornerAO(sx1, sy0, c10)) / 3.0
-					// BL: sx0, sy0, c00
-					ao3 := float32(cornerAO(sx0, sy0, c00)) / 3.0
-
-					aos := []float32{ao0, ao1, ao2, ao3}
+					aos, lights := sampleFaceLighting(wx, y, wz, lightNorth, getBlock, getLight)
 
 					sideTintCol := tintColor
 					if block == blockGrass {
 						sideTintCol = rl.NewColor(0, 0, 0, 0)
 					}
 					tints := []rl.Color{sideTintCol, sideTintCol, sideTintCol, sideTintCol}
-					colors := a.applyAOSmooth(block, northTint, aos, false, getLight(wx, y, wz-1), tints)
+					colors := a.applyAOSmooth(block, northTint, aos, lights, tints)
 
 					usePath := textures.North
 					uvRect, inAtlas := a.getAtlasUV(textures.North)
@@ -1052,7 +969,7 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 						// It's close enough.
 
 						ovTints := []rl.Color{smoothFoliage, smoothFoliage, smoothFoliage, smoothFoliage}
-						ovColors := a.applyAOSmooth(block, white, aos, false, getLight(wx, y, wz-1), ovTints)
+						ovColors := a.applyAOSmooth(block, white, aos, lights, ovTints)
 
 						getBuilder(oPass, oPath).addFaceSmooth(
 							[]float32{px - 0.5, py + 0.5, pz - oDisp, px + 0.5, py + 0.5, pz - oDisp, px + 0.5, py - 0.5, pz - oDisp, px - 0.5, py - 0.5, pz - oDisp},
@@ -1064,36 +981,14 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 				}
 				// SOUTH (Z+)
 				if a.shouldDrawFace(block, getBlock(wx, y, wz+1)) {
-					// Neighbors at Z+1
-					sx0, sx1 := isOccluding(wx-1, y, wz+1), isOccluding(wx+1, y, wz+1)
-					sy0, sy1 := isOccluding(wx, y-1, wz+1), isOccluding(wx, y+1, wz+1)
-					c00, c01 := isOccluding(wx-1, y-1, wz+1), isOccluding(wx-1, y+1, wz+1)
-					c10, c11 := isOccluding(wx+1, y-1, wz+1), isOccluding(wx+1, y+1, wz+1)
-
-					// Verts: TR(X+1, Y+1), TL(X-1, Y+1), BL(X-1, Y-1), BR(X+1, Y-1)
-					// But we define quads:
-					// []float32{px + 0.5, py + 0.5, pz + 0.5, (TR)
-					//           px - 0.5, py + 0.5, pz + 0.5, (TL)
-					//           px - 0.5, py - 0.5, pz + 0.5, (BL)
-					//           px + 0.5, py - 0.5, pz + 0.5} (BR)
-
-					// TR: sx1, sy1, c11
-					ao0 := float32(cornerAO(sx1, sy1, c11)) / 3.0
-					// TL: sx0, sy1, c01
-					ao1 := float32(cornerAO(sx0, sy1, c01)) / 3.0
-					// BL: sx0, sy0, c00
-					ao2 := float32(cornerAO(sx0, sy0, c00)) / 3.0
-					// BR: sx1, sy0, c10
-					ao3 := float32(cornerAO(sx1, sy0, c10)) / 3.0
-
-					aos := []float32{ao0, ao1, ao2, ao3}
+					aos, lights := sampleFaceLighting(wx, y, wz, lightSouth, getBlock, getLight)
 
 					sideTintCol := tintColor
 					if block == blockGrass {
 						sideTintCol = rl.NewColor(0, 0, 0, 0)
 					}
 					tints := []rl.Color{sideTintCol, sideTintCol, sideTintCol, sideTintCol}
-					colors := a.applyAOSmooth(block, southTint, aos, false, getLight(wx, y, wz+1), tints)
+					colors := a.applyAOSmooth(block, southTint, aos, lights, tints)
 
 					usePath := textures.South
 					uvRect, inAtlas := a.getAtlasUV(textures.South)
@@ -1130,7 +1025,7 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 						}
 
 						ovTints := []rl.Color{smoothFoliage, smoothFoliage, smoothFoliage, smoothFoliage}
-						ovColors := a.applyAOSmooth(block, white, aos, false, getLight(wx, y, wz+1), ovTints)
+						ovColors := a.applyAOSmooth(block, white, aos, lights, ovTints)
 
 						getBuilder(oPass, oPath).addFaceSmooth(
 							[]float32{px + 0.5, py + 0.5, pz + oDisp, px - 0.5, py + 0.5, pz + oDisp, px - 0.5, py - 0.5, pz + oDisp, px + 0.5, py - 0.5, pz + oDisp},
@@ -1142,30 +1037,14 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 				}
 				// EAST (X+)
 				if a.shouldDrawFace(block, getBlock(wx+1, y, wz)) {
-					// Neighbors at X+1
-					sz0, sz1 := isOccluding(wx+1, y, wz-1), isOccluding(wx+1, y, wz+1)
-					sy0, sy1 := isOccluding(wx+1, y-1, wz), isOccluding(wx+1, y+1, wz)
-					c00, c01 := isOccluding(wx+1, y-1, wz-1), isOccluding(wx+1, y+1, wz-1)
-					c10, c11 := isOccluding(wx+1, y-1, wz+1), isOccluding(wx+1, y+1, wz+1)
-
-					// Verts:
-					// px + 0.5, py + 0.5, pz - 0.5 (Top Left / near Z-) -> sz0, sy1, c01
-					ao0 := float32(cornerAO(sz0, sy1, c01)) / 3.0
-					// px + 0.5, py + 0.5, pz + 0.5 (Top Right / near Z+) -> sz1, sy1, c11
-					ao1 := float32(cornerAO(sz1, sy1, c11)) / 3.0
-					// px + 0.5, py - 0.5, pz + 0.5 (Bottom Right / near Z+) -> sz1, sy0, c10
-					ao2 := float32(cornerAO(sz1, sy0, c10)) / 3.0
-					// px + 0.5, py - 0.5, pz - 0.5 (Bottom Left / near Z-) -> sz0, sy0, c00
-					ao3 := float32(cornerAO(sz0, sy0, c00)) / 3.0
-
-					aos := []float32{ao0, ao1, ao2, ao3}
+					aos, lights := sampleFaceLighting(wx, y, wz, lightEast, getBlock, getLight)
 
 					sideTintCol := tintColor
 					if block == blockGrass {
 						sideTintCol = rl.NewColor(0, 0, 0, 0)
 					}
 					tints := []rl.Color{sideTintCol, sideTintCol, sideTintCol, sideTintCol}
-					colors := a.applyAOSmooth(block, eastTint, aos, false, getLight(wx+1, y, wz), tints)
+					colors := a.applyAOSmooth(block, eastTint, aos, lights, tints)
 
 					usePath := textures.East
 					uvRect, inAtlas := a.getAtlasUV(textures.East)
@@ -1202,7 +1081,7 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 						}
 
 						ovTints := []rl.Color{smoothFoliage, smoothFoliage, smoothFoliage, smoothFoliage}
-						ovColors := a.applyAOSmooth(block, white, aos, false, getLight(wx+1, y, wz), ovTints)
+						ovColors := a.applyAOSmooth(block, white, aos, lights, ovTints)
 
 						getBuilder(oPass, oPath).addFaceSmooth(
 							[]float32{px + 0.5, py + 0.5, pz - oDisp, px + 0.5, py + 0.5, pz + oDisp, px + 0.5, py - 0.5, pz + oDisp, px + 0.5, py - 0.5, pz - oDisp},
@@ -1214,30 +1093,14 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 				}
 				// WEST (X-)
 				if a.shouldDrawFace(block, getBlock(wx-1, y, wz)) {
-					// Neighbors at X-1
-					sz0, sz1 := isOccluding(wx-1, y, wz-1), isOccluding(wx-1, y, wz+1)
-					sy0, sy1 := isOccluding(wx-1, y-1, wz), isOccluding(wx-1, y+1, wz)
-					c00, c01 := isOccluding(wx-1, y-1, wz-1), isOccluding(wx-1, y+1, wz-1)
-					c10, c11 := isOccluding(wx-1, y-1, wz+1), isOccluding(wx-1, y+1, wz+1)
-
-					// Verts:
-					// px - 0.5, py + 0.5, pz + 0.5 (TL / near Z+) -> sz1, sy1, c11
-					ao0 := float32(cornerAO(sz1, sy1, c11)) / 3.0
-					// px - 0.5, py + 0.5, pz - 0.5 (TR / near Z-) -> sz0, sy1, c01
-					ao1 := float32(cornerAO(sz0, sy1, c01)) / 3.0
-					// px - 0.5, py - 0.5, pz - 0.5 (BR / near Z-) -> sz0, sy0, c00
-					ao2 := float32(cornerAO(sz0, sy0, c00)) / 3.0
-					// px - 0.5, py - 0.5, pz + 0.5 (BL / near Z+) -> sz1, sy0, c10
-					ao3 := float32(cornerAO(sz1, sy0, c10)) / 3.0
-
-					aos := []float32{ao0, ao1, ao2, ao3}
+					aos, lights := sampleFaceLighting(wx, y, wz, lightWest, getBlock, getLight)
 
 					sideTintCol := tintColor
 					if block == blockGrass {
 						sideTintCol = rl.NewColor(0, 0, 0, 0)
 					}
 					tints := []rl.Color{sideTintCol, sideTintCol, sideTintCol, sideTintCol}
-					colors := a.applyAOSmooth(block, westTint, aos, false, getLight(wx-1, y, wz), tints)
+					colors := a.applyAOSmooth(block, westTint, aos, lights, tints)
 
 					usePath := textures.West
 					uvRect, inAtlas := a.getAtlasUV(textures.West)
@@ -1274,7 +1137,7 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 						}
 
 						ovTints := []rl.Color{smoothFoliage, smoothFoliage, smoothFoliage, smoothFoliage}
-						ovColors := a.applyAOSmooth(block, white, aos, false, getLight(wx-1, y, wz), ovTints)
+						ovColors := a.applyAOSmooth(block, white, aos, lights, ovTints)
 
 						getBuilder(oPass, oPath).addFaceSmooth(
 							[]float32{px - 0.5, py + 0.5, pz + oDisp, px - 0.5, py + 0.5, pz - oDisp, px - 0.5, py - 0.5, pz - oDisp, px - 0.5, py - 0.5, pz + oDisp},

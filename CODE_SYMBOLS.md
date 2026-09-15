@@ -24,7 +24,7 @@
 
 类型：`MeshBuildData`、`meshBuilder`
 
-函数/方法：`*meshBuilder.addFace`、`*meshBuilder.addFaceSmooth`、`*MeshBuildData.Reset`、`*RenderAssets.applyMeshData`、`*RenderAssets.isTransparent`、`*RenderAssets.getBiomeBaseColor`、`*RenderAssets.getClimateColor`、`*RenderAssets.shouldDrawFace`、`*RenderAssets.applyAO`、`*RenderAssets.applyAOSmooth`、`*RenderAssets.buildAllMeshData`、`allocFloat32`、`allocUint8`、`allocUint16`
+函数/方法：`*meshBuilder.addFace`、`*meshBuilder.addFaceSmooth`、`*MeshBuildData.Reset`、`*RenderAssets.applyMeshData`、`*RenderAssets.isTransparent`、`*RenderAssets.getBiomeBaseColor`、`*RenderAssets.getClimateColor`、`*RenderAssets.shouldDrawFace`、`*RenderAssets.applyAO`、`*RenderAssets.buildAllMeshData`、`allocFloat32`、`allocUint8`、`allocUint16`
 
 ## [client.go](client.go)
 
@@ -143,6 +143,12 @@
 ## [menu_screens.go](menu_screens.go)
 
 函数/方法：`menuLayout`、`menuNavigate`、`drawMenuBackdrop`、`menuPanel`、`menuMessage`、`drawMenu`、`drawWorldMenu`、`drawCreateMenu`、`drawMultiplayerMenu`、`drawSettingsMenu`、`drawPauseMenu`
+
+## [mesh_lighting.go](mesh_lighting.go)
+
+类型：`litFace`、`faceLightLayout`
+
+函数/方法：`sampleFaceLighting`、`*RenderAssets.applyAOSmooth`、`flipLightDiagonal`
 
 ## [mesh_tint.go](mesh_tint.go)
 
