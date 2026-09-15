@@ -7,13 +7,14 @@
 
 | 功能 | 文件与入口 |
 | --- | --- |
-| 程序入口、全局界面状态、主循环 | [main.go](main.go)：`main`、`updateMenu` |
+| 程序入口、全局界面状态、主循环（`-webgpu` 实验路径在 Playing 状态接管 present） | [main.go](main.go)：`main`、`updateMenu` |
 | 游戏会话建立与退出 | [game_session.go](game_session.go)：`startGame`、`exitGame` |
 | 每帧更新、暂停、输入与地形就绪 | [game_update.go](game_update.go)：`updateGame` |
 | 客户端缺失区块请求 | [game_streaming.go](game_streaming.go)：`requestMissingChunks` |
 | 客户端收到消息后的状态更新 | [game_packets.go](game_packets.go)：`handlePacket` |
 | 远程实体插值 | [game_entities.go](game_entities.go) |
 | 游戏场景绘制 | [game_render.go](game_render.go) |
+| WebGPU Playing 状态接入/退出 | [webgpu_game_windows.go](webgpu_game_windows.go)、[webgpu_game_stub.go](webgpu_game_stub.go) |
 | 客户端连接与收发 | [client.go](client.go) |
 | 配置、渲染距离 | [settings.go](settings.go)、[menu_screens.go](menu_screens.go) |
 
@@ -57,8 +58,10 @@
 | 客户端光照增量、精确网格失效范围与更新合并 | [world_packet_light.go](world_packet_light.go)、[world_mesh_dirty.go](world_mesh_dirty.go)、[world_mesh_dirty_test.go](world_mesh_dirty_test.go) |
 | 网格任务与快照 | [world_mesh.go](world_mesh.go) |
 | 方块表面网格构建 | [chunk_mesher.go](chunk_mesher.go) |
-| 网格上传与 GL 状态 | [render_mesh.go](render_mesh.go)、[platform/mesh.go](platform/mesh.go)、[platform/gl.go](platform/gl.go) |
-| 可见区块、透明排序、雾距 | [world_render.go](world_render.go)、[render_cull.go](render_cull.go) |
+| 后端中立网格上传接口、OpenGL/WebGPU GPU buffer | [render_mesh.go](render_mesh.go)、[platform/renderer.go](platform/renderer.go)、[platform/mesh.go](platform/mesh.go)、[platform/webgpu_backend.go](platform/webgpu_backend.go) |
+| OpenGL 可见区块、透明排序、雾距 | [world_render.go](world_render.go)、[render_cull.go](render_cull.go) |
+| WebGPU 世界渲染（surface、depth、atlas、opaque/cutout、water/glass、fog、可见 section 提交） | [webgpu_world_renderer_windows.go](webgpu_world_renderer_windows.go)、[webgpu_atlas.go](webgpu_atlas.go) |
+| WebGPU 迁移验证/交互预览 | [webgpu_chunk_preview_test.go](webgpu_chunk_preview_test.go)、[webgpu_region_preview_test.go](webgpu_region_preview_test.go)、[webgpu_surface_preview_test.go](webgpu_surface_preview_test.go)、[webgpu_textured_preview_test.go](webgpu_textured_preview_test.go)、[webgpu_transparency_preview_test.go](webgpu_transparency_preview_test.go)、[WEBGPU_MIGRATION.md](WEBGPU_MIGRATION.md) |
 | 地形颜色缓存 | [mesh_tint.go](mesh_tint.go) |
 | 资源持有、初始化与释放 | [render_assets.go](render_assets.go) |
 | 纹理加载、材质、透明像素处理 | [render_textures.go](render_textures.go) |
@@ -97,17 +100,18 @@
 - 存档与协议：`save_file_test.go`、`protocol_varint_test.go`，各玩法测试也覆盖消息往返。
 - 重生与生命：`player_vitals_test.go`；视距：`settings_distance_test.go`、`world_fog_test.go`。
 - 界面预览：`*_preview_test.go`；性能：`engine_bench_test.go`。
+- WebGPU 实机路径：Windows 下 `go run . -webgpu`，菜单仍由 Raylib/OpenGL 绘制，进入 Playing 后 WebGPU 独占 world present；当前实体、HUD/菜单叠加、特殊/动画非 atlas 材质仍待迁移。
 - 纹理过滤：`render_filter_test.go` 检查设置往返与图集留白；设置 `GOCRAFT_FILTER_GPU_TEST=1` 后运行 `go test . -run TestTextureFilterGPU`，实测倍率、mipmap 开关回读及 GL 错误。
 - 过滤设置默认 mipmap 开启、AF 8×，即时生效并保存；AF 自动限制到硬件能力。图集使用加宽留白，8× 保留 0–4 级，16× 限至 0–3 级；关闭 mipmap 仅停用采样，不释放层级内存。
 - 新增功能或移动职责时，同一批修改更新本页；符号清单运行 `go run ./tools/codeindex -write` 更新。
 - 提交前运行 `go run ./tools/codeindex -check`，防止符号清单过期。
 - 同职责使用同一文件前缀；不为了行数拆开一个紧密相关的小流程。
 - 活跃 World 由所属主循环持有；生成 worker 操作私有区块，网格 worker 读取快照。拆文件不改变线程归属。
-- GPU 创建/绘制/释放继续留在渲染线程；这次没有修复资源释放逻辑。
+- GPU 创建/绘制/释放继续留在渲染线程；WebGPU backend 切换发生在 Playing 渲染线程，World 先释放 mesh handle 再释放 WebGPU device。
 
 ## 尚未完成的结构改进
 
 `chunk_mesher.go` 的 `buildAllMeshData`、`server_packets.go` 的 `HandlePacket`、
 `input.go` 仍包含较大的单体流程。这轮保留其内部实现，避免整理目录时混入算法修改。
 后续分别适合抽取面生成策略、按消息域处理函数、输入与交互状态机。
-工程仍使用 package main；本轮不是包级解耦，也没有解决 World 职责集中的问题。
+工程仍使用 package main；WebGPU 实验目前只替换 world pass，并未完成 UI/实体/特殊材质的平台解耦。
