@@ -4,13 +4,20 @@ This branch is an isolated experiment for evaluating a WebGPU rendering backend 
 
 ## Current status
 
-The Raylib/OpenGL reference renderer still builds and renders the existing GoCraft world after the first backend-neutral mesh refactor.
+The Raylib/OpenGL reference renderer still builds and renders the existing GoCraft world after the backend-neutral mesh refactor.
 
-The Windows surface smoke probe has now been validated on real hardware: WebGPU successfully presents into the existing Raylib-created HWND. The next probe exercises the actual GoCraft 36-byte `platform.Vertex` layout, WebGPU vertex/index buffer upload and indexed drawing. Run it with `go run ./cmd/webgpu-smoke`; success is a blue window containing a four-corner colored quad.
+The Windows experiment has now been validated through progressively larger milestones on real hardware (NVIDIA GeForce RTX 4070, Vulkan backend):
 
-The legacy `platform.UploadMesh` entry used by the real chunk mesher now routes through the selected `MeshBackend`. The concrete OpenGL upload is private to `OpenGLMeshBackend`, so switching to WebGPU can no longer be bypassed accidentally by the existing chunk upload call site. Rendering state is still OpenGL-specific and is the next larger integration boundary.
+- WebGPU presentation into the existing Raylib-created HWND.
+- Real vertex/index buffers using GoCraft's existing 36-byte `platform.Vertex` layout.
+- Perspective camera and `Depth24Plus` depth testing.
+- Real procedural world generation and the existing chunk mesher.
+- A 5x5 neighbor halo feeding a rendered inner 3x3 terrain region.
+- A CPU-built block texture atlas sampled through WebGPU using the existing chunk-mesher UV decisions, including vertex AO/tint/light modulation and cutout alpha discard.
 
-The experiment uses `github.com/go-webgpu/webgpu v0.5.5`, which requires Go 1.25 and the `wgpu-native` v29 runtime binary (`wgpu_native.dll` on Windows). The native library can be placed beside the executable / in PATH, or selected with `WGPU_NATIVE_PATH`.
+The experiment now uses `github.com/gogpu/wgpu v0.34.5` with the pure-Go native backend. The earlier `go-webgpu/webgpu` + `wgpu-native` path was abandoned after its v29 vertex-attribute ABI gap caused native pipeline panics. `wgpu_native.dll` is no longer required for this branch's normal WebGPU path.
+
+`webgpu_transparency_preview_test.go` is the current validation target. It adds a second pipeline for water/glass with alpha blending, depth testing with depth writes disabled, back-to-front transparent batch sorting, plus distance fog shared by opaque and translucent terrain. This newest step still requires local validation before it is considered complete.
 
 ## Initial audit
 
@@ -29,20 +36,25 @@ Raylib also appears in shared/non-rendering structures (client state, world ray 
 ## Milestones
 
 - [x] Backend-neutral mesh payload/handle boundary; existing renderer remains functional.
-- [x] Select and pin the Go WebGPU binding/backend (`go-webgpu/webgpu v0.5.5`, wgpu-native v29).
+- [x] Select and pin the Go WebGPU binding/backend (`gogpu/wgpu v0.34.5`, pure-Go native backend).
 - [x] Prove WebGPU instance/device/surface presentation on the current Raylib-created HWND.
 - [x] Replace staged CPU payloads with real WebGPU vertex/index GPU buffers.
-- [x] Prove a WGSL pipeline matching the existing 36-byte vertex semantics in the smoke probe.
-- [x] Route the real chunk mesher's existing `UploadMesh` call through `MeshBackend` without changing CPU meshing.
-- [ ] Upload and render one real GoCraft chunk through a WebGPU frame pass.
-- [ ] Camera/view-projection, depth, atlas texture and vertex tint.
-- [ ] Visible chunk loop and culling.
-- [ ] Transparent pass and remaining world rendering.
+- [x] Prove a WGSL pipeline matching the existing 36-byte vertex semantics.
+- [x] Upload and render real GoCraft chunk-mesher output through a WebGPU frame pass.
+- [x] Camera/view-projection and depth.
+- [x] Real generated multi-chunk terrain with neighbor-aware meshing.
+- [x] Atlas texture, sampler, existing UVs, vertex tint/AO/light and cutout alpha discard.
+- [ ] Validate transparent water/glass pass and distance fog on hardware.
+- [ ] Move the validated WebGPU world pipeline out of preview tests into an actual frame renderer.
+- [ ] Visible-section loop/frustum culling and live chunk upload/unload integration.
+- [ ] Remaining world rendering: animated liquids, entities, mining crack and special materials.
 - [ ] UI/input/platform parity as needed.
 - [ ] Benchmark against the Raylib/OpenGL baseline and decide whether to continue migration.
 
-## Validation note
+## Validation notes
 
-The reference Raylib/OpenGL path has been locally confirmed to build, pass the current tests, and visually render the existing world after the initial seam refactor. The plain WebGPU surface clear has also been visually validated on Windows hardware. The indexed mesh probe added after that still requires local validation before claiming the vertex layout/buffer path is correct.
+The reference Raylib/OpenGL path has been locally confirmed to build, pass the current tests, and visually render the existing world after the initial seam refactor.
 
-The GLFW/WGL warning observed when closing the surface-only smoke probe occurs during Raylib's OpenGL-context teardown after WebGPU has presented into the same HWND. It is not currently treated as a renderer failure; the production WebGPU path will not use Raylib's OpenGL draw/swap loop, and window/input ownership will be revisited after world rendering works.
+The WebGPU path has also been visually confirmed through the textured generated-terrain milestone. Preview tests intentionally mesh only a vertical slice around the surface, so when the orbiting camera sees below that artificial `yMin` plane it can expose dark cave/geology cutaways; those cutaways are a preview artifact, not evidence of broken indexing or depth.
+
+The GLFW/WGL warning observed when closing early probes occurred during Raylib's OpenGL-context teardown after WebGPU had presented into the same HWND. It is not currently treated as a renderer failure. The production WebGPU path will not use Raylib's OpenGL draw/swap loop; window/input ownership will be revisited during frame-loop integration.
