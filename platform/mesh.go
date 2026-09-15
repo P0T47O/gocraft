@@ -16,9 +16,8 @@ type Vertex struct {
 	Normal   [3]float32
 }
 
-// Mesh is an opaque GPU mesh from the caller's point of view. The OpenGL
-// handles intentionally stay private so a WebGPU implementation can replace
-// them with vertex/index buffers without leaking backend identities upward.
+// Mesh is the OpenGL implementation of MeshHandle. Its GL object identities
+// remain private so callers can hold the backend-neutral MeshHandle instead.
 type Mesh struct {
 	vao        uint32
 	vbo        uint32
@@ -26,7 +25,18 @@ type Mesh struct {
 	indexCount int32
 }
 
-func UploadMesh(vertices []Vertex, indices []uint32) *Mesh {
+// UploadMesh is kept as the compatibility entry point used by the current
+// chunk mesher and previews. It now routes through the selected MeshBackend,
+// so existing CPU meshing code does not need to know whether OpenGL or WebGPU
+// owns the resulting GPU buffers.
+func UploadMesh(vertices []Vertex, indices []uint32) MeshHandle {
+	return UploadRenderMesh(vertices, indices)
+}
+
+// uploadOpenGLMesh is the concrete OpenGL upload used only by
+// OpenGLMeshBackend. Keeping it private prevents the renderer-neutral path from
+// accidentally bypassing backend selection again.
+func uploadOpenGLMesh(vertices []Vertex, indices []uint32) *Mesh {
 	InitGLOnce()
 
 	vao := GenVertexArray()
