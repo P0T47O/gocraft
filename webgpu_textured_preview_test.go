@@ -104,6 +104,7 @@ func TestWebGPUTexturedPreview(t *testing.T) {
 							maxTop = top
 						}
 					}
+				}
 			}
 		}
 	}
