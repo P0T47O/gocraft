@@ -30,13 +30,14 @@ func drawExperimentalWebGPUFrame() error {
 	if activeWebGPUWorldRenderer == nil {
 		return fmt.Errorf("WebGPU world renderer is not initialized")
 	}
-	return activeWebGPUWorldRenderer.DrawWithHUD(world, camera, input)
+	return activeWebGPUWorldRenderer.DrawGameplay(world, camera, input)
 }
 
 func closeExperimentalWebGPURenderer() {
 	if activeWebGPUWorldRenderer == nil {
 		return
 	}
+	closeWebGPUTextRenderer()
 	closeWebGPUHUDRenderer()
 	activeWebGPUWorldRenderer.Close()
 	activeWebGPUWorldRenderer = nil
