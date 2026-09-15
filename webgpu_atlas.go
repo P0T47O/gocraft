@@ -32,6 +32,7 @@ func buildWebGPUBlockAtlas() (*webGPUBlockAtlas, error) {
 			if path != "" {
 				pathsSet[path] = struct{}{}
 			}
+		}
 	}
 
 	// Grass side overlay is emitted directly by the chunk mesher rather than
