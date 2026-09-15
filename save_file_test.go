@@ -100,6 +100,31 @@ func TestChunkSaveRoundTripAndDirtyFailure(t *testing.T) {
 			t.Fatal("round trip lost block/metadata")
 		}
 	}
+
+	missing := &Chunk{}
+	if TryLoadChunk(dir, missing, 99, 99) {
+		t.Fatal("missing chunk should fall back to generation")
+	}
+
+	corruptPath := filepath.Join(dir, chunkDir, "7_0_9.bin")
+	if err := os.MkdirAll(filepath.Dir(corruptPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(corruptPath, []byte("corrupt"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	func() {
+		defer func() {
+			if recover() == nil {
+				t.Fatal("corrupt chunk save was treated as missing")
+			}
+		}()
+		_ = TryLoadChunk(dir, &Chunk{}, 7, 9)
+	}()
+	if got, err := os.ReadFile(corruptPath); err != nil || string(got) != "corrupt" {
+		t.Fatalf("corrupt chunk save was modified: %q, %v", got, err)
+	}
+
 	c.dirty = true
 	if err := SaveChunk(filepath.Join(dir, chunkDir, "-2_0_3.bin"), c, -2, 3); err == nil {
 		t.Fatal("expected save failure")
