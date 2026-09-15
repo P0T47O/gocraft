@@ -6,7 +6,8 @@ require (
 	github.com/ebitengine/purego v0.7.1
 	github.com/gen2brain/raylib-go/raylib v0.55.1
 	github.com/go-gl/mathgl v1.2.0
-	github.com/go-webgpu/webgpu v0.5.5
+	github.com/gogpu/gputypes v0.8.0
+	github.com/gogpu/wgpu v0.34.5
 	github.com/klauspost/compress v1.17.9
 )
 
