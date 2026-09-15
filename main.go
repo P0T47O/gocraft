@@ -143,6 +143,7 @@ func main() {
 	}
 
 	const webGPUFrameInterval = time.Second / 60
+	var webGPULastFrame time.Time
 	for !rl.WindowShouldClose() && !quitRequested {
 		// The WebGPU path owns presentation while playing. Raylib continues to own
 		// the native window and input, but Begin/EndDrawing must not swap the same
@@ -154,12 +155,18 @@ func main() {
 				continue
 			}
 
-			// Raylib normally enforces SetTargetFPS from EndDrawing. The WebGPU path
-			// intentionally skips EndDrawing to avoid an OpenGL swap on the same HWND,
-			// so pace this loop explicitly. Without this guard, the game update runs as
-			// fast as the CPU allows while rl.GetFrameTime still reflects the last GL
-			// frame, causing extreme movement speed and flooding reliable network queues.
+			// Raylib normally updates GetFrameTime and enforces SetTargetFPS from
+			// EndDrawing. WebGPU intentionally skips EndDrawing, so own both the
+			// gameplay clock and frame pacing here instead of reusing stale Raylib
+			// timing from the last OpenGL menu frame.
 			frameStarted := time.Now()
+			if webGPULastFrame.IsZero() {
+				setGameFrameTime(defaultGameFrameTime)
+			} else {
+				setGameFrameTime(float32(frameStarted.Sub(webGPULastFrame).Seconds()))
+			}
+			webGPULastFrame = frameStarted
+
 			rl.PollInputEvents()
 			updateGame()
 			if currentState == StatePlaying {
@@ -175,6 +182,7 @@ func main() {
 			continue
 		}
 
+		webGPULastFrame = time.Time{}
 		rl.BeginDrawing()
 		rl.ClearBackground(invBackground)
 
@@ -183,6 +191,7 @@ func main() {
 			updateMenu()
 			drawMenu()
 		case StatePlaying:
+			setGameFrameTime(rl.GetFrameTime())
 			updateGame()
 			if currentState == StatePlaying {
 				drawGame()
