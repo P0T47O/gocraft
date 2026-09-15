@@ -71,6 +71,13 @@ func (m *Mesh) Draw() {
 	BindVertexArray(0)
 }
 
+func (m *Mesh) IndexCount() int32 {
+	if m == nil {
+		return 0
+	}
+	return m.indexCount
+}
+
 func (m *Mesh) Unload() {
 	if m == nil {
 		return
