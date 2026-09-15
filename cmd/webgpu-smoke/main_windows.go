@@ -63,9 +63,20 @@ func main() {
 	}
 	defer instance.Release()
 
-	adapter, err := instance.RequestAdapter(nil)
+	// Create the presentation surface before choosing an adapter so hybrid-GPU
+	// systems cannot hand us an adapter that is unable to present to this HWND.
+	surface, err := instance.CreateSurfaceFromWindowsHWND(0, hwnd)
 	if err != nil {
-		log.Fatalf("request WebGPU adapter: %v", err)
+		log.Fatalf("create WebGPU surface from raylib HWND: %v", err)
+	}
+	defer surface.Release()
+
+	adapter, err := instance.RequestAdapter(&wgpu.RequestAdapterOptions{
+		PowerPreference:   wgpu.PowerPreferenceHighPerformance,
+		CompatibleSurface: surface,
+	})
+	if err != nil {
+		log.Fatalf("request surface-compatible WebGPU adapter: %v", err)
 	}
 	defer adapter.Release()
 
@@ -80,24 +91,23 @@ func main() {
 	}
 	defer queue.Release()
 
-	surface, err := instance.CreateSurfaceFromWindowsHWND(0, hwnd)
-	if err != nil {
-		log.Fatalf("create WebGPU surface from raylib HWND: %v", err)
-	}
-	defer surface.Release()
-
-	caps, err := surface.GetCapabilities(adapter)
-	if err != nil {
-		log.Fatalf("query surface capabilities: %v", err)
-	}
-	if len(caps.Formats) == 0 {
-		log.Fatal("WebGPU surface reports no supported formats")
-	}
-	format := caps.Formats[0]
-	for _, candidate := range caps.Formats {
-		if candidate == wgpu.TextureFormatBGRA8Unorm {
-			format = candidate
-			break
+	// BGRA8Unorm already worked in the validated clear probe on Windows. Prefer
+	// reported capabilities when available, but do not make a wrapper-level empty
+	// capability list fatal when the known-good format can still be configured.
+	format := wgpu.TextureFormatBGRA8Unorm
+	caps, capsErr := surface.GetCapabilities(adapter)
+	switch {
+	case capsErr != nil:
+		fmt.Printf("warning: surface capability query failed (%v); trying BGRA8Unorm\n", capsErr)
+	case len(caps.Formats) == 0:
+		fmt.Println("warning: surface capability query returned no formats; trying BGRA8Unorm")
+	default:
+		format = caps.Formats[0]
+		for _, candidate := range caps.Formats {
+			if candidate == wgpu.TextureFormatBGRA8Unorm {
+				format = candidate
+				break
+			}
 		}
 	}
 
