@@ -167,7 +167,7 @@ func (s *InputState) UpdateCamera(world *World, camera *rl.Camera3D) {
 	controls.Jump = rl.IsKeyDown(rl.KeySpace)
 	controls.Sneak = rl.IsKeyDown(rl.KeyLeftShift) || rl.IsKeyDown(rl.KeyRightShift)
 	controls.Sprint = s.SprintLatched || rl.IsKeyDown(rl.KeyLeftControl) || rl.IsKeyDown(rl.KeyRightControl)
-	camera.Position = s.StepMovement(world, camera.Position, rl.GetFrameTime(), controls, currentGameMode == ModeCreative)
+	camera.Position = s.StepMovement(world, camera.Position, gameFrameTime(), controls, currentGameMode == ModeCreative)
 
 	camera.Target = rl.Vector3Add(camera.Position, forward)
 	camera.Up = up
@@ -255,7 +255,7 @@ func HandleInput(world *World, camera *rl.Camera3D, state *InputState, client *C
 	}
 	if state.InventoryOpen {
 		old := camera.Position
-		camera.Position = state.StepMovement(world, old, rl.GetFrameTime(), MovementControls{}, currentGameMode == ModeCreative)
+		camera.Position = state.StepMovement(world, old, gameFrameTime(), MovementControls{}, currentGameMode == ModeCreative)
 		camera.Target = rl.Vector3Add(camera.Target, rl.Vector3Subtract(camera.Position, old))
 		state.UpdateSelection(false)
 		state.UpdateInventoryPage()
@@ -348,7 +348,7 @@ func HandleInput(world *World, camera *rl.Camera3D, state *InputState, client *C
 		if seconds == 0 {
 			state.MiningProgress = 1
 		} else if seconds > 0 {
-			state.MiningProgress += rl.GetFrameTime() / seconds
+			state.MiningProgress += gameFrameTime() / seconds
 		}
 
 		// 5. Break Block if Done
