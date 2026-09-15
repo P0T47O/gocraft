@@ -19,9 +19,14 @@ func NewChunkPool(initialCap int) *ChunkPool {
 	}
 }
 
-// Get retrieves a chunk from the pool and resets it
+// Get retrieves a chunk from the pool. Some recycle paths publish the object
+// just before their previous owner releases chunk.mu. Taking and releasing the
+// mutex here forms an ownership handoff barrier: a reused Chunk is never
+// returned to a new owner until the previous owner has fully unlocked it.
 func (p *ChunkPool) Get() *Chunk {
 	c := p.pool.Get().(*Chunk)
+	c.mu.Lock()
+	c.mu.Unlock()
 	return c
 }
 
