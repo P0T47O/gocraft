@@ -84,9 +84,12 @@ func exitGame() {
 		server = nil
 	}
 	if world != nil {
+		// Chunk mesh handles must be released while their owning GPU device is
+		// still alive. The experimental renderer is closed immediately afterward.
 		world.Close()
 		world = nil
 	}
+	closeExperimentalWebGPURenderer()
 	if assets != nil {
 		assets.unload()
 		assets = nil
