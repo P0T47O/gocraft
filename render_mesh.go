@@ -8,7 +8,10 @@ import (
 )
 
 type ChunkMesh struct {
-	gpuMesh  platform.MeshHandle
+	// Keep the historical field name while the renderer split is in progress so
+	// existing mesh builders/tests do not all have to change at once. The value is
+	// now backend-neutral even though the name still says glMesh.
+	glMesh   platform.MeshHandle
 	material rl.Material
 }
 
@@ -32,7 +35,7 @@ func (s *meshRenderState) reset() {
 }
 
 func (s *meshRenderState) draw(m *ChunkMesh, shader uint32, viewProj mgl32.Mat4, overrideTextureID uint32) {
-	if m == nil || m.gpuMesh == nil {
+	if m == nil || m.glMesh == nil {
 		return
 	}
 	if !s.shaderBound || s.shader != shader {
@@ -76,7 +79,7 @@ func (s *meshRenderState) draw(m *ChunkMesh, shader uint32, viewProj mgl32.Mat4,
 		platform.BindTexture(platform.GL_TEXTURE_2D, texture)
 		s.texture, s.textureBound = texture, true
 	}
-	platform.DrawRenderMesh(m.gpuMesh)
+	platform.DrawRenderMesh(m.glMesh)
 }
 
 func (m *ChunkMesh) Draw(shader uint32, viewProj mgl32.Mat4, overrideTextureID uint32) {
@@ -85,8 +88,8 @@ func (m *ChunkMesh) Draw(shader uint32, viewProj mgl32.Mat4, overrideTextureID u
 }
 
 func (m *ChunkMesh) unload() {
-	if m.gpuMesh != nil {
-		m.gpuMesh.Unload()
-		m.gpuMesh = nil
+	if m.glMesh != nil {
+		m.glMesh.Unload()
+		m.glMesh = nil
 	}
 }
