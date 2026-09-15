@@ -13,7 +13,7 @@ func TestStreamingBudgetsAndBackpressure(t *testing.T) {
 		}
 	}
 	c := &ClientConnection{Send: make(chan Packet, 8)}
-	for i := 0; i < 6; i++ {
+	for i := 0; i < 4; i++ {
 		c.Send <- &PacketChunkData{}
 	}
 	if chunkSendHasRoom(c) {
@@ -32,6 +32,21 @@ func TestStreamingBudgetsAndBackpressure(t *testing.T) {
 	}
 }
 
+func TestStreamingReserveCoversInventoryBurst(t *testing.T) {
+	c := &ClientConnection{Send: make(chan Packet, 128)}
+	for chunkSendHasRoom(c) {
+		c.Send <- &PacketChunkData{}
+	}
+	if reserve := cap(c.Send) - len(c.Send); reserve < 36 {
+		t.Fatalf("streaming reserve too small for full inventory sync: %d", reserve)
+	}
+	for i := 0; i < 36; i++ {
+		if !c.enqueue(&PacketInventoryUpdate{SlotID: int32(i)}) {
+			t.Fatalf("inventory burst saturated queue at packet %d", i)
+		}
+	}
+}
+
 func TestStreamingFullPeerDoesNotBlockReadyPeer(t *testing.T) {
 	initBlockRegistry()
 	w := NewFlatWorld()
@@ -41,7 +56,7 @@ func TestStreamingFullPeerDoesNotBlockReadyPeer(t *testing.T) {
 	c.generated = true
 	full := &ClientConnection{Send: make(chan Packet, 8), KnownChunks: map[chunkKey]bool{}}
 	ready := &ClientConnection{Send: make(chan Packet, 8), KnownChunks: map[chunkKey]bool{}}
-	for i := 0; i < 6; i++ {
+	for i := 0; i < 4; i++ {
 		full.Send <- &PacketChat{}
 	}
 	s := &Server{World: w, Clients: map[string]*ClientConnection{"full": full, "ready": ready}, PendingChunks: map[chunkKey][]string{key: {"full", "ready"}}}

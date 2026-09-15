@@ -30,7 +30,9 @@ func (s *Server) chunkOrderNeedsRefresh(now time.Time) bool {
 	return len(s.chunkOrder) == 0 || now.Sub(s.chunkOrderAt) >= 50*time.Millisecond
 }
 
-// Leave room for vital gameplay packets; a slow peer cannot block other peers.
+// Leave half the outbound queue for authoritative gameplay bursts. A full
+// inventory snapshot currently emits 36 packets, so the old 25% reserve on a
+// 128-slot queue could be exhausted by one inventory sync while chunks loaded.
 func chunkSendHasRoom(c *ClientConnection) bool {
-	return c != nil && len(c.Send) < max(1, cap(c.Send)*3/4)
+	return c != nil && len(c.Send) < max(1, cap(c.Send)/2)
 }

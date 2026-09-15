@@ -45,8 +45,12 @@ func ConnectTCP(addr string, name string) (*Client, error) {
 		for {
 			p, err := ReadPacket(conn)
 			if err != nil {
+				c.closeOnce.Do(func() {
+					close(c.done)
+					_ = conn.Close()
+				})
 				fmt.Printf("Disconnected from server: %v\n", err)
-				break
+				return
 			}
 			select {
 			case c.Incoming <- p:
@@ -70,12 +74,24 @@ func (c *Client) Close() {
 	if c == nil {
 		return
 	}
-	c.closeOnce.Do(func() { close(c.done); c.Conn.Close(); c.reader.Wait() })
+	c.closeOnce.Do(func() {
+		close(c.done)
+		_ = c.Conn.Close()
+	})
+	c.reader.Wait()
 }
 
 func (c *Client) Send(p Packet) {
-	err := WritePacket(c.Conn, p)
-	if err != nil {
+	select {
+	case <-c.done:
+		return
+	default:
+	}
+	if err := WritePacket(c.Conn, p); err != nil {
+		c.closeOnce.Do(func() {
+			close(c.done)
+			_ = c.Conn.Close()
+		})
 		fmt.Printf("Send error: %v\n", err)
 	}
 }

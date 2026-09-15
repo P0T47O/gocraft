@@ -75,8 +75,9 @@ func (c *ClientConnection) close() {
 	})
 }
 
-// Critical messages never block the world loop. A saturated peer reconnects
-// instead of silently losing authoritative inventory/block changes.
+// Critical messages never block the world loop. Streaming leaves a large
+// reserve for gameplay bursts; if that reserve is still exhausted, reconnect
+// rather than silently losing authoritative inventory/block changes.
 func (c *ClientConnection) enqueue(p Packet) bool {
 	select {
 	case <-c.done:
@@ -87,6 +88,7 @@ func (c *ClientConnection) enqueue(p Packet) bool {
 	case c.Send <- p:
 		return true
 	default:
+		fmt.Printf("Disconnecting %s: outbound queue saturated (%d/%d), packet=%d\n", c.Name, len(c.Send), cap(c.Send), p.ID())
 		c.close()
 		return false
 	}
