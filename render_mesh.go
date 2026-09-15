@@ -76,7 +76,7 @@ func (s *meshRenderState) draw(m *ChunkMesh, shader uint32, viewProj mgl32.Mat4,
 		platform.BindTexture(platform.GL_TEXTURE_2D, texture)
 		s.texture, s.textureBound = texture, true
 	}
-	m.gpuMesh.Draw()
+	platform.DrawRenderMesh(m.gpuMesh)
 }
 
 func (m *ChunkMesh) Draw(shader uint32, viewProj mgl32.Mat4, overrideTextureID uint32) {
