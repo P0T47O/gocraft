@@ -159,7 +159,7 @@ func (r *worldRenderCache) drawMeshes(meshes map[string][]*ChunkMesh, assets *Re
 			r.state.draw(mesh, mesh.material.Shader.ID, viewProj, texture)
 			if mesh.glMesh != nil {
 				r.drawCalls++
-				r.triangles += int(mesh.glMesh.IndexCount) / 3
+				r.triangles += int(mesh.glMesh.IndexCount()) / 3
 			}
 		}
 	}
