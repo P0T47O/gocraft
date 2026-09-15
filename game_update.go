@@ -73,7 +73,7 @@ func updateGame() {
 				} else {
 					rl.DisableCursor()
 					// Reset mouse to center to prevent view jump
-					rl.SetMousePosition(int32(rl.GetScreenWidth()/2), int32(rl.GetScreenHeight()/2))
+					rl.SetMousePosition(rl.GetScreenWidth()/2, rl.GetScreenHeight()/2)
 				}
 			}
 		}

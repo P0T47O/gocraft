@@ -61,7 +61,7 @@ func handlePacket(pkt Packet) {
 			rl.EnableCursor()
 
 			// Center the mouse so it feels natural when UI opens
-			rl.SetMousePosition(int32(rl.GetScreenWidth()/2), int32(rl.GetScreenHeight()/2))
+			rl.SetMousePosition(rl.GetScreenWidth()/2, rl.GetScreenHeight()/2)
 		}
 
 	case *PacketChunkData:

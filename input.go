@@ -106,10 +106,10 @@ func (s *InputState) ToggleInventory() {
 		s.SkipCamera = true
 		if s.InventoryOpen {
 			rl.EnableCursor()
-			rl.SetMousePosition(int32(rl.GetScreenWidth()/2), int32(rl.GetScreenHeight()/2))
+			rl.SetMousePosition(rl.GetScreenWidth()/2, rl.GetScreenHeight()/2)
 		} else {
 			s.CraftingStation = 0 // Clear crafting state
-			rl.SetMousePosition(int32(rl.GetScreenWidth()/2), int32(rl.GetScreenHeight()/2))
+			rl.SetMousePosition(rl.GetScreenWidth()/2, rl.GetScreenHeight()/2)
 			rl.DisableCursor()
 		}
 	}
@@ -118,7 +118,7 @@ func (s *InputState) ToggleInventory() {
 		s.SkipCamera = true
 		s.CraftingStation = 0
 
-		rl.SetMousePosition(int32(rl.GetScreenWidth()/2), int32(rl.GetScreenHeight()/2))
+		rl.SetMousePosition(rl.GetScreenWidth()/2, rl.GetScreenHeight()/2)
 		rl.DisableCursor()
 	}
 }
