@@ -164,12 +164,13 @@ func (s *Server) Broadcast(p Packet) {
 	s.ClientsMu.RLock()
 	defer s.ClientsMu.RUnlock()
 
-	// Movement snapshots are replaceable: if a peer is behind, dropping an old
-	// position is better than disconnecting it. Authoritative state transitions
-	// (blocks, inventory, spawn/despawn, metadata, vitals, unloads, chat, etc.)
-	// must never disappear silently; enqueue() will disconnect a peer that can no
-	// longer keep up rather than leaving it permanently divergent.
-	bestEffort := p.ID() == IDPlayerMove || p.ID() == IDEntityMove || p.ID() == 0x1D
+	// Movement snapshots and chunk-unload hints are replaceable. A client also
+	// garbage-collects far chunks locally, and the server clears KnownChunks when
+	// it unloads one, so dropping an unload hint under backpressure is preferable
+	// to disconnecting an otherwise healthy client. Authoritative inventory,
+	// block, spawn/despawn, metadata, vitals and chat transitions still use the
+	// reliable enqueue path below.
+	bestEffort := p.ID() == IDPlayerMove || p.ID() == IDEntityMove || p.ID() == IDUnloadChunk || p.ID() == 0x1D
 	for _, c := range s.Clients {
 		if bestEffort {
 			select {
