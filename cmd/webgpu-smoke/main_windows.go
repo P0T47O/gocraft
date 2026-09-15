@@ -6,14 +6,44 @@ import (
 	"fmt"
 	"log"
 	"time"
+	"unsafe"
 
 	rl "github.com/gen2brain/raylib-go/raylib"
 	"github.com/go-webgpu/webgpu/wgpu"
+	"gocraft/platform"
 )
+
+const smokeShader = `
+struct VertexInput {
+    @location(0) position: vec3f,
+    @location(1) uv: vec2f,
+    @location(2) normal: vec3f,
+    @location(3) color: vec4f,
+}
+
+struct VertexOutput {
+    @builtin(position) position: vec4f,
+    @location(0) color: vec4f,
+}
+
+@vertex
+fn vs_main(in: VertexInput) -> VertexOutput {
+    var out: VertexOutput;
+    out.position = vec4f(in.position, 1.0);
+    let normalLight = 0.70 + 0.30 * max(in.normal.z, 0.0);
+    out.color = vec4f(in.color.rgb * normalLight, in.color.a);
+    return out;
+}
+
+@fragment
+fn fs_main(in: VertexOutput) -> @location(0) vec4f {
+    return in.color;
+}
+`
 
 func main() {
 	rl.SetTraceLogLevel(rl.LogWarning)
-	rl.InitWindow(960, 540, "GoCraft WebGPU smoke")
+	rl.InitWindow(960, 540, "GoCraft WebGPU mesh smoke")
 	defer rl.CloseWindow()
 	rl.SetExitKey(0)
 
@@ -44,6 +74,10 @@ func main() {
 	}
 	defer device.Release()
 	queue := device.Queue()
+	if queue == nil {
+		log.Fatal("WebGPU device returned a nil queue")
+	}
+	defer queue.Release()
 
 	surface, err := instance.CreateSurfaceFromWindowsHWND(0, hwnd)
 	if err != nil {
@@ -82,8 +116,21 @@ func main() {
 	}
 	configure()
 
-	fmt.Printf("WebGPU smoke ready: HWND=0x%x, format=%v, %dx%d\n", hwnd, format, width, height)
-	fmt.Println("Expected result: this window should stay WebGPU-blue. Close it normally to finish the probe.")
+	pipeline, err := createSmokePipeline(device, format)
+	if err != nil {
+		log.Fatalf("create GoCraft WebGPU mesh pipeline: %v", err)
+	}
+	defer pipeline.Release()
+
+	meshBackend := platform.NewWebGPUMeshBackend(device)
+	mesh, err := meshBackend.UploadChecked(smokeVertices(), []uint32{0, 1, 2, 2, 3, 0})
+	if err != nil {
+		log.Fatalf("upload GoCraft WebGPU smoke mesh: %v", err)
+	}
+	defer mesh.Unload()
+
+	fmt.Printf("WebGPU mesh smoke ready: HWND=0x%x, format=%v, %dx%d, vertexStride=%d bytes\n", hwnd, format, width, height, unsafe.Sizeof(platform.Vertex{}))
+	fmt.Println("Expected result: blue background with a four-corner colored quad. Resize the window, then close it normally.")
 
 	for {
 		rl.PollInputEvents()
@@ -98,7 +145,7 @@ func main() {
 			configure()
 		}
 
-		if err := drawClearFrame(device, queue, surface); err != nil {
+		if err := drawMeshFrame(device, queue, surface, pipeline, meshBackend, mesh); err != nil {
 			if err == wgpu.ErrSurfaceLost || err == wgpu.ErrSurfaceNeedsReconfigure {
 				configure()
 				continue
@@ -109,7 +156,74 @@ func main() {
 	}
 }
 
-func drawClearFrame(device *wgpu.Device, queue *wgpu.Queue, surface *wgpu.Surface) error {
+func smokeVertices() []platform.Vertex {
+	return []platform.Vertex{
+		{Position: [3]float32{-0.65, -0.55, 0}, Texcoord: [2]float32{0, 1}, Color: [4]uint8{255, 90, 90, 255}, Normal: [3]float32{0, 0, 1}},
+		{Position: [3]float32{0.65, -0.55, 0}, Texcoord: [2]float32{1, 1}, Color: [4]uint8{90, 255, 120, 255}, Normal: [3]float32{0, 0, 1}},
+		{Position: [3]float32{0.65, 0.55, 0}, Texcoord: [2]float32{1, 0}, Color: [4]uint8{100, 150, 255, 255}, Normal: [3]float32{0, 0, 1}},
+		{Position: [3]float32{-0.65, 0.55, 0}, Texcoord: [2]float32{0, 0}, Color: [4]uint8{255, 220, 90, 255}, Normal: [3]float32{0, 0, 1}},
+	}
+}
+
+func createSmokePipeline(device *wgpu.Device, format wgpu.TextureFormat) (*wgpu.RenderPipeline, error) {
+	shader, err := device.CreateShaderModuleWGSL(smokeShader)
+	if err != nil {
+		return nil, fmt.Errorf("create WGSL shader: %w", err)
+	}
+	if shader == nil {
+		return nil, fmt.Errorf("create WGSL shader: nil module")
+	}
+	defer shader.Release()
+
+	attributes := []wgpu.VertexAttribute{
+		{Format: wgpu.VertexFormatFloat32x3, Offset: 0, ShaderLocation: 0},
+		{Format: wgpu.VertexFormatFloat32x2, Offset: 12, ShaderLocation: 1},
+		{Format: wgpu.VertexFormatFloat32x3, Offset: 24, ShaderLocation: 2},
+		{Format: wgpu.VertexFormatUnorm8x4, Offset: 20, ShaderLocation: 3},
+	}
+	stride := uint64(unsafe.Sizeof(platform.Vertex{}))
+	if stride != 36 {
+		return nil, fmt.Errorf("unexpected platform.Vertex stride %d, want 36", stride)
+	}
+
+	pipeline, err := device.CreateRenderPipeline(&wgpu.RenderPipelineDescriptor{
+		Label:  "GoCraft WebGPU mesh smoke pipeline",
+		Layout: nil,
+		Vertex: wgpu.VertexState{
+			Module:     shader,
+			EntryPoint: "vs_main",
+			Buffers: []wgpu.VertexBufferLayout{{
+				ArrayStride:    stride,
+				StepMode:       wgpu.VertexStepModeVertex,
+				AttributeCount: len(attributes),
+				Attributes:     &attributes[0],
+			}},
+		},
+		Primitive: wgpu.PrimitiveState{
+			Topology:  wgpu.PrimitiveTopologyTriangleList,
+			FrontFace: wgpu.FrontFaceCCW,
+			CullMode:  wgpu.CullModeNone,
+		},
+		Multisample: wgpu.MultisampleState{Count: 1, Mask: 0xFFFFFFFF},
+		Fragment: &wgpu.FragmentState{
+			Module:     shader,
+			EntryPoint: "fs_main",
+			Targets: []wgpu.ColorTargetState{{
+				Format:    format,
+				WriteMask: wgpu.ColorWriteMaskAll,
+			}},
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	if pipeline == nil {
+		return nil, fmt.Errorf("WebGPU returned nil render pipeline")
+	}
+	return pipeline, nil
+}
+
+func drawMeshFrame(device *wgpu.Device, queue *wgpu.Queue, surface *wgpu.Surface, pipeline *wgpu.RenderPipeline, meshBackend *platform.WebGPUMeshBackend, mesh platform.MeshHandle) error {
 	surfaceTexture, _, err := surface.GetCurrentTexture()
 	if err != nil {
 		return err
@@ -125,13 +239,13 @@ func drawClearFrame(device *wgpu.Device, queue *wgpu.Queue, surface *wgpu.Surfac
 	}
 	defer view.Release()
 
-	encoder, err := device.CreateCommandEncoder(&wgpu.CommandEncoderDescriptor{Label: "GoCraft WebGPU smoke encoder"})
+	encoder, err := device.CreateCommandEncoder(&wgpu.CommandEncoderDescriptor{Label: "GoCraft WebGPU mesh smoke encoder"})
 	if err != nil {
 		return fmt.Errorf("create command encoder: %w", err)
 	}
 
 	pass, err := encoder.BeginRenderPass(&wgpu.RenderPassDescriptor{
-		Label: "GoCraft WebGPU smoke clear pass",
+		Label: "GoCraft WebGPU mesh smoke pass",
 		ColorAttachments: []wgpu.RenderPassColorAttachment{{
 			View:       view,
 			LoadOp:     wgpu.LoadOpClear,
@@ -142,6 +256,13 @@ func drawClearFrame(device *wgpu.Device, queue *wgpu.Queue, surface *wgpu.Surfac
 	if err != nil {
 		encoder.Release()
 		return fmt.Errorf("begin render pass: %w", err)
+	}
+	pass.SetPipeline(pipeline)
+	if err := meshBackend.DrawPass(pass, mesh); err != nil {
+		pass.End()
+		pass.Release()
+		encoder.Release()
+		return fmt.Errorf("draw mesh: %w", err)
 	}
 	pass.End()
 	pass.Release()

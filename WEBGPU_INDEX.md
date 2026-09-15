@@ -7,11 +7,12 @@ This supplements `CODE_INDEX.md` without replacing the main project's complete n
 | Migration plan and milestones | `WEBGPU_MIGRATION.md` |
 | Backend-neutral vertex and opaque current OpenGL mesh | `platform/mesh.go` |
 | `MeshBackend` / `MeshHandle`, upload/draw routing | `platform/renderer.go` |
-| `webgpu` build-tag staging backend | `platform/webgpu_backend.go`: `EnableExperimentalWebGPU` |
+| Real WebGPU vertex/index buffer backend | `platform/webgpu_backend.go`: `NewWebGPUMeshBackend`, `UploadChecked`, `DrawPass` |
+| Windows WebGPU surface + indexed mesh smoke probe | `cmd/webgpu-smoke/main_windows.go` |
 | Chunk mesh backend-neutral GPU handle | `render_mesh.go` |
 
-Current state: the OpenGL VAO/VBO/EBO identities no longer escape `platform.Mesh`; chunk meshes hold a backend-neutral handle and mesh draws route through the selected backend. The tagged WebGPU backend currently owns copies of CPU vertex/index payloads but intentionally does not draw yet.
+Current state: the Raylib-created HWND can be presented by WebGPU on real Windows hardware. The WebGPU backend now uploads the exact GoCraft `platform.Vertex` payload and uint32 index buffers to GPU memory, owns their release, and can bind/draw them inside a WebGPU render pass. The smoke command uses the same 36-byte layout in WGSL and should show a colored quad if the path is correct.
 
-Next implementation step: choose/pin the WebGPU Go binding, initialize instance/device/surface, replace staged CPU payloads with real vertex/index GPU buffers, then introduce the chunk WGSL pipeline. Normal Raylib/OpenGL remains the reference path during bring-up.
+Next implementation step after local validation: feed one real chunk mesher output into the WebGPU pass, then add camera/view-projection uniforms, depth and atlas sampling. The normal Raylib/OpenGL renderer remains the reference path during bring-up.
 
-Local validation note: because this work was authored through the repository connector rather than a GPU-capable checkout, run the normal validation plus `go run ./tools/codeindex -write` after checkout before judging the branch. No visual correctness claim has been made yet.
+Local validation: run `go build .`, `go test ./...`, then `go run ./cmd/webgpu-smoke` with `WGPU_NATIVE_PATH` configured. Because new Go symbols were added through the repository connector, also run `go run ./tools/codeindex -write` and commit the regenerated `CODE_SYMBOLS.md` before considering the branch clean.

@@ -6,7 +6,7 @@ This branch is an isolated experiment for evaluating a WebGPU rendering backend 
 
 The Raylib/OpenGL reference renderer still builds and renders the existing GoCraft world after the first backend-neutral mesh refactor.
 
-The next milestone is now concrete: `cmd/webgpu-smoke` attaches go-webgpu to the **existing Raylib-created Windows HWND** and presents a WebGPU clear pass without using Raylib's drawing/swap path. This intentionally tests whether Raylib can remain as a temporary window/input layer while rendering moves to WebGPU.
+The Windows surface smoke probe has now been validated on real hardware: WebGPU successfully presents into the existing Raylib-created HWND. The next probe exercises the actual GoCraft 36-byte `platform.Vertex` layout, WebGPU vertex/index buffer upload and indexed drawing. Run it with `go run ./cmd/webgpu-smoke`; success is a blue window containing a four-corner colored quad.
 
 The experiment uses `github.com/go-webgpu/webgpu v0.5.5`, which requires Go 1.25 and the `wgpu-native` v29 runtime binary (`wgpu_native.dll` on Windows). The native library can be placed beside the executable / in PATH, or selected with `WGPU_NATIVE_PATH`.
 
@@ -28,9 +28,9 @@ Raylib also appears in shared/non-rendering structures (client state, world ray 
 
 - [x] Backend-neutral mesh payload/handle boundary; existing renderer remains functional.
 - [x] Select and pin the Go WebGPU binding/backend (`go-webgpu/webgpu v0.5.5`, wgpu-native v29).
-- [ ] Prove WebGPU instance/device/surface presentation on the current Raylib-created HWND (`go run ./cmd/webgpu-smoke`).
-- [ ] Replace staged CPU payloads with real WebGPU vertex/index GPU buffers.
-- [ ] WGSL chunk pipeline matching the existing 36-byte vertex semantics.
+- [x] Prove WebGPU instance/device/surface presentation on the current Raylib-created HWND.
+- [x] Replace staged CPU payloads with real WebGPU vertex/index GPU buffers.
+- [x] Prove a WGSL pipeline matching the existing 36-byte vertex semantics in the smoke probe.
 - [ ] Upload and render one real GoCraft chunk.
 - [ ] Camera/view-projection, depth, atlas texture and vertex tint.
 - [ ] Visible chunk loop and culling.
@@ -40,4 +40,4 @@ Raylib also appears in shared/non-rendering structures (client state, world ray 
 
 ## Validation note
 
-The reference Raylib/OpenGL path has now been locally confirmed to build, pass the current tests, and visually render the existing world after the initial seam refactor. WebGPU visual correctness is not yet claimed until the smoke probe presents successfully on real hardware.
+The reference Raylib/OpenGL path has been locally confirmed to build, pass the current tests, and visually render the existing world after the initial seam refactor. The plain WebGPU surface clear has also been visually validated on Windows hardware. The indexed mesh probe added after that still requires local validation before claiming the vertex layout/buffer path is correct.
