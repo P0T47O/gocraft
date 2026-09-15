@@ -15,6 +15,7 @@
 | 远程实体插值 | [game_entities.go](game_entities.go) |
 | 游戏场景绘制 | [game_render.go](game_render.go) |
 | WebGPU Playing 状态接入/退出 | [webgpu_game_windows.go](webgpu_game_windows.go)、[webgpu_game_stub.go](webgpu_game_stub.go) |
+| WebGPU Playing 单 pass 合成（world + HUD + text） | [webgpu_gameplay_windows.go](webgpu_gameplay_windows.go)：`DrawGameplay` |
 | 客户端连接与收发 | [client.go](client.go) |
 | 配置、渲染距离 | [settings.go](settings.go)、[menu_screens.go](menu_screens.go) |
 
@@ -61,6 +62,7 @@
 | 后端中立网格上传接口、OpenGL/WebGPU GPU buffer | [render_mesh.go](render_mesh.go)、[platform/renderer.go](platform/renderer.go)、[platform/mesh.go](platform/mesh.go)、[platform/webgpu_backend.go](platform/webgpu_backend.go) |
 | OpenGL 可见区块、透明排序、雾距 | [world_render.go](world_render.go)、[render_cull.go](render_cull.go) |
 | WebGPU 世界渲染（surface、depth、atlas、opaque/cutout、water/glass、fog、可见 section 提交） | [webgpu_world_renderer_windows.go](webgpu_world_renderer_windows.go)、[webgpu_atlas.go](webgpu_atlas.go) |
+| WebGPU gameplay HUD / 文本（准星、热键栏、生命、像素字体、聊天、debug、暂停/死亡提示） | [webgpu_hud_windows.go](webgpu_hud_windows.go)、[webgpu_text_windows.go](webgpu_text_windows.go) |
 | WebGPU 迁移验证/交互预览 | [webgpu_chunk_preview_test.go](webgpu_chunk_preview_test.go)、[webgpu_region_preview_test.go](webgpu_region_preview_test.go)、[webgpu_surface_preview_test.go](webgpu_surface_preview_test.go)、[webgpu_textured_preview_test.go](webgpu_textured_preview_test.go)、[webgpu_transparency_preview_test.go](webgpu_transparency_preview_test.go)、[WEBGPU_MIGRATION.md](WEBGPU_MIGRATION.md) |
 | 地形颜色缓存 | [mesh_tint.go](mesh_tint.go) |
 | 资源持有、初始化与释放 | [render_assets.go](render_assets.go) |
@@ -100,7 +102,7 @@
 - 存档与协议：`save_file_test.go`、`protocol_varint_test.go`，各玩法测试也覆盖消息往返。
 - 重生与生命：`player_vitals_test.go`；视距：`settings_distance_test.go`、`world_fog_test.go`。
 - 界面预览：`*_preview_test.go`；性能：`engine_bench_test.go`。
-- WebGPU 实机路径：Windows 下 `go run . -webgpu`，菜单仍由 Raylib/OpenGL 绘制，进入 Playing 后 WebGPU 独占 world present；当前实体、HUD/菜单叠加、特殊/动画非 atlas 材质仍待迁移。
+- WebGPU 实机路径：Windows 下 `go run . -webgpu`，菜单仍由 Raylib/OpenGL 绘制，进入 Playing 后 WebGPU 独占 present；当前 world、准星、热键栏、生命 HUD、ASCII 文本/聊天/debug/暂停死亡提示已迁移，实体、完整背包/容器/暂停菜单控件、挖掘裂纹、特殊/动画非 atlas 材质仍待迁移。
 - 纹理过滤：`render_filter_test.go` 检查设置往返与图集留白；设置 `GOCRAFT_FILTER_GPU_TEST=1` 后运行 `go test . -run TestTextureFilterGPU`，实测倍率、mipmap 开关回读及 GL 错误。
 - 过滤设置默认 mipmap 开启、AF 8×，即时生效并保存；AF 自动限制到硬件能力。图集使用加宽留白，8× 保留 0–4 级，16× 限至 0–3 级；关闭 mipmap 仅停用采样，不释放层级内存。
 - 新增功能或移动职责时，同一批修改更新本页；符号清单运行 `go run ./tools/codeindex -write` 更新。
@@ -114,4 +116,4 @@
 `chunk_mesher.go` 的 `buildAllMeshData`、`server_packets.go` 的 `HandlePacket`、
 `input.go` 仍包含较大的单体流程。这轮保留其内部实现，避免整理目录时混入算法修改。
 后续分别适合抽取面生成策略、按消息域处理函数、输入与交互状态机。
-工程仍使用 package main；WebGPU 实验目前只替换 world pass，并未完成 UI/实体/特殊材质的平台解耦。
+工程仍使用 package main；WebGPU 实验现已接管 Playing 的 world + 基础 HUD/text presentation，但完整 UI、实体、特殊材质，以及 window/input 与 Raylib 类型解耦仍未完成。
