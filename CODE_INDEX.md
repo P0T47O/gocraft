@@ -1,7 +1,7 @@
 # 功能与代码导航
 
 按功能先查本页，按类型/函数名查 [自动符号索引](CODE_SYMBOLS.md)。
-本轮只调整文件归属，不改协议、存档格式、线程模型或公开函数名。
+本页随功能演进维护；当前加载流水线与测量方法见 [加载说明](LOADING.md)。
 
 ## 运行入口与客户端
 
@@ -26,6 +26,8 @@
 | 权威 tick、区块回收 | [server_tick.go](server_tick.go)：`Tick` |
 | 权威消息处理与玩家操作校验 | [server_packets.go](server_packets.go)：`HandlePacket` |
 | 区块请求排队、快照、发送预算 | [server_chunks.go](server_chunks.go) |
+| 独立加载调度、近处优先排序缓存、客户端队列反压 | [server_streaming.go](server_streaming.go)、[client.go](client.go)、[server_streaming_test.go](server_streaming_test.go) |
+| 光照分段快照、合并与完整请求优先 | [server_chunk_light.go](server_chunk_light.go)、[protocol_light.go](protocol_light.go)、[protocol_light_test.go](protocol_light_test.go) |
 | 实体更新、生成、背包同步 | [server_entities.go](server_entities.go) |
 | 聊天命令 | [server_commands.go](server_commands.go) |
 | 服务端保存编排 | [server_save.go](server_save.go)：`Save` |
@@ -46,10 +48,12 @@
 | 生成任务、区块填充、矿脉 | [world_gen.go](world_gen.go) |
 | 群系权重、高度场、河道、地表与植被规则 | [generation_biomes.go](generation_biomes.go) |
 | 地形列、坡度、洞穴和坐标哈希 | [generation_terrain.go](generation_terrain.go) |
+| 生成任务内地表/树木共享采样缓存与逐字节一致性对照 | [generation_cache.go](generation_cache.go)、[generation_cache_test.go](generation_cache_test.go) |
 | 树锚点与跨区块树冠 | [generation_trees.go](generation_trees.go) |
 | 生成机制及限制 | [GENERATION.md](GENERATION.md) |
 | 光照传播 | [world_light.go](world_light.go) |
 | 客户端区块消息应用、射线查询 | [world_packets.go](world_packets.go)、[world_ray.go](world_ray.go) |
+| 客户端光照增量、精确网格失效范围与更新合并 | [world_packet_light.go](world_packet_light.go)、[world_mesh_dirty.go](world_mesh_dirty.go)、[world_mesh_dirty_test.go](world_mesh_dirty_test.go) |
 | 网格任务与快照 | [world_mesh.go](world_mesh.go) |
 | 方块表面网格构建 | [chunk_mesher.go](chunk_mesher.go) |
 | 网格上传与 GL 状态 | [render_mesh.go](render_mesh.go)、[platform/mesh.go](platform/mesh.go)、[platform/gl.go](platform/gl.go) |
@@ -63,6 +67,7 @@
 | 物品图标、图集、着色器 | [render_icons.go](render_icons.go)、[render_atlas.go](render_atlas.go)、[render_shaders.go](render_shaders.go) |
 | 方块/掉落物绘制 | [render_block.go](render_block.go)、[render_item.go](render_item.go) |
 | 性能采样与日志 | [performance_monitor.go](performance_monitor.go) |
+| 加载阶段耗时/积压/废弃网格统计、32 半径服务端冷加载实测 | [performance_loading.go](performance_loading.go)、[streaming_load_test.go](streaming_load_test.go)、[LOADING.md](LOADING.md) |
 
 ## 玩法、界面与存档
 

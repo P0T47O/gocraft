@@ -17,6 +17,7 @@ var chunkDataBufPool = sync.Pool{
 }
 
 type Server struct {
+	pendingLights     map[chunkKey]map[string]uint16
 	MobSpawnTicks     int
 	Containers        map[BlockPos]*BlockContainer
 	ContainerSessions map[string]ContainerSession
@@ -39,6 +40,8 @@ type Server struct {
 	LastSentMeta                          map[string]int32
 	SavePath                              string
 	PendingChunks                         map[chunkKey][]string
+	chunkOrder                            []chunkPriority
+	chunkOrderAt                          time.Time
 	Listener                              net.Listener
 }
 
@@ -120,6 +123,8 @@ func (s *Server) Start() {
 	fmt.Println("Server starting...")
 	ticker := time.NewTicker(50 * time.Millisecond) // 20 TPS
 	defer ticker.Stop()
+	streamTicker := time.NewTicker(8 * time.Millisecond)
+	defer streamTicker.Stop()
 	playerSaveTicker := time.NewTicker(60 * time.Second)
 	defer playerSaveTicker.Stop()
 
@@ -146,6 +151,8 @@ func (s *Server) Start() {
 			s.Save()
 		case <-ticker.C:
 			s.Tick()
+		case <-streamTicker.C:
+			s.processChunkStreaming()
 		case wrap := <-s.PacketCh:
 			s.HandlePacket(wrap)
 		}

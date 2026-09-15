@@ -16,6 +16,10 @@ func sampleTerrainColumn(seed uint32, x, z int) terrainColumn {
 	// Central differences of unquantized height avoid voxel stair-step artifacts.
 	dx := (sampleEnvironment(seed, x+2, z).elevation - sampleEnvironment(seed, x-2, z).elevation) / 4
 	dz := (sampleEnvironment(seed, x, z+2).elevation - sampleEnvironment(seed, x, z-2).elevation) / 4
+	return terrainColumnFromSamples(seed, x, z, e, dx, dz)
+}
+
+func terrainColumnFromSamples(seed uint32, x, z int, e environmentSample, dx, dz float32) terrainColumn {
 	slope := float32(math.Sqrt(float64(dx*dx + dz*dz)))
 	top, filler := surfaceFromEnvironment(seed, x, z, e, slope)
 	return terrainColumn{height: e.height, biomeID: e.biome, top: top, filler: filler, ocean: isOceanBiome(e.biome), environment: e, slope: slope}

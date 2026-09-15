@@ -11,8 +11,6 @@ func (s *Server) Tick() {
 	}
 	started := time.Now()
 	defer func() { perfMon.RecordTick(time.Since(started)) }()
-	s.World.ProcessGenResults()
-	s.processPendingChunks()
 	s.updatePlayerVitals()
 	s.UpdateEntities()
 	s.updateMobs()

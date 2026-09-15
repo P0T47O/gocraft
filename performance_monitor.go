@@ -15,15 +15,17 @@ import (
 )
 
 type PerformanceMonitor struct {
-	file           *os.File
-	updateTicker   *time.Ticker
-	Metrics        PerfMetrics
-	chunksMeshed   atomic.Int64
-	chunksLoaded   atomic.Int64
-	chunksUnloaded atomic.Int64
-	tickNanos      atomic.Int64
-	frames         []float64
-	startTime      time.Time
+	loading                                                        [loadingPhaseCount]loadingPhaseCounter
+	genQueued, genReady, chunksPending, chunksPublished, meshStale atomic.Int64
+	file                                                           *os.File
+	updateTicker                                                   *time.Ticker
+	Metrics                                                        PerfMetrics
+	chunksMeshed                                                   atomic.Int64
+	chunksLoaded                                                   atomic.Int64
+	chunksUnloaded                                                 atomic.Int64
+	tickNanos                                                      atomic.Int64
+	frames                                                         []float64
+	startTime                                                      time.Time
 }
 
 type PerfMetrics struct {
@@ -48,7 +50,7 @@ func NewPerformanceMonitor() *PerformanceMonitor {
 	}
 
 	// Write CSV Header
-	_, _ = f.WriteString("Timestamp,FPS,FrameTime(ms),HeapAlloc(MB),Goroutines,MeshesBuilt/s,ChunksLoaded/s,ChunksUnloaded/s,ActiveMeshes,FrameP95(ms),FrameP99(ms),ServerTick(ms),MeshJobs,MeshResults,ClientChunks,DrawCalls,Triangles\n")
+	_, _ = f.WriteString("Timestamp,FPS,FrameTime(ms),HeapAlloc(MB),Goroutines,MeshesBuilt/s,ClientChunksReceived/s,ChunksUnloaded/s,ActiveMeshes,FrameP95(ms),FrameP99(ms),ServerTick(ms),MeshJobs,MeshResults,ClientChunks,DrawCalls,Triangles" + loadingCSVHeader() + "\n")
 
 	pm := &PerformanceMonitor{
 		file:         f,
@@ -163,7 +165,7 @@ func (pm *PerformanceMonitor) logMetrics() {
 
 	timestamp := time.Since(pm.startTime).Seconds()
 
-	line := fmt.Sprintf("%.2f,%d,%.2f,%d,%d,%d,%d,%d,%d,%.2f,%.2f,%.2f,%d,%d,%d,%d,%d\n",
+	line := fmt.Sprintf("%.2f,%d,%.2f,%d,%d,%d,%d,%d,%d,%.2f,%.2f,%.2f,%d,%d,%d,%d,%d",
 		timestamp,
 		pm.Metrics.FPS,
 		pm.Metrics.FrameTime,
@@ -177,7 +179,7 @@ func (pm *PerformanceMonitor) logMetrics() {
 		pm.Metrics.MeshJobs, pm.Metrics.MeshResults, pm.Metrics.LoadedChunks, pm.Metrics.DrawCalls, pm.Metrics.Triangles,
 	)
 
-	_, err := pm.file.WriteString(line)
+	_, err := pm.file.WriteString(line + pm.loadingCSVValues() + "\n")
 	if err != nil {
 		log.Printf("Error writing to perf log: %v", err)
 	}

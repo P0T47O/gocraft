@@ -33,11 +33,13 @@ func (p *ChunkPool) Put(c *Chunk) {
 
 // Reset clears the chunk data so it can be reused
 func (c *Chunk) Reset() {
+	c.lightDirtySections = 0
 	c.instance = 0
 	c.sectionBlocks = [sectionCount]uint16{}
 	c.torches = c.torches[:0]
 	c.tints = nil
 	c.meshRequest = [sectionCount]uint64{}
+	c.meshSubmittedVersion = [sectionCount]uint32{}
 	c.meshRetries = [sectionCount]byte{}
 	// Re-initialize arrays to zero
 	// Note: Go arrays are value types, so assigning a zero-value array clears them

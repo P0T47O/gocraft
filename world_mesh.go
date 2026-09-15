@@ -148,7 +148,9 @@ func (w *World) StartMeshWorkers(assets *RenderAssets, workers int) {
 						return
 					default:
 					}
+					start := time.Now()
 					res.results = assets.buildAllMeshData(&job.heightMap, job.baseX, job.baseZ, job.yMin, job.yMax, job.snapshot.blockAt, job.snapshot.lightAt, job.snapshot.metaAt, w.seed, job.tints)
+					perfMon.recordLoading(phaseMeshCPU, start)
 				}()
 				select {
 				case w.meshResults <- res:
@@ -274,14 +276,12 @@ func (w *World) markChunkSectionDirty(cx, cz, section int) {
 	ensureChunkSections(chunk)
 	if section < 0 || section >= sectionCount {
 		for i := range chunk.sectionDirty {
-			chunk.sectionDirty[i] = true
-			chunk.meshVersion[i]++
+			chunk.invalidateMeshSection(i)
 		}
 		chunk.mu.Unlock()
 		return
 	}
-	chunk.sectionDirty[section] = true
-	chunk.meshVersion[section]++
+	chunk.invalidateMeshSection(section)
 	chunk.mu.Unlock()
 }
 
@@ -372,6 +372,7 @@ func (w *World) submitMesh(cx, cz, sec int, assets *RenderAssets) bool {
 	job.request = w.nextMeshID
 	select {
 	case w.meshJobs <- job:
+		c.meshSubmittedVersion[sec] = job.version
 		c.meshRequest[sec] = job.request
 		setMeshPending(c, sec, true)
 		return true
@@ -440,6 +441,9 @@ func (w *World) ProcessMeshResults(assets *RenderAssets, maxPerFrame int) {
 		case res := <-w.meshResults:
 			c := w.acceptsMesh(res)
 			if c == nil {
+				if perfMon != nil {
+					perfMon.meshStale.Add(1)
+				}
 				releaseMeshResults(res.results)
 				continue
 			}
@@ -455,11 +459,13 @@ func (w *World) ProcessMeshResults(assets *RenderAssets, maxPerFrame int) {
 				}
 			}
 			sec := res.section
+			uploadStart := time.Now()
 			clearSectionMeshes(c, sec)
 			c.opaqueMeshes[sec] = assets.applyMeshData(res.results["opaque"])
 			c.waterMeshes[sec] = assets.applyMeshData(res.results["water"])
 			c.cutoutMeshes[sec] = assets.applyMeshData(res.results["cutout"])
 			c.glassMeshes[sec] = assets.applyMeshData(res.results["glass"])
+			perfMon.recordLoading(phaseUpload, uploadStart)
 			c.meshRetries[sec] = 0
 			c.sectionDirty[sec] = false
 			perfMon.IncrementMeshBuild()

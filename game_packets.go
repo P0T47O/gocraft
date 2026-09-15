@@ -68,6 +68,8 @@ func handlePacket(pkt Packet) {
 		if world.applyChunkPacket(p) {
 			delete(pendingChunkRequests, chunkKey{int(p.CX), int(p.CZ)})
 		}
+	case *PacketChunkLight:
+		world.applyChunkLight(p)
 
 	case *PacketBlockChange:
 		world.SetBlockAt(int(p.X), int(p.Y), int(p.Z), p.BlockID)

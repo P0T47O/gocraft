@@ -56,7 +56,8 @@ func (w *World) queueChunkGen(key chunkKey) {
 
 func (w *World) ProcessGenResults() {
 	deadline := time.Now().Add(3 * time.Millisecond)
-	for count := 0; count < 4; count++ {
+	limit := streamingBatchSize(len(w.genResults))
+	for count := 0; count < limit; count++ {
 		if count > 0 && time.Now().After(deadline) {
 			return
 		}
@@ -74,11 +75,15 @@ func (w *World) ProcessGenResults() {
 			delete(w.pending, res.key)
 			w.chunksMu.Unlock()
 			w.freeChunk(old)
+			lightStart := time.Now()
 			w.stitchChunkLighting(res.key.X, res.key.Z)
+			perfMon.recordLoading(phaseLightStitch, lightStart)
 			w.markChunkAllSectionsDirty(res.key.X, res.key.Z)
 			w.markNeighborsDirty(res.key.X, res.key.Z)
 			w.applyPendingEdits(res.key)
-			perfMon.IncrementChunkLoad()
+			if perfMon != nil {
+				perfMon.chunksPublished.Add(1)
+			}
 		default:
 			return
 		}
@@ -100,13 +105,23 @@ func (w *World) genWorker() {
 		default:
 		}
 		chunk := w.chunkPool.Get()
-		if w.SavePath == "" || !TryLoadChunk(w.SavePath, chunk, job.key.X, job.key.Z) {
+		loaded := false
+		if w.SavePath != "" {
+			start := time.Now()
+			loaded = TryLoadChunk(w.SavePath, chunk, job.key.X, job.key.Z)
+			perfMon.recordLoading(phaseDisk, start)
+		}
+		if !loaded {
+			start := time.Now()
 			generateChunkData(w.seed, job.key.X, job.key.Z, chunk)
+			perfMon.recordLoading(phaseGeneration, start)
 		}
 		chunk.rebuildHeightMap()
 		chunk.rebuildTorchCount()
 		ensureChunkSections(chunk)
+		lightStart := time.Now()
 		initializeChunkLighting(chunk)
+		perfMon.recordLoading(phaseLightInit, lightStart)
 		chunk.generated = true
 		select {
 		case w.genResults <- chunkGenResult{key: job.key, chunk: chunk, instance: job.instance}:
@@ -118,6 +133,12 @@ func (w *World) genWorker() {
 }
 
 func generateChunkData(seed uint32, cx, cz int, chunk *Chunk) {
+	var cache terrainSampleCache
+	cache.init(seed, cx, cz)
+	generateChunkDataSampled(seed, cx, cz, chunk, cache.column)
+}
+
+func generateChunkDataSampled(seed uint32, cx, cz int, chunk *Chunk, column func(uint32, int, int) terrainColumn) {
 	blocks := &chunk.blocks
 	heightMap := &chunk.heightMap
 	// Pool reuse must not retain air-space blocks from previous coordinates.
@@ -126,7 +147,7 @@ func generateChunkData(seed uint32, cx, cz int, chunk *Chunk) {
 	for x := 0; x < chunkWidth; x++ {
 		for z := 0; z < chunkWidth; z++ {
 			wx, wz := cx*chunkWidth+x, cz*chunkWidth+z
-			col := sampleTerrainColumn(seed, wx, wz)
+			col := column(seed, wx, wz)
 			columns[x][z] = col
 			for y := 0; y < col.topY(); y++ {
 				blocks[x][y][z] = col.blockAt(seed, wx, y, wz)
@@ -234,7 +255,7 @@ func generateChunkData(seed uint32, cx, cz int, chunk *Chunk) {
 	placeOreVeins(randForChunk(0x1004), blockDiamondOre, 1, 7, 1, 16, false)
 	placeOreVeins(randForChunk(0x1005), blockLapisOre, 1, 6, 1, 32, true)
 
-	placeGeneratedTrees(seed, cx, cz, chunk)
+	placeGeneratedTreesSampled(seed, cx, cz, chunk, column)
 	for x := 0; x < chunkWidth; x++ {
 		for z := 0; z < chunkWidth; z++ {
 			col := columns[x][z]

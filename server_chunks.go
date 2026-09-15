@@ -43,26 +43,13 @@ func (s *Server) SendChunksAround(username string, centerCX, centerCZ, radius in
 		// Trigger generation priority
 		s.World.requestChunk(key.X, key.Z)
 
-		// Add to pending
-		if list, ok := s.PendingChunks[key]; ok {
-			// Check if already in list to avoid dups
-			found := false
-			for _, n := range list {
-				if n == username {
-					found = true
-					break
-				}
-			}
-			if !found {
-				s.PendingChunks[key] = append(list, username)
-			}
-		} else {
-			s.PendingChunks[key] = []string{username}
-		}
+		s.queueChunkFor(key, username)
 	}
 }
 
 func (s *Server) queueChunkFor(key chunkKey, user string) {
+	// An explicit full request always supersedes a pending light-only refresh.
+	delete(s.pendingLights[key], user)
 	for _, name := range s.PendingChunks[key] {
 		if name == user {
 			return
@@ -72,6 +59,8 @@ func (s *Server) queueChunkFor(key chunkKey, user string) {
 }
 
 func chunkPacket(key chunkKey, chunk *Chunk) *PacketChunkData {
+	start := time.Now()
+	defer func() { perfMon.recordLoading(phaseSnapshot, start) }()
 	data := make([]byte, chunkWidth*chunkHeight*chunkWidth)
 	light := make([]byte, len(data))
 	meta := make([]byte, len(data))
@@ -90,59 +79,76 @@ func chunkPacket(key chunkKey, chunk *Chunk) *PacketChunkData {
 }
 
 func (s *Server) processPendingChunks() {
+	deadline := time.Now().Add(2 * time.Millisecond)
 	// Border lighting can change already-sent chunks when a neighbor arrives.
 	s.ClientsMu.RLock()
 	for key := range s.World.lightChanged {
+		chunk := s.World.getChunkIfGenerated(key.X, key.Z)
+		if chunk == nil {
+			continue
+		}
+		mask := chunk.lightDirtySections
+		if mask == 0 {
+			mask = 0xffff
+		}
 		for name, c := range s.Clients {
 			if c.KnownChunks[key] {
-				s.queueChunkFor(key, name)
+				s.queueChunkLightFor(key, name, mask)
 			}
 		}
+		chunk.lightDirtySections = 0
 	}
 	s.ClientsMu.RUnlock()
 	clear(s.World.lightChanged)
-	keys := make([]chunkKey, 0, len(s.PendingChunks))
-	for key := range s.PendingChunks {
-		keys = append(keys, key)
+	if len(s.PendingChunks) == 0 {
+		s.chunkOrder = s.chunkOrder[:0]
+		return
 	}
-	distance := func(key chunkKey) int {
-		best := int(^uint(0) >> 1)
-		for _, name := range s.PendingChunks[key] {
-			if c := s.Clients[name]; c != nil {
-				dx, dz := key.X-c.LastChunkX, key.Z-c.LastChunkZ
-				if d := dx*dx + dz*dz; d < best {
-					best = d
+	if s.chunkOrderNeedsRefresh(time.Now()) {
+		s.chunkOrder = s.chunkOrder[:0]
+		distance := func(key chunkKey) int {
+			best := int(^uint(0) >> 1)
+			for _, name := range s.PendingChunks[key] {
+				if c := s.Clients[name]; c != nil {
+					dx, dz := key.X-c.LastChunkX, key.Z-c.LastChunkZ
+					if d := dx*dx + dz*dz; d < best {
+						best = d
+					}
 				}
 			}
+			return best
 		}
-		return best
+		s.ClientsMu.RLock()
+		for key := range s.PendingChunks {
+			s.chunkOrder = append(s.chunkOrder, chunkPriority{key, distance(key)})
+		}
+		sort.Slice(s.chunkOrder, func(i, j int) bool {
+			di, dj := s.chunkOrder[i].distance, s.chunkOrder[j].distance
+			if di != dj {
+				return di < dj
+			}
+			if s.chunkOrder[i].key.X != s.chunkOrder[j].key.X {
+				return s.chunkOrder[i].key.X < s.chunkOrder[j].key.X
+			}
+			return s.chunkOrder[i].key.Z < s.chunkOrder[j].key.Z
+		})
+		s.ClientsMu.RUnlock()
+		s.chunkOrderAt = time.Now()
 	}
-	s.ClientsMu.RLock()
-	sort.Slice(keys, func(i, j int) bool {
-		di, dj := distance(keys[i]), distance(keys[j])
-		if di != dj {
-			return di < dj
-		}
-		if keys[i].X != keys[j].X {
-			return keys[i].X < keys[j].X
-		}
-		return keys[i].Z < keys[j].Z
-	})
-	s.ClientsMu.RUnlock()
-	deadline := time.Now().Add(2 * time.Millisecond)
+	limit := streamingBatchSize(len(s.PendingChunks))
 	sent := 0
-	for _, key := range keys {
-		if sent >= 4 || time.Now().After(deadline) {
+	for _, entry := range s.chunkOrder {
+		key := entry.key
+		if sent >= limit || time.Now().After(deadline) {
 			return
 		}
-		// Retry submissions previously rejected by a full generation queue.
-		chunk := s.World.requestChunk(key.X, key.Z)
-		if !chunk.generated {
+		if len(s.PendingChunks[key]) == 0 {
 			continue
 		}
-		packet := chunkPacket(key, chunk)
+		// Prune abandoned requests, and do not allocate snapshots for full peers.
+		ready := false
 		remaining := s.PendingChunks[key][:0]
-		s.ClientsMu.Lock()
+		s.ClientsMu.RLock()
 		for _, name := range s.PendingChunks[key] {
 			c := s.Clients[name]
 			if c == nil {
@@ -152,9 +158,57 @@ func (s *Server) processPendingChunks() {
 			if dx*dx+dz*dz > (maxRenderDistance+4)*(maxRenderDistance+4) {
 				continue
 			}
+			remaining = append(remaining, name)
+			ready = ready || chunkSendHasRoom(c)
+		}
+		s.ClientsMu.RUnlock()
+		if len(remaining) == 0 {
+			delete(s.PendingChunks, key)
+			delete(s.pendingLights, key)
+			continue
+		}
+		s.PendingChunks[key] = remaining
+		if !ready {
+			continue
+		}
+		// Retry submissions previously rejected by a full generation queue.
+		chunk := s.World.requestChunk(key.X, key.Z)
+		if !chunk.generated {
+			continue
+		}
+		var fullPacket *PacketChunkData
+		lightPackets := make(map[uint16]*PacketChunkLight)
+		remaining = s.PendingChunks[key][:0]
+		s.ClientsMu.Lock()
+		for _, name := range s.PendingChunks[key] {
+			c := s.Clients[name]
+			if c == nil {
+				continue
+			}
+			if !chunkSendHasRoom(c) {
+				remaining = append(remaining, name)
+				continue
+			}
+			dx, dz := key.X-c.LastChunkX, key.Z-c.LastChunkZ
+			if dx*dx+dz*dz > (maxRenderDistance+4)*(maxRenderDistance+4) {
+				continue
+			}
+			var packet Packet
+			if mask := s.pendingLights[key][name]; mask != 0 && c.KnownChunks[key] {
+				if lightPackets[mask] == nil {
+					lightPackets[mask] = chunkLightPacket(key, chunk, mask)
+				}
+				packet = lightPackets[mask]
+			} else {
+				if fullPacket == nil {
+					fullPacket = chunkPacket(key, chunk)
+				}
+				packet = fullPacket
+			}
 			select {
 			case c.Send <- packet:
 				c.KnownChunks[key] = true
+				delete(s.pendingLights[key], name)
 			default:
 				remaining = append(remaining, name)
 			}
@@ -162,6 +216,7 @@ func (s *Server) processPendingChunks() {
 		s.ClientsMu.Unlock()
 		if len(remaining) == 0 {
 			delete(s.PendingChunks, key)
+			delete(s.pendingLights, key)
 		} else {
 			s.PendingChunks[key] = remaining
 		}

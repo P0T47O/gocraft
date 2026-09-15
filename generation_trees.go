@@ -10,6 +10,10 @@ type treeAnchor struct {
 
 func sampleTreeAnchor(seed uint32, x, z int) (treeAnchor, bool) {
 	c := sampleTerrainColumn(seed, x, z)
+	return treeAnchorFromColumn(seed, x, z, c)
+}
+
+func treeAnchorFromColumn(seed uint32, x, z int, c terrainColumn) (treeAnchor, bool) {
 	a := treeAnchor{x: x, y: c.height, z: z, log: blockLog, leaves: blockLeaves}
 	if c.height < seaLevel || c.height >= chunkHeight-20 || isOceanBiome(c.biomeID) ||
 		(c.top != blockGrass && c.top != blockDirt && c.top != blockSnow) {
@@ -85,12 +89,16 @@ func generationIsLeaf(b byte) bool {
 }
 
 func placeGeneratedTrees(seed uint32, cx, cz int, chunk *Chunk) {
+	placeGeneratedTreesSampled(seed, cx, cz, chunk, sampleTerrainColumn)
+}
+
+func placeGeneratedTreesSampled(seed uint32, cx, cz int, chunk *Chunk, column func(uint32, int, int) terrainColumn) {
 	bx, bz := cx*chunkWidth, cz*chunkWidth
 	// Every intersecting anchor is replayed in global X/Z order in each chunk.
 	// Logs beat leaves; the earliest anchor wins equal-priority overlaps.
 	for x := bx - treeRadius; x < bx+chunkWidth+treeRadius; x++ {
 		for z := bz - treeRadius; z < bz+chunkWidth+treeRadius; z++ {
-			a, ok := sampleTreeAnchor(seed, x, z)
+			a, ok := treeAnchorFromColumn(seed, x, z, column(seed, x, z))
 			if !ok {
 				continue
 			}

@@ -84,17 +84,23 @@
 
 函数/方法：`terrainNoise`、`sampleEnvironment`、`riverSignedDistance`、`surfaceFromEnvironment`、`vegetationAt`
 
+## [generation_cache.go](generation_cache.go)
+
+类型：`terrainSampleCache`
+
+函数/方法：`*terrainSampleCache.init`、`*terrainSampleCache.column`
+
 ## [generation_terrain.go](generation_terrain.go)
 
 类型：`terrainColumn`
 
-函数/方法：`sampleTerrainColumn`、`terrainColumn.topY`、`terrainColumn.blockAt`、`generationHash`、`caveNoise`、`caveAt`、`vegetationBlock`
+函数/方法：`sampleTerrainColumn`、`terrainColumnFromSamples`、`terrainColumn.topY`、`terrainColumn.blockAt`、`generationHash`、`caveNoise`、`caveAt`、`vegetationBlock`
 
 ## [generation_trees.go](generation_trees.go)
 
 类型：`treeAnchor`
 
-函数/方法：`sampleTreeAnchor`、`treeAnchor.emit`、`generationIsLog`、`generationIsLeaf`、`placeGeneratedTrees`
+函数/方法：`sampleTreeAnchor`、`treeAnchorFromColumn`、`treeAnchor.emit`、`generationIsLog`、`generationIsLeaf`、`placeGeneratedTrees`、`placeGeneratedTreesSampled`
 
 ## [hud_ui.go](hud_ui.go)
 
@@ -180,6 +186,12 @@
 
 函数/方法：`newMob`、`*MobEntity.random`、`*MobEntity.hasBehavior`、`colliderLoaded`、`*MobEntity.Tick`、`mobBox`、`*MobEntity.hit`
 
+## [performance_loading.go](performance_loading.go)
+
+类型：`loadingPhase`、`loadingPhaseCounter`
+
+函数/方法：`*PerformanceMonitor.recordLoading`、`loadingCSVHeader`、`*PerformanceMonitor.loadingCSVValues`
+
 ## [performance_monitor.go](performance_monitor.go)
 
 类型：`PerformanceMonitor`、`PerfMetrics`
@@ -233,6 +245,12 @@
 类型：`PacketEntitySpawn`、`PacketEntityDespawn`、`PacketEntityMeta`、`PacketEntityMove`
 
 函数/方法：`*PacketEntitySpawn.ID`、`*PacketEntitySpawn.Encode`、`*PacketEntitySpawn.Decode`、`*PacketEntityDespawn.ID`、`*PacketEntityDespawn.Encode`、`*PacketEntityDespawn.Decode`、`*PacketEntityMeta.ID`、`*PacketEntityMeta.Encode`、`*PacketEntityMeta.Decode`、`*PacketEntityMove.ID`、`*PacketEntityMove.Encode`、`*PacketEntityMove.Decode`
+
+## [protocol_light.go](protocol_light.go)
+
+类型：`PacketChunkLight`
+
+函数/方法：`chunkLightSize`、`*PacketChunkLight.ID`、`*PacketChunkLight.Encode`、`*PacketChunkLight.Decode`
 
 ## [protocol_player.go](protocol_player.go)
 
@@ -354,6 +372,10 @@
 
 函数/方法：`NewServer`、`*Server.Stop`、`*Server.Start`
 
+## [server_chunk_light.go](server_chunk_light.go)
+
+函数/方法：`*Server.queueChunkLightFor`、`chunkLightPacket`
+
 ## [server_chunks.go](server_chunks.go)
 
 函数/方法：`*Server.SendChunksAround`、`*Server.queueChunkFor`、`chunkPacket`、`*Server.processPendingChunks`
@@ -377,6 +399,12 @@
 ## [server_save.go](server_save.go)
 
 函数/方法：`*Server.Save`
+
+## [server_streaming.go](server_streaming.go)
+
+类型：`chunkPriority`
+
+函数/方法：`*Server.processChunkStreaming`、`streamingBatchSize`、`*Server.chunkOrderNeedsRefresh`、`chunkSendHasRoom`
 
 ## [server_tick.go](server_tick.go)
 
@@ -436,7 +464,7 @@
 
 类型：`chunkGenJob`、`chunkGenResult`
 
-函数/方法：`init`、`*World.queueChunkGen`、`*World.ProcessGenResults`、`*World.genWorker`、`generateChunkData`、`terrainTopY`、`blockAtProcedural`、`terrainHeight`、`rawTerrainHeight`、`terrainShapeSample`、`getClimate`、`getBiome`、`isOceanBiome`、`fbm2`、`noise2`、`hash2`、`absInt`、`abs`、`fade`、`lerp`、`smoothstep`、`ridge`、`smoothCurve`、`classifyBiome`、`fastFloor`
+函数/方法：`init`、`*World.queueChunkGen`、`*World.ProcessGenResults`、`*World.genWorker`、`generateChunkData`、`generateChunkDataSampled`、`terrainTopY`、`blockAtProcedural`、`terrainHeight`、`rawTerrainHeight`、`terrainShapeSample`、`getClimate`、`getBiome`、`isOceanBiome`、`fbm2`、`noise2`、`hash2`、`absInt`、`abs`、`fade`、`lerp`、`smoothstep`、`ridge`、`smoothCurve`、`classifyBiome`、`fastFloor`
 
 ## [world_lifecycle.go](world_lifecycle.go)
 
@@ -455,6 +483,16 @@
 类型：`meshKind`、`meshSnapshot`、`meshJob`、`meshResult`
 
 函数/方法：`*meshSnapshot.index`、`*meshSnapshot.blockAt`、`*meshSnapshot.lightAt`、`*meshSnapshot.metaAt`、`*meshSnapshot.Release`、`releaseMeshResults`、`*World.StartMeshWorkers`、`buildMeshSnapshotFromNeighbors`、`*World.markChunkSectionDirty`、`*World.markNeighborsDirty`、`*World.requestImmediateMesh`、`*World.requestImmediateAllSections`、`unloadMeshPass`、`clearSectionMeshes`、`setMeshPending`、`*World.submitMesh`、`*World.ProcessImmediateMeshes`、`*World.acceptsMesh`、`*World.ProcessMeshResults`
+
+## [world_mesh_dirty.go](world_mesh_dirty.go)
+
+类型：`chunkMeshChanges`
+
+函数/方法：`*Chunk.invalidateMeshSection`、`*chunkMeshChanges.mark`、`*chunkMeshChanges.apply`
+
+## [world_packet_light.go](world_packet_light.go)
+
+函数/方法：`*World.applyChunkLight`
 
 ## [world_packets.go](world_packets.go)
 

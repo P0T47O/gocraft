@@ -205,6 +205,7 @@ func (u *lightUpdate) set(p lightPos, sky bool, value byte) bool {
 		return false
 	}
 	*light = value
+	c.c.lightDirtySections |= 1 << (p.y / sectionHeight)
 	if u.w.lightChanged == nil {
 		u.w.lightChanged = make(map[chunkKey]bool)
 	}
@@ -216,8 +217,7 @@ func (u *lightUpdate) flush() {
 	for key := range u.dirty {
 		c := u.chunk(chunkKey{key.X, key.Z}).c
 		ensureChunkSections(c)
-		c.sectionDirty[key.Section] = true
-		c.meshVersion[key.Section]++
+		c.invalidateMeshSection(key.Section)
 	}
 	if len(u.dirty) > 0 {
 		u.w.dirty = true
@@ -355,6 +355,7 @@ func (w *World) rebuildLightingForChunk(cx, cz int) {
 						w.lightChanged = make(map[chunkKey]bool)
 					}
 					w.lightChanged[chunkKey{cx, cz}] = true
+					c.lightDirtySections |= 1 << (y / sectionHeight)
 					u.mark(lightPos{cx*chunkWidth + x, y, cz*chunkWidth + z})
 				}
 			}

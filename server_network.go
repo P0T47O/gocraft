@@ -122,7 +122,12 @@ func (s *Server) handleNewConnection(conn net.Conn) {
 			case <-cc.done:
 				return
 			case p := <-cc.Send:
-				if err := WritePacket(conn, p); err != nil {
+				start := time.Now()
+				err := WritePacket(conn, p)
+				if p.ID() == IDChunkData || p.ID() == IDChunkLight {
+					perfMon.recordLoading(phaseNetworkWrite, start)
+				}
+				if err != nil {
 					return
 				}
 			}

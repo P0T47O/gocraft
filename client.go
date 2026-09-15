@@ -33,7 +33,7 @@ func ConnectTCP(addr string, name string) (*Client, error) {
 	c := &Client{
 		Conn:     conn,
 		Name:     name,
-		Incoming: make(chan Packet, 4096),
+		Incoming: make(chan Packet, 128), // Bounded snapshots; TCP supplies backpressure.
 		done:     make(chan struct{}),
 	}
 

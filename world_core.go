@@ -60,31 +60,33 @@ type sectionKey struct {
 }
 
 type Chunk struct {
-	mu            sync.RWMutex
-	instance      uint64
-	sectionBlocks [sectionCount]uint16
-	torches       []blockPos
-	tints         *meshTintCache
-	meshRequest   [sectionCount]uint64
-	blocks        [chunkWidth][chunkHeight][chunkWidth]byte
-	meta          [chunkWidth][chunkHeight][chunkWidth]byte
-	heightMap     [chunkWidth][chunkWidth]int16
-	opaqueMeshes  []map[string][]*ChunkMesh
-	waterMeshes   []map[string][]*ChunkMesh
-	cutoutMeshes  []map[string][]*ChunkMesh
-	glassMeshes   []map[string][]*ChunkMesh
-	skyLight      [chunkWidth][chunkHeight][chunkWidth]byte
-	blockLight    [chunkWidth][chunkHeight][chunkWidth]byte
-	meshRetries   [sectionCount]byte // Track failures to prevent infinite retry loops
-	dirty         bool
-	generated     bool
-	sectionDirty  []bool
-	pendingOpaque []bool
-	pendingWater  []bool
-	pendingCutout []bool
-	pendingGlass  []bool
-	meshVersion   []uint32
-	torchCount    int
+	lightDirtySections   uint16
+	mu                   sync.RWMutex
+	instance             uint64
+	sectionBlocks        [sectionCount]uint16
+	torches              []blockPos
+	tints                *meshTintCache
+	meshRequest          [sectionCount]uint64
+	meshSubmittedVersion [sectionCount]uint32
+	blocks               [chunkWidth][chunkHeight][chunkWidth]byte
+	meta                 [chunkWidth][chunkHeight][chunkWidth]byte
+	heightMap            [chunkWidth][chunkWidth]int16
+	opaqueMeshes         []map[string][]*ChunkMesh
+	waterMeshes          []map[string][]*ChunkMesh
+	cutoutMeshes         []map[string][]*ChunkMesh
+	glassMeshes          []map[string][]*ChunkMesh
+	skyLight             [chunkWidth][chunkHeight][chunkWidth]byte
+	blockLight           [chunkWidth][chunkHeight][chunkWidth]byte
+	meshRetries          [sectionCount]byte // Track failures to prevent infinite retry loops
+	dirty                bool
+	generated            bool
+	sectionDirty         []bool
+	pendingOpaque        []bool
+	pendingWater         []bool
+	pendingCutout        []bool
+	pendingGlass         []bool
+	meshVersion          []uint32
+	torchCount           int
 }
 
 func NewFlatWorld() *World {
@@ -308,8 +310,7 @@ func (w *World) SetMetaAt(x, y, z int, meta byte) {
 	chunk.dirty = true
 	ensureChunkSections(chunk)
 	sec := sectionIndexForY(y)
-	chunk.sectionDirty[sec] = true
-	chunk.meshVersion[sec]++
+	chunk.invalidateMeshSection(sec)
 	chunk.mu.Unlock()
 	w.requestImmediateMesh(cx, cz, sec)
 	w.dirty = true
@@ -362,8 +363,7 @@ func (w *World) SetBlockAt(x, y, z int, block byte) {
 	chunk.dirty = true
 	ensureChunkSections(chunk)
 	sec := sectionIndexForY(y)
-	chunk.sectionDirty[sec] = true
-	chunk.meshVersion[sec]++
+	chunk.invalidateMeshSection(sec)
 	chunk.mu.Unlock()
 	opacityChanged := isOpaqueBlock(oldBlock) != isOpaqueBlock(block)
 	if emitsLight(oldBlock) || emitsLight(block) || opacityChanged {
@@ -423,8 +423,7 @@ func (w *World) markChunkAllSectionsDirty(cx, cz int) {
 	defer chunk.mu.Unlock()
 	ensureChunkSections(chunk)
 	for i := range chunk.sectionDirty {
-		chunk.sectionDirty[i] = true
-		chunk.meshVersion[i]++
+		chunk.invalidateMeshSection(i)
 	}
 }
 
