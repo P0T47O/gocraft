@@ -260,14 +260,10 @@ func (w *World) BlockAt(x, y, z int) byte {
 	cz := divFloor(z, chunkWidth)
 	lx := modFloor(x, chunkWidth)
 	lz := modFloor(z, chunkWidth)
-	// Prefer reading from already-generated chunks to avoid triggering generation on read paths
-	chunk := w.getChunkIfGenerated(cx, cz)
-	if chunk != nil {
-		return chunk.blocks[lx][y][lz]
-	}
-	// Fallback: request chunk (may trigger generation) and use procedural if not ready
-	chunk = w.requestChunk(cx, cz)
-	if chunk.generated {
+	// Reads are side-effect free: generated chunks are authoritative, while
+	// unloaded coordinates use the deterministic terrain baseline. Callers that
+	// need materialized chunk state must request/write it explicitly.
+	if chunk := w.getChunkIfGenerated(cx, cz); chunk != nil {
 		return chunk.blocks[lx][y][lz]
 	}
 	return blockAtProcedural(w.seed, x, y, z)
@@ -281,8 +277,7 @@ func (w *World) MetaAt(x, y, z int) byte {
 	cz := divFloor(z, chunkWidth)
 	lx := modFloor(x, chunkWidth)
 	lz := modFloor(z, chunkWidth)
-	chunk := w.requestChunk(cx, cz)
-	if chunk.generated {
+	if chunk := w.getChunkIfGenerated(cx, cz); chunk != nil {
 		return chunk.meta[lx][y][lz]
 	}
 	return 0
@@ -407,8 +402,7 @@ func (w *World) HeightAt(x, z int) int {
 	cz := divFloor(z, chunkWidth)
 	lx := modFloor(x, chunkWidth)
 	lz := modFloor(z, chunkWidth)
-	chunk := w.requestChunk(cx, cz)
-	if chunk.generated {
+	if chunk := w.getChunkIfGenerated(cx, cz); chunk != nil {
 		return int(chunk.heightMap[lx][lz])
 	}
 	return terrainTopY(w.seed, x, z)

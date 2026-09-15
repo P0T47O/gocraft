@@ -119,6 +119,12 @@ func TestGenerationRejectsOldInstanceAndAppliesDeferredEdit(t *testing.T) {
 	initBlockRegistry()
 	w := NewFlatWorld()
 	defer w.Close()
+	_ = w.BlockAt(32, 70, 32)
+	_ = w.MetaAt(32, 70, 32)
+	_ = w.HeightAt(32, 32)
+	if len(w.chunks) != 0 || len(w.pending) != 0 {
+		t.Fatal("read-only world queries requested chunks")
+	}
 	old := w.requestChunk(0, 0).instance
 	w.UnloadChunks(100, 100, 1, nil)
 	c := w.requestChunk(0, 0)
