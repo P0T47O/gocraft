@@ -233,6 +233,32 @@ func drawSettingsMenu(l SurvivalLayout, fromPause bool) {
 	l.Text("PLAYER", 28, 184, 14, invAccent)
 	l.Text("Your name is used to", 28, 222, 15, invMuted)
 	l.Text("identify your inventory.", 28, 246, 15, invMuted)
+	mipmapLabel := "Mipmaps: OFF"
+	if settings.Mipmaps {
+		mipmapLabel = "Mipmaps: ON"
+	}
+	if ui.DrawButton(l.Rect(28, 274, 142, 34), mipmapLabel, true) {
+		settings.Mipmaps = !settings.Mipmaps
+		SaveSettings()
+		applyWorldTextureFiltering()
+	}
+	limit := supportedAnisotropy()
+	af := min(normalizeAnisotropy(settings.Anisotropy), limit)
+	afLabel := fmt.Sprintf("AF: %dx", af)
+	if af == 1 {
+		afLabel = "AF: OFF"
+	}
+	if limit == 1 {
+		afLabel = "AF: N/A"
+	}
+	if ui.DrawButton(l.Rect(180, 274, 142, 34), afLabel, limit > 1) {
+		settings.Anisotropy = af * 2
+		if settings.Anisotropy > limit {
+			settings.Anisotropy = 1
+		}
+		SaveSettings()
+		applyWorldTextureFiltering()
+	}
 	l.Text("PLAYER NAME", 354, 164, 12, invMuted)
 	ui.DrawTextField(l.Rect(354, 186, 600, 40), &settings.PlayerName, "player_name", 16, false)
 	l.Text("MOUSE SENSITIVITY", 354, 244, 12, invMuted)

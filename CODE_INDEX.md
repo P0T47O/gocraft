@@ -57,7 +57,7 @@
 | 地形颜色缓存 | [mesh_tint.go](mesh_tint.go) |
 | 资源持有、初始化与释放 | [render_assets.go](render_assets.go) |
 | 纹理加载、材质、透明像素处理 | [render_textures.go](render_textures.go) |
-| 世界纹理 mipmap、图集留白与层级限制 | [render_filter.go](render_filter.go)、[render_filter_test.go](render_filter_test.go)、[render_atlas.go](render_atlas.go) |
+| 世界纹理 mipmap/各向异性过滤、图集留白与安全层级限制 | [render_filter.go](render_filter.go)、[render_filter_test.go](render_filter_test.go)、[render_atlas.go](render_atlas.go)；硬件检测：[platform/texture_filter.go](platform/texture_filter.go)；即时设置和保存：[settings.go](settings.go)、[menu_screens.go](menu_screens.go) |
 | 动画纹理及模型纹理切换 | [render_animation.go](render_animation.go) |
 | 面模型、面网格模板 | [render_faces.go](render_faces.go) |
 | 物品图标、图集、着色器 | [render_icons.go](render_icons.go)、[render_atlas.go](render_atlas.go)、[render_shaders.go](render_shaders.go) |
@@ -91,6 +91,8 @@
 - 存档与协议：`save_file_test.go`、`protocol_varint_test.go`，各玩法测试也覆盖消息往返。
 - 重生与生命：`player_vitals_test.go`；视距：`settings_distance_test.go`、`world_fog_test.go`。
 - 界面预览：`*_preview_test.go`；性能：`engine_bench_test.go`。
+- 纹理过滤：`render_filter_test.go` 检查设置往返与图集留白；设置 `GOCRAFT_FILTER_GPU_TEST=1` 后运行 `go test . -run TestTextureFilterGPU`，实测倍率、mipmap 开关回读及 GL 错误。
+- 过滤设置默认 mipmap 开启、AF 8×，即时生效并保存；AF 自动限制到硬件能力。图集使用加宽留白，8× 保留 0–4 级，16× 限至 0–3 级；关闭 mipmap 仅停用采样，不释放层级内存。
 - 新增功能或移动职责时，同一批修改更新本页；符号清单运行 `go run ./tools/codeindex -write` 更新。
 - 提交前运行 `go run ./tools/codeindex -check`，防止符号清单过期。
 - 同职责使用同一文件前缀；不为了行数拆开一个紧密相关的小流程。

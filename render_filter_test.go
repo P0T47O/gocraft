@@ -1,6 +1,54 @@
 package main
 
-import "testing"
+import (
+	"encoding/json"
+	"testing"
+)
+
+func TestTextureFilterSettingsRoundTrip(t *testing.T) {
+	s := GameSettings{Mipmaps: true, Anisotropy: 8}
+	if err := json.Unmarshal([]byte(`{"PlayerName":"Old"}`), &s); err != nil {
+		t.Fatal(err)
+	}
+	if !s.Mipmaps || s.Anisotropy != 8 {
+		t.Fatal("missing fields lost defaults")
+	}
+	s.Mipmaps, s.Anisotropy = false, 16
+	b, err := json.Marshal(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var restored GameSettings
+	if err := json.Unmarshal(b, &restored); err != nil {
+		t.Fatal(err)
+	}
+	if restored.Mipmaps || restored.Anisotropy != 16 {
+		t.Fatal("filter settings lost")
+	}
+}
+
+func TestAnisotropyNormalization(t *testing.T) {
+	for _, tc := range [][2]int{{-1, 1}, {0, 1}, {1, 1}, {2, 2}, {3, 2}, {7, 4}, {8, 8}, {16, 16}, {100, 16}} {
+		if got := normalizeAnisotropy(tc[0]); got != tc[1] {
+			t.Fatalf("%d: got %d want %d", tc[0], got, tc[1])
+		}
+	}
+}
+
+func TestAnisotropicAtlasGutters(t *testing.T) {
+	if safeAtlasMipLevel(8) != atlasMaxMipLevel {
+		t.Fatal("default AF must retain all mip levels")
+	}
+	for _, af := range []int{1, 2, 4, 8, 16} {
+		level := safeAtlasMipLevel(af)
+		if level < 0 || level > atlasMaxMipLevel {
+			t.Fatal("invalid level", level)
+		}
+		if atlasPadding/(1<<level) < af/2+1 {
+			t.Fatal("unsafe footprint", af, level)
+		}
+	}
+}
 
 func TestAtlasMipIsolation(t *testing.T) {
 	for level := 0; level <= atlasMaxMipLevel; level++ {

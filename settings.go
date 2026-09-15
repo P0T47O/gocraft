@@ -15,6 +15,8 @@ type GameSettings struct {
 	ResolutionHeight int
 	PlayerName       string
 	RenderDistance   int // Chunks; client-pull streaming supports live changes.
+	Mipmaps          bool
+	Anisotropy       int // 1 disables anisotropic filtering; otherwise 2/4/8/16.
 }
 
 const minRenderDistance = 8
@@ -52,6 +54,8 @@ func LoadSettings() *GameSettings {
 		ResolutionHeight: 720,
 		PlayerName:       "Player",
 		RenderDistance:   defaultRenderDistance,
+		Mipmaps:          true,
+		Anisotropy:       8,
 	}
 
 	data, err := os.ReadFile(settingsFile)
@@ -64,6 +68,7 @@ func LoadSettings() *GameSettings {
 	}
 
 	settings.RenderDistance = clampRenderDistance(settings.RenderDistance)
+	settings.Anisotropy = normalizeAnisotropy(settings.Anisotropy)
 	currentSettings = settings
 	return settings
 }

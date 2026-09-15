@@ -6,9 +6,39 @@ import (
 )
 
 const atlasTileSize = 16
-const atlasCellSize = 64
-const atlasPadding = 16
+
+// Wide gutters retain the full mip chain at the default 8x anisotropy.
+const atlasCellSize = 256
+const atlasPadding = 112
 const atlasMaxMipLevel = 4
+
+var textureAnisotropyLimit int
+
+func normalizeAnisotropy(value int) int {
+	level := 1
+	for level < 16 && level*2 <= value {
+		level *= 2
+	}
+	return level
+}
+
+func supportedAnisotropy() int {
+	if textureAnisotropyLimit == 0 {
+		textureAnisotropyLimit = normalizeAnisotropy(platform.MaxTextureAnisotropy())
+	}
+	return textureAnisotropyLimit
+}
+
+// Reserve enough extruded texels for the elongated footprint plus linear taps.
+// A stronger filter trades some coarse atlas mip levels for protection from bleed.
+func safeAtlasMipLevel(anisotropy int) int {
+	level := atlasMaxMipLevel
+	padding := min(atlasPadding, atlasCellSize-atlasPadding-atlasTileSize)
+	for level > 0 && padding/(1<<level) < anisotropy/2+1 {
+		level--
+	}
+	return level
+}
 
 // Keep magnification pixel-sharp; blend mip levels during minification.
 // UI render targets retain their original point sampling.
@@ -20,11 +50,49 @@ func configureWorldTexture(texture *rl.Texture2D, atlas bool) {
 		rl.GenTextureMipmaps(texture)
 	}
 	rl.SetTextureFilter(*texture, rl.FilterPoint)
-	if texture.Mipmaps > 1 {
+	// FilterPoint selects NEAREST_MIPMAP_NEAREST when mip storage exists.
+	// Explicitly disable mip sampling before applying the selected mode.
+	rl.TextureParameters(texture.ID, rl.TextureMinFilter, rl.TextureFilterNearest)
+	mipmaps, anisotropy := true, 8
+	if currentSettings != nil {
+		mipmaps, anisotropy = currentSettings.Mipmaps, currentSettings.Anisotropy
+	}
+	anisotropy = min(normalizeAnisotropy(anisotropy), supportedAnisotropy())
+	if mipmaps && texture.Mipmaps > 1 {
 		rl.TextureParameters(texture.ID, rl.TextureMinFilter, rl.TextureFilterNearestMipLinear)
+		if anisotropy > 1 {
+			rl.TextureParameters(texture.ID, rl.TextureMinFilter, rl.TextureFilterMipLinear)
+		}
+	} else if anisotropy > 1 {
+		rl.TextureParameters(texture.ID, rl.TextureMinFilter, rl.TextureFilterLinear)
 	}
 	if atlas {
-		platform.SetTextureMaxLevel(texture.ID, atlasMaxMipLevel)
+		platform.SetTextureMaxLevel(texture.ID, safeAtlasMipLevel(anisotropy))
+	}
+	// rl.TextureParameters resets anisotropy on other parameter changes: apply last.
+	if supportedAnisotropy() > 1 {
+		rl.TextureParameters(texture.ID, rl.TextureFilterAnisotropic, int32(anisotropy))
+	}
+}
+
+// Called from settings UI on the render thread, between batches. Retain mip
+// storage while disabled so toggling never reallocates the world's textures.
+func applyWorldTextureFiltering() {
+	if assets == nil {
+		return
+	}
+	rl.DrawRenderBatchActive()
+	for path, texture := range assets.textures {
+		configureWorldTexture(&texture, false)
+		assets.textures[path] = texture
+	}
+	for _, animation := range assets.animated {
+		for i := range animation.Frames {
+			configureWorldTexture(&animation.Frames[i], false)
+		}
+	}
+	if assets.atlas != nil {
+		configureWorldTexture(&assets.atlas.Texture, true)
 	}
 }
 

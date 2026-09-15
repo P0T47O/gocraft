@@ -196,6 +196,10 @@
 
 函数/方法：`UploadMesh`、`*Mesh.Draw`、`*Mesh.Unload`、`InitGLOnce`
 
+## [platform/texture_filter.go](platform/texture_filter.go)
+
+函数/方法：`MaxTextureAnisotropy`
+
 ## [player_movement.go](player_movement.go)
 
 类型：`MovementControls`
@@ -278,7 +282,7 @@
 
 ## [render_filter.go](render_filter.go)
 
-函数/方法：`configureWorldTexture`、`atlasSourceCoordinate`
+函数/方法：`normalizeAnisotropy`、`supportedAnisotropy`、`safeAtlasMipLevel`、`configureWorldTexture`、`applyWorldTextureFiltering`、`atlasSourceCoordinate`
 
 ## [render_icons.go](render_icons.go)
 
