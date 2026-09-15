@@ -19,7 +19,7 @@ type MeshBackend interface {
 type OpenGLMeshBackend struct{}
 
 func (OpenGLMeshBackend) Upload(vertices []Vertex, indices []uint32) MeshHandle {
-	return UploadMesh(vertices, indices)
+	return uploadOpenGLMesh(vertices, indices)
 }
 
 func (OpenGLMeshBackend) Draw(mesh MeshHandle) {
