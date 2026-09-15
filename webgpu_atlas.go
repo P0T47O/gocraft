@@ -18,9 +18,9 @@ type webGPUBlockAtlas struct {
 }
 
 // buildWebGPUBlockAtlas builds a CPU-side RGBA atlas containing every texture
-// referenced by the current block registry. The returned UV map can be installed
-// on RenderAssets before chunk meshing so the existing CPU mesher emits atlas
-// coordinates without knowing which GPU backend will consume them.
+// referenced by the current block registry plus standalone item sprites. The
+// returned UV map is installed on RenderAssets so both chunk meshes and the
+// native WebGPU UI can share one texture without depending on Raylib GPU state.
 func buildWebGPUBlockAtlas() (*webGPUBlockAtlas, error) {
 	pathsSet := make(map[string]struct{})
 	for _, def := range Blocks {
@@ -32,6 +32,13 @@ func buildWebGPUBlockAtlas() (*webGPUBlockAtlas, error) {
 			if path != "" {
 				pathsSet[path] = struct{}{}
 			}
+	}
+
+	// Standalone tools/items do not have block faces but still need to appear in
+	// the WebGPU hotbar/inventory. Block items already reuse their block texture.
+	for _, def := range Items {
+		if def != nil && def.Icon != "" {
+			pathsSet[def.Icon] = struct{}{}
 		}
 	}
 
@@ -45,7 +52,7 @@ func buildWebGPUBlockAtlas() (*webGPUBlockAtlas, error) {
 	}
 	sort.Strings(paths)
 	if len(paths) == 0 {
-		return nil, fmt.Errorf("block registry contains no texture paths")
+		return nil, fmt.Errorf("registry contains no texture paths")
 	}
 
 	side := 1
