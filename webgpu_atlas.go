@@ -32,6 +32,7 @@ func buildWebGPUBlockAtlas() (*webGPUBlockAtlas, error) {
 			if path != "" {
 				pathsSet[path] = struct{}{}
 			}
+		}
 	}
 
 	// Standalone tools/items do not have block faces but still need to appear in
