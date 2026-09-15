@@ -37,6 +37,7 @@ var (
 	isServer   = flag.Bool("server", false, "Start as dedicated server")
 	serverAddr = flag.String("addr", "127.0.0.1:25565", "Server address to listen/connect")
 	username   = flag.String("name", "Player"+fmt.Sprint(time.Now().Unix()%1000), "Username")
+	useWebGPU  = flag.Bool("webgpu", false, "Use the experimental WebGPU world renderer (Windows only)")
 
 	// Game State
 	currentState ProgramState = StateMenu
@@ -142,6 +143,27 @@ func main() {
 	}
 
 	for !rl.WindowShouldClose() && !quitRequested {
+		// The WebGPU path owns presentation while playing. Raylib continues to own
+		// the native window and input, but Begin/EndDrawing must not swap the same
+		// HWND while WebGPU is presenting to it.
+		if *useWebGPU && currentState == StatePlaying {
+			if err := ensureExperimentalWebGPURenderer(); err != nil {
+				fmt.Printf("WebGPU renderer unavailable, falling back to OpenGL: %v\n", err)
+				*useWebGPU = false
+				continue
+			}
+			rl.PollInputEvents()
+			updateGame()
+			if currentState == StatePlaying {
+				if err := drawExperimentalWebGPUFrame(); err != nil {
+					fmt.Printf("WebGPU frame failed: %v\n", err)
+					quitRequested = true
+				}
+			}
+			perfMon.Update()
+			continue
+		}
+
 		rl.BeginDrawing()
 		rl.ClearBackground(invBackground)
 
