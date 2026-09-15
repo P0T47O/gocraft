@@ -2,6 +2,14 @@
 
 This branch is an isolated experiment for evaluating a WebGPU rendering backend without destabilizing `main`.
 
+## Current status
+
+The Raylib/OpenGL reference renderer still builds and renders the existing GoCraft world after the first backend-neutral mesh refactor.
+
+The next milestone is now concrete: `cmd/webgpu-smoke` attaches go-webgpu to the **existing Raylib-created Windows HWND** and presents a WebGPU clear pass without using Raylib's drawing/swap path. This intentionally tests whether Raylib can remain as a temporary window/input layer while rendering moves to WebGPU.
+
+The experiment uses `github.com/go-webgpu/webgpu v0.5.5`, which requires Go 1.25 and the `wgpu-native` v29 runtime binary (`wgpu_native.dll` on Windows). The native library can be placed beside the executable / in PATH, or selected with `WGPU_NATIVE_PATH`.
+
 ## Initial audit
 
 GoCraft already owns explicit OpenGL chunk mesh upload/draw state (`platform/mesh.go`, `render_mesh.go`) instead of relying only on Raylib high-level drawing. CPU-side meshing can therefore survive the migration, but WebGPU is a real backend rewrite rather than a library-name substitution.
@@ -18,9 +26,10 @@ Raylib also appears in shared/non-rendering structures (client state, world ray 
 
 ## Milestones
 
-- [ ] Backend-neutral mesh payload/handle boundary; existing renderer remains functional.
-- [ ] Select and pin the Go WebGPU binding/backend.
-- [ ] Device/surface/window bring-up.
+- [x] Backend-neutral mesh payload/handle boundary; existing renderer remains functional.
+- [x] Select and pin the Go WebGPU binding/backend (`go-webgpu/webgpu v0.5.5`, wgpu-native v29).
+- [ ] Prove WebGPU instance/device/surface presentation on the current Raylib-created HWND (`go run ./cmd/webgpu-smoke`).
+- [ ] Replace staged CPU payloads with real WebGPU vertex/index GPU buffers.
 - [ ] WGSL chunk pipeline matching the existing 36-byte vertex semantics.
 - [ ] Upload and render one real GoCraft chunk.
 - [ ] Camera/view-projection, depth, atlas texture and vertex tint.
@@ -29,10 +38,6 @@ Raylib also appears in shared/non-rendering structures (client state, world ray 
 - [ ] UI/input/platform parity as needed.
 - [ ] Benchmark against the Raylib/OpenGL baseline and decide whether to continue migration.
 
-## First technical seam
-
-The first code change should make the existing mesh API backend-neutral before adding WebGPU. In particular, game/render code should no longer know that a mesh is represented by VAO/VBO/EBO IDs. This gives the WebGPU implementation somewhere clean to attach its vertex/index buffers without changing the chunk mesher.
-
 ## Validation note
 
-This branch is being brought up remotely. No claim of visual correctness or local GPU validation should be made until it is run on a real supported graphics environment.
+The reference Raylib/OpenGL path has now been locally confirmed to build, pass the current tests, and visually render the existing world after the initial seam refactor. WebGPU visual correctness is not yet claimed until the smoke probe presents successfully on real hardware.
