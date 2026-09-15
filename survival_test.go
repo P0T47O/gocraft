@@ -100,6 +100,20 @@ func TestBasicMiningCraftingAndPlacement(t *testing.T) {
 	if EntityPlayer != 0 || EntityPig != 1 || EntityItem != 2 {
 		t.Fatalf("stable entity ids changed: player=%d pig=%d item=%d", EntityPlayer, EntityPig, EntityItem)
 	}
+	stableRecipes := []struct {
+		id     int
+		result int32
+	}{
+		{0, int32(blockPlankOak)},
+		{23, int32(blockTorch)},
+		{36, int32(blockFurnace)},
+		{40, int32(blockChest)},
+	}
+	for _, tc := range stableRecipes {
+		if tc.id >= len(RecipeRegistry) || RecipeRegistry[tc.id] == nil || RecipeRegistry[tc.id].ID != tc.id || RecipeRegistry[tc.id].Result.ID != tc.result {
+			t.Fatalf("stable recipe id changed: id=%d", tc.id)
+		}
+	}
 	w := NewClientWorld()
 	defer w.Close()
 	c := lifecycleChunk(w, chunkKey{0, 0})
