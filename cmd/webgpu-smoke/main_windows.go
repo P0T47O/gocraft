@@ -18,7 +18,7 @@ struct VertexInput {
     @location(0) position: vec3f,
     @location(1) uv: vec2f,
     @location(2) normal: vec3f,
-    @location(3) color: vec4f,
+    @location(3) color: vec4u,
 }
 
 struct VertexOutput {
@@ -31,7 +31,8 @@ fn vs_main(in: VertexInput) -> VertexOutput {
     var out: VertexOutput;
     out.position = vec4f(in.position, 1.0);
     let normalLight = 0.70 + 0.30 * max(in.normal.z, 0.0);
-    out.color = vec4f(in.color.rgb * normalLight, in.color.a);
+    let color = vec4f(in.color) / 255.0;
+    out.color = vec4f(color.rgb * normalLight, color.a);
     return out;
 }
 
@@ -179,7 +180,7 @@ func createSmokePipeline(device *wgpu.Device, format wgpu.TextureFormat) (*wgpu.
 		{Format: wgpu.VertexFormatFloat32x3, Offset: 0, ShaderLocation: 0},
 		{Format: wgpu.VertexFormatFloat32x2, Offset: 12, ShaderLocation: 1},
 		{Format: wgpu.VertexFormatFloat32x3, Offset: 24, ShaderLocation: 2},
-		{Format: wgpu.VertexFormatUnorm8x4, Offset: 20, ShaderLocation: 3},
+		{Format: wgpu.VertexFormatUint8x4, Offset: 20, ShaderLocation: 3},
 	}
 	stride := uint64(unsafe.Sizeof(platform.Vertex{}))
 	if stride != 36 {
@@ -195,7 +196,7 @@ func createSmokePipeline(device *wgpu.Device, format wgpu.TextureFormat) (*wgpu.
 			Buffers: []wgpu.VertexBufferLayout{{
 				ArrayStride:    stride,
 				StepMode:       wgpu.VertexStepModeVertex,
-				AttributeCount: len(attributes),
+				AttributeCount: uintptr(len(attributes)),
 				Attributes:     &attributes[0],
 			}},
 		},
