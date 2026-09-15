@@ -315,6 +315,13 @@ func createSmokePipeline(device *wgpu.Device, format gputypes.TextureFormat) (*w
 		return nil, nil, nil, nil, fmt.Errorf("unexpected platform.Vertex stride %d, want 36", stride)
 	}
 
+	stencilIgnore := wgpu.StencilFaceState{
+		Compare:     gputypes.CompareFunctionAlways,
+		FailOp:      gputypes.StencilOperationKeep,
+		DepthFailOp: gputypes.StencilOperationKeep,
+		PassOp:      gputypes.StencilOperationKeep,
+	}
+
 	pipeline, err := device.CreateRenderPipeline(&wgpu.RenderPipelineDescriptor{
 		Label:  "GoCraft WebGPU 3D smoke pipeline",
 		Layout: layout,
@@ -341,6 +348,8 @@ func createSmokePipeline(device *wgpu.Device, format gputypes.TextureFormat) (*w
 			Format:              smokeDepthFormat,
 			DepthWriteEnabled:   true,
 			DepthCompare:        gputypes.CompareFunctionLess,
+			StencilFront:        stencilIgnore,
+			StencilBack:         stencilIgnore,
 			StencilReadMask:     0xFFFFFFFF,
 			StencilWriteMask:    0xFFFFFFFF,
 		},
