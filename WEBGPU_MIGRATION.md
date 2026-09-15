@@ -14,10 +14,13 @@ The Windows experiment has now been validated through progressively larger miles
 - Real procedural world generation and the existing chunk mesher.
 - A 5x5 neighbor halo feeding a rendered inner 3x3 terrain region.
 - A CPU-built block texture atlas sampled through WebGPU using the existing chunk-mesher UV decisions, including vertex AO/tint/light modulation and cutout alpha discard.
+- Water/glass alpha blending with depth testing, depth writes disabled, back-to-front transparent batch ordering and shared distance fog.
 
-The experiment now uses `github.com/gogpu/wgpu v0.34.5` with the pure-Go native backend. The earlier `go-webgpu/webgpu` + `wgpu-native` path was abandoned after its v29 vertex-attribute ABI gap caused native pipeline panics. `wgpu_native.dll` is no longer required for this branch's normal WebGPU path.
+The experiment uses `github.com/gogpu/wgpu v0.34.5` with the pure-Go native backend. The earlier `go-webgpu/webgpu` + `wgpu-native` path was abandoned after its v29 vertex-attribute ABI gap caused native pipeline panics. `wgpu_native.dll` is no longer required for this branch's normal WebGPU path.
 
-`webgpu_transparency_preview_test.go` is the current validation target. It adds a second pipeline for water/glass with alpha blending, depth testing with depth writes disabled, back-to-front transparent batch sorting, plus distance fog shared by opaque and translucent terrain. This newest step still requires local validation before it is considered complete.
+The validated preview pipeline has now been extracted into `webgpu_world_renderer_windows.go`. Running the game with `-webgpu` keeps Raylib as the window/input owner and uses the normal OpenGL menu, then switches the Playing state to WebGPU presentation. The live WebGPU world renderer reuses the existing visible-section/frustum logic, submits normal mesh jobs, receives live chunk uploads through `WebGPUMeshBackend`, draws opaque/cutout then sorted water/glass, and presents directly to the Raylib-created HWND.
+
+This is intentionally not parity-complete yet: entities, HUD/inventory/pause overlays, mining crack, animated/special non-atlas materials and some underwater presentation remain on the follow-up list. The `-webgpu` path is therefore an integration test, not yet the default renderer.
 
 ## Initial audit
 
@@ -27,7 +30,7 @@ Raylib also appears in shared/non-rendering structures (client state, world ray 
 
 ## Strategy
 
-1. Keep `main` untouched; all work stays on `experiment/webgpu` until a real world renders and is benchmarked.
+1. Keep `main` untouched on the default path; all experimental behavior remains opt-in with `-webgpu` on `experiment/webgpu` until parity and benchmarking justify a default switch.
 2. Preserve the CPU mesh payload (`Position`, `Texcoord`, byte `Color`, `Normal`) and indices while making GPU handles backend-owned.
 3. Temporarily keep Raylib/OpenGL as the reference path while WebGPU reaches useful parity. Two permanent renderers are not a goal.
 4. Introduce narrow seams for mesh upload/draw/unload, textures, pipelines, frame/surface management and camera uniforms. Avoid a giant generic graphics API.
@@ -44,17 +47,20 @@ Raylib also appears in shared/non-rendering structures (client state, world ray 
 - [x] Camera/view-projection and depth.
 - [x] Real generated multi-chunk terrain with neighbor-aware meshing.
 - [x] Atlas texture, sampler, existing UVs, vertex tint/AO/light and cutout alpha discard.
-- [ ] Validate transparent water/glass pass and distance fog on hardware.
-- [ ] Move the validated WebGPU world pipeline out of preview tests into an actual frame renderer.
-- [ ] Visible-section loop/frustum culling and live chunk upload/unload integration.
-- [ ] Remaining world rendering: animated liquids, entities, mining crack and special materials.
-- [ ] UI/input/platform parity as needed.
+- [x] Validate transparent water/glass pass and distance fog on hardware.
+- [x] Move the validated WebGPU world pipeline out of preview tests into an actual frame renderer.
+- [x] Reuse live visible-section/frustum selection and normal chunk mesh upload/unload integration.
+- [ ] Validate the opt-in `go run . -webgpu` live game path on hardware.
+- [ ] Remaining world rendering: animated liquids, entities, mining crack and special non-atlas materials.
+- [ ] UI/HUD/inventory/pause overlay parity and frame-timing cleanup.
 - [ ] Benchmark against the Raylib/OpenGL baseline and decide whether to continue migration.
 
 ## Validation notes
 
 The reference Raylib/OpenGL path has been locally confirmed to build, pass the current tests, and visually render the existing world after the initial seam refactor.
 
-The WebGPU path has also been visually confirmed through the textured generated-terrain milestone. Preview tests intentionally mesh only a vertical slice around the surface, so when the orbiting camera sees below that artificial `yMin` plane it can expose dark cave/geology cutaways; those cutaways are a preview artifact, not evidence of broken indexing or depth.
+The WebGPU path has been visually confirmed through textured terrain plus water/glass/fog previews. Preview tests intentionally mesh only a vertical slice around the surface, so when the orbiting camera sees below that artificial `yMin` plane it can expose dark cave/geology cutaways; those cutaways are a preview artifact, not evidence of broken indexing or depth.
 
-The GLFW/WGL warning observed when closing early probes occurred during Raylib's OpenGL-context teardown after WebGPU had presented into the same HWND. It is not currently treated as a renderer failure. The production WebGPU path will not use Raylib's OpenGL draw/swap loop; window/input ownership will be revisited during frame-loop integration.
+The live `-webgpu` Playing path must not call Raylib `BeginDrawing`/`EndDrawing`; Raylib only polls input while WebGPU owns presentation. The menu remains OpenGL until entering a game. On exit, the World is closed first so its WebGPU mesh buffers are released before the WebGPU device is destroyed and the mesh backend is reset to OpenGL.
+
+The GLFW/WGL warning observed when closing early probes occurred during Raylib's OpenGL-context teardown after WebGPU had presented into the same HWND. It was not a renderer failure in those probes, but the live integration should still be watched for teardown/context issues during local validation.
