@@ -2,31 +2,35 @@
 
 package platform
 
-import "fmt"
-
 // WebGPUMeshBackend is the experimental replacement for the OpenGL mesh path.
-// The build tag keeps the incomplete backend out of normal builds while the
-// device/surface implementation is brought up.
+// Device/surface and real GPU buffers are intentionally the next milestone.
 type WebGPUMeshBackend struct{}
 
 func (WebGPUMeshBackend) Upload(vertices []Vertex, indices []uint32) MeshHandle {
-	return &pendingWebGPUMesh{vertexCount: len(vertices), indexCount: len(indices)}
+	// Keep an owned CPU copy during bring-up. This makes the backend seam usable
+	// before a WebGPU device exists and gives the real uploader stable source data.
+	v := append([]Vertex(nil), vertices...)
+	i := append([]uint32(nil), indices...)
+	return &pendingWebGPUMesh{vertices: v, indices: i}
+}
+
+func (WebGPUMeshBackend) Draw(mesh MeshHandle) {
+	// No-op until device/surface/pipeline bring-up. This is preferable to calling
+	// OpenGL accidentally from a build intended to expose remaining dependencies.
 }
 
 type pendingWebGPUMesh struct {
-	vertexCount int
-	indexCount  int
+	vertices []Vertex
+	indices  []uint32
 }
 
-func (m *pendingWebGPUMesh) Draw() {
-	panic(fmt.Sprintf("WebGPU backend not initialized: attempted to draw mesh with %d vertices / %d indices", m.vertexCount, m.indexCount))
+func (m *pendingWebGPUMesh) Draw() {}
+
+func (m *pendingWebGPUMesh) Unload() {
+	m.vertices = nil
+	m.indices = nil
 }
 
-func (m *pendingWebGPUMesh) Unload() {}
-
-// EnableExperimentalWebGPU switches future mesh uploads to the experimental
-// backend. It is deliberately explicit while surface/device bring-up is still
-// incomplete; normal builds continue to use OpenGL.
 func EnableExperimentalWebGPU() {
 	SetMeshBackend(WebGPUMeshBackend{})
 }
