@@ -253,7 +253,6 @@ func drawMeshFrame(device *wgpu.Device, queue *wgpu.Queue, surface *wgpu.Surface
 		surface.DiscardTexture()
 		return fmt.Errorf("create command encoder: %w", err)
 	}
-	defer encoder.Release()
 
 	pass, err := encoder.BeginRenderPass(&wgpu.RenderPassDescriptor{
 		Label: "GoCraft WebGPU mesh smoke pass",
@@ -271,16 +270,13 @@ func drawMeshFrame(device *wgpu.Device, queue *wgpu.Queue, surface *wgpu.Surface
 	pass.SetPipeline(pipeline)
 	if err := meshBackend.DrawPass(pass, mesh); err != nil {
 		_ = pass.End()
-		pass.Release()
 		surface.DiscardTexture()
 		return fmt.Errorf("draw mesh: %w", err)
 	}
 	if err := pass.End(); err != nil {
-		pass.Release()
 		surface.DiscardTexture()
 		return fmt.Errorf("end render pass: %w", err)
 	}
-	pass.Release()
 
 	commandBuffer, err := encoder.Finish()
 	if err != nil {
