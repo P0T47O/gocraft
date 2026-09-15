@@ -26,6 +26,13 @@ type pendingWebGPUMesh struct {
 
 func (m *pendingWebGPUMesh) Draw() {}
 
+func (m *pendingWebGPUMesh) IndexCount() int32 {
+	if m == nil {
+		return 0
+	}
+	return int32(len(m.indices))
+}
+
 func (m *pendingWebGPUMesh) Unload() {
 	m.vertices = nil
 	m.indices = nil
