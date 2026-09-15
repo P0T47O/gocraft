@@ -163,13 +163,22 @@ func (s *Server) handleNewConnection(conn net.Conn) {
 func (s *Server) Broadcast(p Packet) {
 	s.ClientsMu.RLock()
 	defer s.ClientsMu.RUnlock()
+
+	// Movement snapshots are replaceable: if a peer is behind, dropping an old
+	// position is better than disconnecting it. Authoritative state transitions
+	// (blocks, inventory, spawn/despawn, metadata, vitals, unloads, chat, etc.)
+	// must never disappear silently; enqueue() will disconnect a peer that can no
+	// longer keep up rather than leaving it permanently divergent.
+	bestEffort := p.ID() == IDPlayerMove || p.ID() == IDEntityMove || p.ID() == 0x1D
 	for _, c := range s.Clients {
-		// Non-blocking for global broadcast to prevent one laggy client from stalling server
-		select {
-		case c.Send <- p:
-		default:
-			// fmt.Println("Dropped broadcast packet to", c.Name)
+		if bestEffort {
+			select {
+			case c.Send <- p:
+			default:
+			}
+			continue
 		}
+		c.enqueue(p)
 	}
 }
 
