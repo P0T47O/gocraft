@@ -116,6 +116,10 @@ Loop:
 	world.ProcessMeshResults(assets, 16)
 
 	if input.isDead() {
+		if *useWebGPU && !input.RespawnWaiting && rl.IsKeyPressed(rl.KeyR) {
+			input.RespawnWaiting = true
+			input.RespawnLast = 0
+		}
 		input.updateRespawnRequest(client)
 		requestMissingChunks()
 		return
