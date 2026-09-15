@@ -69,6 +69,37 @@ func TestInventoryOverflowConservesItems(t *testing.T) {
 func TestBasicMiningCraftingAndPlacement(t *testing.T) {
 	initBlockRegistry()
 	InitRecipes()
+	stableBlocks := []struct {
+		name string
+		got  byte
+		want byte
+	}{
+		{"air", blockAir, 0}, {"torch", blockTorch, 10}, {"bedrock", blockBedrock, 16},
+		{"oak_plank", blockPlankOak, 30}, {"crafting_table", blockCraftingTable, 41},
+		{"chest", blockChest, 42}, {"furnace", blockFurnace, 43},
+	}
+	for _, tc := range stableBlocks {
+		if tc.got != tc.want {
+			t.Fatalf("stable block id changed: %s=%d want %d", tc.name, tc.got, tc.want)
+		}
+	}
+	stableItems := []struct {
+		name string
+		got  byte
+		want byte
+	}{
+		{"wood_pickaxe", itemWoodPickaxe, 100}, {"gold_pickaxe", itemGoldPickaxe, 104},
+		{"wood_shovel", itemWoodShovel, 105}, {"wood_axe", itemWoodAxe, 110},
+		{"coal", itemCoal, 115}, {"stick", itemStick, 119}, {"cooked_pork", itemCookedPork, 121},
+	}
+	for _, tc := range stableItems {
+		if tc.got != tc.want {
+			t.Fatalf("stable item id changed: %s=%d want %d", tc.name, tc.got, tc.want)
+		}
+	}
+	if EntityPlayer != 0 || EntityPig != 1 || EntityItem != 2 {
+		t.Fatalf("stable entity ids changed: player=%d pig=%d item=%d", EntityPlayer, EntityPig, EntityItem)
+	}
 	w := NewClientWorld()
 	defer w.Close()
 	c := lifecycleChunk(w, chunkKey{0, 0})
