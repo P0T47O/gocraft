@@ -5,6 +5,7 @@ package platform
 type MeshHandle interface {
 	Draw()
 	Unload()
+	IndexCount() int32
 }
 
 // MeshBackend is the first narrow renderer seam used by the WebGPU experiment.
