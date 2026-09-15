@@ -13,9 +13,11 @@ type Client struct {
 	done          chan struct{}
 	closeOnce     sync.Once
 	reader        sync.WaitGroup
+	writer        sync.WaitGroup
 	Conn          net.Conn
 	Name          string
 	Incoming      chan Packet // Channel to receive packets from server
+	Outgoing      chan Packet // Bounded queue drained by the socket writer.
 	LastSentX     float64
 	LastSentY     float64
 	LastSentZ     float64
@@ -34,8 +36,30 @@ func ConnectTCP(addr string, name string) (*Client, error) {
 		Conn:     conn,
 		Name:     name,
 		Incoming: make(chan Packet, 128), // Bounded snapshots; TCP supplies backpressure.
+		Outgoing: make(chan Packet, 128), // Keep socket stalls off the render/update thread.
 		done:     make(chan struct{}),
 	}
+
+	// Writer loop. Closing Conn unblocks a stalled WritePacket during shutdown.
+	c.writer.Add(1)
+	go func() {
+		defer c.writer.Done()
+		for {
+			select {
+			case <-c.done:
+				return
+			case p := <-c.Outgoing:
+				if err := WritePacket(conn, p); err != nil {
+					c.closeOnce.Do(func() {
+						close(c.done)
+						_ = conn.Close()
+					})
+					fmt.Printf("Send error: %v\n", err)
+					return
+				}
+			}
+		}
+	}()
 
 	// Reader Loop
 	c.reader.Add(1)
@@ -79,6 +103,7 @@ func (c *Client) Close() {
 		_ = c.Conn.Close()
 	})
 	c.reader.Wait()
+	c.writer.Wait()
 }
 
 func (c *Client) Send(p Packet) {
@@ -87,12 +112,30 @@ func (c *Client) Send(p Packet) {
 		return
 	default:
 	}
-	if err := WritePacket(c.Conn, p); err != nil {
+
+	// Player movement is a latest-state snapshot. If the writer is temporarily
+	// behind, dropping one movement sample is preferable to blocking a frame.
+	if p.ID() == IDPlayerMove {
+		select {
+		case c.Outgoing <- p:
+		case <-c.done:
+		default:
+		}
+		return
+	}
+
+	// Gameplay actions are authoritative requests and must not disappear
+	// silently. A client that cannot enqueue them is already too far behind to
+	// remain synchronized, so close it instead of blocking the render thread.
+	select {
+	case c.Outgoing <- p:
+	case <-c.done:
+	default:
+		fmt.Printf("Disconnecting client: outbound queue saturated (%d/%d), packet=%d\n", len(c.Outgoing), cap(c.Outgoing), p.ID())
 		c.closeOnce.Do(func() {
 			close(c.done)
 			_ = c.Conn.Close()
 		})
-		fmt.Printf("Send error: %v\n", err)
 	}
 }
 
