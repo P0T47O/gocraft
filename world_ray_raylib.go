@@ -1,15 +1,16 @@
 package main
 
-import rl "github.com/gen2brain/raylib-go/raylib"
-
-func (w *World) HitTest(ray rl.Ray, maxDist float32) hitInfo {
+// HitTest keeps the input-facing query small while the voxel traversal lives in
+// rayCast. The input layer now supplies renderer-neutral origin/direction
+// vectors; no Raylib ray type crosses into World anymore.
+func (w *World) HitTest(origin, direction gameVec3, maxDist float32) hitInfo {
 	return w.rayCast(
-		ray.Position.X,
-		ray.Position.Y,
-		ray.Position.Z,
-		ray.Direction.X,
-		ray.Direction.Y,
-		ray.Direction.Z,
+		origin.X,
+		origin.Y,
+		origin.Z,
+		direction.X,
+		direction.Y,
+		direction.Z,
 		maxDist,
 	)
 }
