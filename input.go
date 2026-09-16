@@ -205,9 +205,14 @@ func (s *InputState) UpdateSelection(allowWheel bool) {
 	s.CurrentBlock = s.Hotbar[s.SelectedSlot]
 }
 
-func (s *InputState) RayFromCenter(camera rl.Camera3D) rl.Ray {
-	center := rl.NewVector2(float32(rl.GetScreenWidth()/2), float32(rl.GetScreenHeight()/2))
-	return rl.GetMouseRay(center, camera)
+func (s *InputState) RayFromCenter(camera rl.Camera3D) (gameVec3, gameVec3) {
+	origin := gameVec3FromRaylib(camera.Position)
+	direction := gameVec3Normalize(gameVec3{
+		X: camera.Target.X - camera.Position.X,
+		Y: camera.Target.Y - camera.Position.Y,
+		Z: camera.Target.Z - camera.Position.Z,
+	})
+	return origin, direction
 }
 
 func resolveCollision(world *World, pos, delta rl.Vector3) rl.Vector3 {
@@ -279,7 +284,7 @@ func HandleInput(world *World, camera *rl.Camera3D, state *InputState, client *C
 		}
 	}
 
-	ray := state.RayFromCenter(*camera)
+	rayOrigin, rayDirection := state.RayFromCenter(*camera)
 
 	// Reach distance depends on Gamemode
 	reachDist := float32(8.0) // Creative default
@@ -287,20 +292,55 @@ func HandleInput(world *World, camera *rl.Camera3D, state *InputState, client *C
 		reachDist = 3.0
 	}
 
-	hit := world.HitTest(ray, reachDist)
+	hit := world.HitTest(rayOrigin, rayDirection, reachDist)
 	mobTarget := ""
 	nearest := float32(3.5)
 	if hit.hit {
 		nearest = min(nearest, hit.distance)
 	}
+
+	// Keep client target selection renderer-neutral too. This mirrors the
+	// authoritative server slab test, so Raylib's Ray/BoundingBox helpers no
+	// longer sit between the gameplay camera and mob targeting.
+	rayBoxDistance := func(cx, cy, cz float32, c Collider, maxDistance float32) (float32, bool) {
+		tMin, tMax := float32(0), maxDistance
+		testAxis := func(origin, direction, minValue, maxValue float32) bool {
+			if math.Abs(float64(direction)) < 1e-7 {
+				return origin >= minValue && origin <= maxValue
+			}
+			inv := 1 / direction
+			t1 := (minValue - origin) * inv
+			t2 := (maxValue - origin) * inv
+			if t1 > t2 {
+				t1, t2 = t2, t1
+			}
+			if t1 > tMin {
+				tMin = t1
+			}
+			if t2 < tMax {
+				tMax = t2
+			}
+			return tMin <= tMax
+		}
+		if !testAxis(rayOrigin.X, rayDirection.X, cx-c.Width/2, cx+c.Width/2) ||
+			!testAxis(rayOrigin.Y, rayDirection.Y, cy, cy+c.Height) ||
+			!testAxis(rayOrigin.Z, rayDirection.Z, cz-c.Depth/2, cz+c.Depth/2) {
+			return 0, false
+		}
+		if tMin < 0 || tMin > maxDistance {
+			return 0, false
+		}
+		return tMin, true
+	}
+
 	for _, e := range remoteEntities {
 		if e.MobKind == "" || e.MobHealth <= 0 {
 			continue
 		}
 		d := mobContent.Definitions[e.MobKind]
-		collision := rl.GetRayCollisionBox(ray, mobBox(rl.NewVector3(float32(e.X), float32(e.Y), float32(e.Z)), d.Collider))
-		if collision.Hit && collision.Distance < nearest {
-			nearest = collision.Distance
+		distance, rayHit := rayBoxDistance(float32(e.X), float32(e.Y), float32(e.Z), d.Collider, nearest)
+		if rayHit && distance < nearest {
+			nearest = distance
 			mobTarget = e.ID
 		}
 	}
