@@ -17,50 +17,50 @@ const (
 // values explicit: inserting or reordering constants must never renumber old
 // content.
 const (
-	blockAir          byte = 0
-	blockGrass        byte = 1
-	blockStone        byte = 2
-	blockDirt         byte = 3
-	blockCobblestone  byte = 4
-	blockSand         byte = 5
-	blockLeaves       byte = 6
-	blockWater        byte = 7
-	blockLava         byte = 8
-	blockGravel       byte = 9
-	blockTorch        byte = 10
-	blockCoalOre      byte = 11
-	blockIronOre      byte = 12
-	blockGoldOre      byte = 13
-	blockDiamondOre   byte = 14
-	blockLapisOre     byte = 15
-	blockBedrock      byte = 16
-	blockLog          byte = 17
-	blockPlank        byte = 18
-	blockGlass        byte = 19
-	blockGlowstone    byte = 20
-	blockObsidian     byte = 21
-	blockDiamondBlock byte = 22
-	blockGoldBlock    byte = 23
-	blockIronBlock    byte = 24
-	blockCoalBlock    byte = 25
-	blockLogBirch     byte = 26
-	blockLogSpruce    byte = 27
-	blockLeavesBirch  byte = 28
-	blockLeavesSpruce byte = 29
-	blockPlankOak     byte = 30
-	blockPlankBirch   byte = 31
-	blockPlankSpruce  byte = 32
-	blockSandstone    byte = 33
-	blockCactus       byte = 34
-	blockDeadBush     byte = 35
-	blockSnow         byte = 36
-	blockIce          byte = 37
-	blockRose         byte = 38
-	blockDandelion    byte = 39
-	blockTallGrass    byte = 40
+	blockAir           byte = 0
+	blockGrass         byte = 1
+	blockStone         byte = 2
+	blockDirt          byte = 3
+	blockCobblestone   byte = 4
+	blockSand          byte = 5
+	blockLeaves        byte = 6
+	blockWater         byte = 7
+	blockLava          byte = 8
+	blockGravel        byte = 9
+	blockTorch         byte = 10
+	blockCoalOre       byte = 11
+	blockIronOre       byte = 12
+	blockGoldOre       byte = 13
+	blockDiamondOre    byte = 14
+	blockLapisOre      byte = 15
+	blockBedrock       byte = 16
+	blockLog           byte = 17
+	blockPlank         byte = 18
+	blockGlass         byte = 19
+	blockGlowstone     byte = 20
+	blockObsidian      byte = 21
+	blockDiamondBlock  byte = 22
+	blockGoldBlock     byte = 23
+	blockIronBlock     byte = 24
+	blockCoalBlock     byte = 25
+	blockLogBirch      byte = 26
+	blockLogSpruce     byte = 27
+	blockLeavesBirch   byte = 28
+	blockLeavesSpruce  byte = 29
+	blockPlankOak      byte = 30
+	blockPlankBirch    byte = 31
+	blockPlankSpruce   byte = 32
+	blockSandstone     byte = 33
+	blockCactus        byte = 34
+	blockDeadBush      byte = 35
+	blockSnow          byte = 36
+	blockIce           byte = 37
+	blockRose          byte = 38
+	blockDandelion     byte = 39
+	blockTallGrass     byte = 40
 	blockCraftingTable byte = 41
-	blockChest        byte = 42
-	blockFurnace      byte = 43
+	blockChest         byte = 42
+	blockFurnace       byte = 43
 )
 
 // Item IDs share the byte namespace with blocks and are also persisted and
@@ -95,10 +95,12 @@ const (
 )
 
 type hitInfo struct {
-	x        int
-	y        int
-	z        int
-	normal   rl.Vector3
+	x      int
+	y      int
+	z      int
+	normal struct {
+		X, Y, Z float32
+	}
 	distance float32
 	hit      bool
 }
@@ -160,10 +162,12 @@ func findHit(blocks *[chunkWidth][chunkHeight][chunkWidth]byte, ray rl.Ray) hitI
 				collision := rl.GetRayCollisionBox(ray, rl.BoundingBox{Min: min, Max: max})
 				if collision.Hit && collision.Distance < best.distance {
 					best = hitInfo{
-						x:        x,
-						y:        y,
-						z:        z,
-						normal:   collision.Normal,
+						x: x,
+						y: y,
+						z: z,
+						normal: struct {
+							X, Y, Z float32
+						}{X: collision.Normal.X, Y: collision.Normal.Y, Z: collision.Normal.Z},
 						distance: collision.Distance,
 						hit:      true,
 					}
