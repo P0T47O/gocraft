@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"image"
+	"image/color"
 	"image/draw"
 	_ "image/png"
 	"os"
@@ -18,9 +19,9 @@ type webGPUBlockAtlas struct {
 }
 
 // buildWebGPUBlockAtlas builds a CPU-side RGBA atlas containing every texture
-// referenced by the current block registry plus standalone item sprites. The
-// returned UV map is installed on RenderAssets so both chunk meshes and the
-// native WebGPU UI can share one texture without depending on Raylib GPU state.
+// referenced by the current block/item registries plus mob skins and mining
+// crack stages. The returned UV map is installed on RenderAssets so all native
+// WebGPU gameplay presentation can share one texture without Raylib GPU state.
 func buildWebGPUBlockAtlas() (*webGPUBlockAtlas, error) {
 	pathsSet := make(map[string]struct{})
 	for _, def := range Blocks {
@@ -32,7 +33,6 @@ func buildWebGPUBlockAtlas() (*webGPUBlockAtlas, error) {
 			if path != "" {
 				pathsSet[path] = struct{}{}
 			}
-		}
 	}
 
 	// Standalone tools/items do not have block faces but still need to appear in
@@ -41,6 +41,19 @@ func buildWebGPUBlockAtlas() (*webGPUBlockAtlas, error) {
 		if def != nil && def.Icon != "" {
 			pathsSet[def.Icon] = struct{}{}
 		}
+	}
+
+	// Mob skins are larger than block tiles. They are reduced with nearest-neighbor
+	// sampling into a single atlas cell; normalized sub-UVs still address the same
+	// regions, which keeps the content-driven bone UV layout intact.
+	for _, model := range mobContent.Models {
+		if model.Texture != "" {
+			pathsSet[model.Texture] = struct{}{}
+		}
+	}
+
+	for i := 0; i < 10; i++ {
+		pathsSet[fmt.Sprintf("textures/block/destroy_stage_%d.png", i)] = struct{}{}
 	}
 
 	// Grass side overlay is emitted directly by the chunk mesher rather than
@@ -78,11 +91,21 @@ func buildWebGPUBlockAtlas() (*webGPUBlockAtlas, error) {
 
 		tile := image.NewNRGBA(image.Rect(0, 0, atlasTileSize, atlasTileSize))
 		bounds := img.Bounds()
-		if path == "textures/block/torch.png" && bounds.Dx() < atlasTileSize {
+		switch {
+		case bounds.Dx() > atlasTileSize || bounds.Dy() > atlasTileSize:
+			for y := 0; y < atlasTileSize; y++ {
+				sy := bounds.Min.Y + y*bounds.Dy()/atlasTileSize
+				for x := 0; x < atlasTileSize; x++ {
+					sx := bounds.Min.X + x*bounds.Dx()/atlasTileSize
+					c := color.NRGBAModel.Convert(img.At(sx, sy)).(color.NRGBA)
+					tile.SetNRGBA(x, y, c)
+				}
+			}
+		case path == "textures/block/torch.png" && bounds.Dx() < atlasTileSize:
 			dx := (atlasTileSize - min(atlasTileSize, bounds.Dx())) / 2
 			dst := image.Rect(dx, 0, dx+min(atlasTileSize, bounds.Dx()), min(atlasTileSize, bounds.Dy()))
 			draw.Draw(tile, dst, img, bounds.Min, draw.Src)
-		} else {
+		default:
 			dst := image.Rect(0, 0, min(atlasTileSize, bounds.Dx()), min(atlasTileSize, bounds.Dy()))
 			draw.Draw(tile, dst, img, bounds.Min, draw.Src)
 		}
