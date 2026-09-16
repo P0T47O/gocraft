@@ -27,7 +27,18 @@ func offsetAxis(p gameVec3, axis int, d float32) gameVec3 {
 func blockAtPosition(w *World, x, y, z float64) byte {
 	return w.BlockAt(int(math.Floor(x+0.5)), int(math.Floor(y+0.5)), int(math.Floor(z+0.5)))
 }
-func feetSupported(w *World, p gameVec3) bool { return collides(w, offsetAxis(p, 1, -0.06)) }
+func playerCollides(w *World, p gameVec3) bool {
+	p.Y -= playerEyeY
+	return colliderHitsCore(w, p, Collider{Width: playerRadius * 2, Depth: playerRadius * 2, Height: playerHeight})
+}
+func resolvePlayerCollision(w *World, p, delta gameVec3) gameVec3 {
+	feet := p
+	feet.Y -= playerEyeY
+	result := moveColliderCore(w, feet, delta, Collider{Width: playerRadius * 2, Depth: playerRadius * 2, Height: playerHeight})
+	result.Y += playerEyeY
+	return result
+}
+func feetSupported(w *World, p gameVec3) bool { return playerCollides(w, offsetAxis(p, 1, -0.06)) }
 func touchesLiquid(w *World, p gameVec3, id byte) bool {
 	for _, dy := range []float32{-playerEyeY + 0.1, -0.8, 0} {
 		if blockAtPosition(w, float64(p.X), float64(p.Y+dy), float64(p.Z)) == id {
@@ -37,7 +48,7 @@ func touchesLiquid(w *World, p gameVec3, id byte) bool {
 	return false
 }
 
-func (s *InputState) StepMovement(w *World, p gameVec3, dt float32, c MovementControls, creative bool) gameVec3 {
+func (s *InputState) stepMovementCore(w *World, p gameVec3, dt float32, c MovementControls, creative bool) gameVec3 {
 	dt = min(max(dt, 0), 0.1)
 	s.IsSneaking = c.Sneak && !creative
 	s.IsSwimming = !creative && touchesLiquid(w, p, blockWater)
@@ -59,7 +70,7 @@ func (s *InputState) StepMovement(w *World, p gameVec3, dt float32, c MovementCo
 		if gameVec3Length(move) > 1 {
 			move = gameVec3Normalize(move)
 		}
-		return resolveCollision(w, p, gameVec3Scale(move, flySpeed*dt))
+		return resolvePlayerCollision(w, p, gameVec3Scale(move, flySpeed*dt))
 	}
 	speed := float32(walkSpeed)
 	if s.IsRunning {
@@ -77,7 +88,7 @@ func (s *InputState) StepMovement(w *World, p gameVec3, dt float32, c MovementCo
 		remaining -= step
 		grounded := feetSupported(w, p)
 		wet := touchesLiquid(w, p, blockWater)
-		next := resolveCollision(w, p, gameVec3Scale(move, speed*step))
+		next := resolvePlayerCollision(w, p, gameVec3Scale(move, speed*step))
 		if c.Sneak && grounded && !wet && !c.Jump {
 			if !feetSupported(w, gameVec3{X: next.X, Y: p.Y, Z: p.Z}) {
 				next.X = p.X
@@ -111,7 +122,7 @@ func (s *InputState) StepMovement(w *World, p gameVec3, dt float32, c MovementCo
 			s.VelocityY = max(s.VelocityY-gravity*step, float32(-terminalVel))
 		}
 		before := next.Y
-		next = resolveCollision(w, next, gameVec3{Y: s.VelocityY * step})
+		next = resolvePlayerCollision(w, next, gameVec3{Y: s.VelocityY * step})
 		if abs32((next.Y-before)-s.VelocityY*step) > 0.001 {
 			s.VelocityY = 0
 		}
