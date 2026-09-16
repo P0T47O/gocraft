@@ -3,15 +3,9 @@
 package main
 
 import (
-	"encoding/binary"
 	"fmt"
-	"math"
-	"slices"
-	"time"
 	"unsafe"
 
-	rl "github.com/gen2brain/raylib-go/raylib"
-	"github.com/go-gl/mathgl/mgl32"
 	"github.com/gogpu/gputypes"
 	"github.com/gogpu/wgpu"
 	_ "github.com/gogpu/wgpu/hal/allbackends"
@@ -110,16 +104,16 @@ type webGPUWorldRenderer struct {
 	width, height       uint32
 }
 
-func newWebGPUWorldRenderer(hwnd uintptr, assets *RenderAssets) (*webGPUWorldRenderer, error) {
+func newWebGPUWorldRenderer(hwnd uintptr, assets *RenderAssets, width, height uint32) (*webGPUWorldRenderer, error) {
 	if hwnd == 0 {
-		return nil, fmt.Errorf("raylib returned a null native window handle")
+		return nil, fmt.Errorf("native window handle is null")
 	}
 	atlas, err := buildWebGPUBlockAtlas()
 	if err != nil {
 		return nil, fmt.Errorf("build block atlas: %w", err)
 	}
 
-	r := &webGPUWorldRenderer{}
+	r := &webGPUWorldRenderer{width: max(uint32(1), width), height: max(uint32(1), height)}
 	fail := func(err error) (*webGPUWorldRenderer, error) {
 		r.closeResources(false)
 		return nil, err
@@ -169,8 +163,6 @@ func newWebGPUWorldRenderer(hwnd uintptr, assets *RenderAssets) (*webGPUWorldRen
 	}
 	assets.atlas.UVs = atlas.uvs
 
-	r.width = uint32(max(1, rl.GetScreenWidth()))
-	r.height = uint32(max(1, rl.GetScreenHeight()))
 	if err := r.configureSurface(); err != nil {
 		return fail(err)
 	}
@@ -262,17 +254,17 @@ func (r *webGPUWorldRenderer) createPipelineResources(atlas *webGPUBlockAtlas) e
 	}
 
 	ignoreStencil := wgpu.StencilFaceState{
-		Compare: gputypes.CompareFunctionAlways,
-		FailOp: gputypes.StencilOperationKeep,
+		Compare:     gputypes.CompareFunctionAlways,
+		FailOp:      gputypes.StencilOperationKeep,
 		DepthFailOp: gputypes.StencilOperationKeep,
-		PassOp: gputypes.StencilOperationKeep,
+		PassOp:      gputypes.StencilOperationKeep,
 	}
 	vertexState := wgpu.VertexState{
-		Module: r.shader,
+		Module:     r.shader,
 		EntryPoint: "vs_main",
 		Buffers: []gputypes.VertexBufferLayout{{
 			ArrayStride: uint64(unsafe.Sizeof(platform.Vertex{})),
-			StepMode: gputypes.VertexStepModeVertex,
+			StepMode:    gputypes.VertexStepModeVertex,
 			Attributes: []gputypes.VertexAttribute{
 				{Format: gputypes.VertexFormatFloat32x3, Offset: 0, ShaderLocation: 0},
 				{Format: gputypes.VertexFormatFloat32x2, Offset: 12, ShaderLocation: 1},
@@ -285,16 +277,16 @@ func (r *webGPUWorldRenderer) createPipelineResources(atlas *webGPUBlockAtlas) e
 	multisample := gputypes.MultisampleState{Count: 1, Mask: 0xFFFFFFFF}
 
 	r.opaquePipeline, err = r.device.CreateRenderPipeline(&wgpu.RenderPipelineDescriptor{
-		Label: "GoCraft WebGPU opaque world pipeline",
-		Layout: r.layout,
-		Vertex: vertexState,
+		Label:     "GoCraft WebGPU opaque world pipeline",
+		Layout:    r.layout,
+		Vertex:    vertexState,
 		Primitive: primitive,
 		DepthStencil: &wgpu.DepthStencilState{
 			Format: webGPUWorldDepthFormat, DepthWriteEnabled: true, DepthCompare: gputypes.CompareFunctionLess,
 			StencilFront: ignoreStencil, StencilBack: ignoreStencil, StencilReadMask: 0, StencilWriteMask: 0,
 		},
 		Multisample: multisample,
-		Fragment: &wgpu.FragmentState{Module: r.shader, EntryPoint: "fs_opaque", Targets: []gputypes.ColorTargetState{{Format: r.format, WriteMask: gputypes.ColorWriteMaskAll}}},
+		Fragment:    &wgpu.FragmentState{Module: r.shader, EntryPoint: "fs_opaque", Targets: []gputypes.ColorTargetState{{Format: r.format, WriteMask: gputypes.ColorWriteMaskAll}}},
 	})
 	if err != nil {
 		return fmt.Errorf("create opaque world pipeline: %w", err)
@@ -305,16 +297,16 @@ func (r *webGPUWorldRenderer) createPipelineResources(atlas *webGPUBlockAtlas) e
 		Alpha: gputypes.BlendComponent{SrcFactor: gputypes.BlendFactorOne, DstFactor: gputypes.BlendFactorOneMinusSrcAlpha, Operation: gputypes.BlendOperationAdd},
 	}
 	r.translucentPipeline, err = r.device.CreateRenderPipeline(&wgpu.RenderPipelineDescriptor{
-		Label: "GoCraft WebGPU translucent world pipeline",
-		Layout: r.layout,
-		Vertex: vertexState,
+		Label:     "GoCraft WebGPU translucent world pipeline",
+		Layout:    r.layout,
+		Vertex:    vertexState,
 		Primitive: primitive,
 		DepthStencil: &wgpu.DepthStencilState{
 			Format: webGPUWorldDepthFormat, DepthWriteEnabled: false, DepthCompare: gputypes.CompareFunctionLess,
 			StencilFront: ignoreStencil, StencilBack: ignoreStencil, StencilReadMask: 0, StencilWriteMask: 0,
 		},
 		Multisample: multisample,
-		Fragment: &wgpu.FragmentState{Module: r.shader, EntryPoint: "fs_translucent", Targets: []gputypes.ColorTargetState{{Format: r.format, Blend: blend, WriteMask: gputypes.ColorWriteMaskAll}}},
+		Fragment:    &wgpu.FragmentState{Module: r.shader, EntryPoint: "fs_translucent", Targets: []gputypes.ColorTargetState{{Format: r.format, Blend: blend, WriteMask: gputypes.ColorWriteMaskAll}}},
 	})
 	if err != nil {
 		return fmt.Errorf("create translucent world pipeline: %w", err)
@@ -324,11 +316,11 @@ func (r *webGPUWorldRenderer) createPipelineResources(atlas *webGPUBlockAtlas) e
 
 func (r *webGPUWorldRenderer) configureSurface() error {
 	if err := r.surface.Configure(r.device, &wgpu.SurfaceConfiguration{
-		Format: r.format,
-		Usage: gputypes.TextureUsageRenderAttachment,
-		Width: r.width,
-		Height: r.height,
-		AlphaMode: gputypes.CompositeAlphaModeOpaque,
+		Format:      r.format,
+		Usage:       gputypes.TextureUsageRenderAttachment,
+		Width:       r.width,
+		Height:      r.height,
+		AlphaMode:   gputypes.CompositeAlphaModeOpaque,
 		PresentMode: gputypes.PresentModeFifo,
 	}); err != nil {
 		return fmt.Errorf("configure WebGPU surface: %w", err)
@@ -344,12 +336,12 @@ func (r *webGPUWorldRenderer) configureSurface() error {
 	var err error
 	r.depthTexture, err = r.device.CreateTexture(&wgpu.TextureDescriptor{
 		Label: "GoCraft WebGPU world depth",
-		Size: wgpu.Extent3D{Width: r.width, Height: r.height, DepthOrArrayLayers: 1},
+		Size:  wgpu.Extent3D{Width: r.width, Height: r.height, DepthOrArrayLayers: 1},
 		MipLevelCount: 1,
-		SampleCount: 1,
-		Dimension: gputypes.TextureDimension2D,
-		Format: webGPUWorldDepthFormat,
-		Usage: gputypes.TextureUsageRenderAttachment,
+		SampleCount:   1,
+		Dimension:     gputypes.TextureDimension2D,
+		Format:        webGPUWorldDepthFormat,
+		Usage:         gputypes.TextureUsageRenderAttachment,
 	})
 	if err != nil {
 		return fmt.Errorf("create WebGPU depth texture: %w", err)
@@ -359,78 +351,6 @@ func (r *webGPUWorldRenderer) configureSurface() error {
 		return fmt.Errorf("create WebGPU depth view: %w", err)
 	}
 	return nil
-}
-
-func (r *webGPUWorldRenderer) updateScene(camera rl.Camera3D) error {
-	aspect := float32(r.width) / float32(max(uint32(1), r.height))
-	projection := mgl32.Perspective(mgl32.DegToRad(camera.Fovy), aspect, 0.01, 1000.0)
-	eye := mgl32.Vec3{camera.Position.X, camera.Position.Y, camera.Position.Z}
-	view := mgl32.LookAtV(eye, mgl32.Vec3{camera.Target.X, camera.Target.Y, camera.Target.Z}, mgl32.Vec3{camera.Up.X, camera.Up.Y, camera.Up.Z})
-	clipCorrection := mgl32.Mat4{
-		1, 0, 0, 0,
-		0, 1, 0, 0,
-		0, 0, 0.5, 0,
-		0, 0, 0.5, 1,
-	}
-	vp := clipCorrection.Mul4(projection).Mul4(view)
-	fogStart, fogEnd := worldFogRange(renderDistance())
-	fogColor := [4]float32{180.0 / 255.0, 210.0 / 255.0, 1.0, 1.0}
-
-	bytes := make([]byte, webGPUWorldSceneBytes)
-	put := func(offset int, value float32) {
-		binary.LittleEndian.PutUint32(bytes[offset:], math.Float32bits(value))
-	}
-	for i := 0; i < 16; i++ {
-		put(i*4, vp[i])
-	}
-	put(64, eye.X())
-	put(68, eye.Y())
-	put(72, eye.Z())
-	put(76, 1)
-	put(80, fogStart)
-	put(84, fogEnd)
-	put(88, 0)
-	put(92, 0)
-	for i, value := range fogColor {
-		put(96+i*4, value)
-	}
-	return r.queue.WriteBuffer(r.sceneBuffer, 0, bytes)
-}
-
-func (r *webGPUWorldRenderer) collectVisible(world *World, camera rl.Camera3D) {
-	aspect := float32(r.width) / float32(max(uint32(1), r.height))
-	projection := mgl32.Perspective(mgl32.DegToRad(camera.Fovy), aspect, 0.01, 1000.0)
-	camPos := mgl32.Vec3{camera.Position.X, camera.Position.Y, camera.Position.Z}
-	view := mgl32.LookAtV(camPos, mgl32.Vec3{camera.Target.X, camera.Target.Y, camera.Target.Z}, mgl32.Vec3{camera.Up.X, camera.Up.Y, camera.Up.Z})
-	frustum := ExtractFrustum(projection.Mul4(view))
-
-	cache := &world.render
-	cache.drawCalls, cache.triangles = 0, 0
-	cache.visible = cache.visible[:0]
-	cx := int(math.Floor(float64(camera.Position.X) / float64(chunkWidth)))
-	cz := int(math.Floor(float64(camera.Position.Z) / float64(chunkWidth)))
-	for _, offset := range cache.radiusOffsets(renderDistance()) {
-		chunkX, chunkZ := cx+offset.dx, cz+offset.dz
-		chunk := world.getChunkIfGenerated(chunkX, chunkZ)
-		if chunk == nil {
-			continue
-		}
-		ensureChunkSections(chunk)
-		cache.appendVisibleSections(chunk, chunkX, chunkZ, &frustum, camPos)
-	}
-	slices.SortFunc(cache.visible, compareVisibleSections)
-
-	deadline := time.Now().Add(time.Millisecond)
-	submissions := 0
-	for _, section := range cache.visible {
-		if submissions == 8 || !time.Now().Before(deadline) {
-			break
-		}
-		if section.chunk.meshRetries[section.sec] <= 5 && world.submitMesh(section.cx, section.cz, section.sec, assets) {
-			submissions++
-		}
-	}
-	cache.collectTranslucent()
 }
 
 func (r *webGPUWorldRenderer) drawMeshMap(pass *wgpu.RenderPassEncoder, meshes map[string][]*ChunkMesh, cache *worldRenderCache) error {
@@ -450,115 +370,6 @@ func (r *webGPUWorldRenderer) drawMeshMap(pass *wgpu.RenderPassEncoder, meshes m
 		}
 	}
 	return nil
-}
-
-func (r *webGPUWorldRenderer) Draw(world *World, camera rl.Camera3D) error {
-	if world == nil {
-		return nil
-	}
-	width := uint32(max(1, rl.GetScreenWidth()))
-	height := uint32(max(1, rl.GetScreenHeight()))
-	if width != r.width || height != r.height {
-		r.width, r.height = width, height
-		if err := r.configureSurface(); err != nil {
-			return err
-		}
-	}
-	if err := r.updateScene(camera); err != nil {
-		return fmt.Errorf("update WebGPU world scene: %w", err)
-	}
-	r.collectVisible(world, camera)
-	cache := &world.render
-	defer func() {
-		clear(cache.visible)
-		cache.visible = cache.visible[:0]
-		clear(cache.translucent)
-		cache.translucent = cache.translucent[:0]
-	}()
-
-	surfaceTexture, _, err := r.surface.GetCurrentTexture()
-	if err != nil {
-		return err
-	}
-	if surfaceTexture == nil {
-		return fmt.Errorf("surface returned no texture")
-	}
-	view, err := surfaceTexture.CreateView(nil)
-	if err != nil {
-		r.surface.DiscardTexture()
-		return err
-	}
-	defer view.Release()
-	encoder, err := r.device.CreateCommandEncoder(&wgpu.CommandEncoderDescriptor{Label: "GoCraft WebGPU world encoder"})
-	if err != nil {
-		r.surface.DiscardTexture()
-		return err
-	}
-	pass, err := encoder.BeginRenderPass(&wgpu.RenderPassDescriptor{
-		Label: "GoCraft WebGPU world pass",
-		ColorAttachments: []wgpu.RenderPassColorAttachment{{
-			View: view,
-			LoadOp: gputypes.LoadOpClear,
-			StoreOp: gputypes.StoreOpStore,
-			ClearValue: gputypes.Color{R: 180.0 / 255.0, G: 210.0 / 255.0, B: 1.0, A: 1.0},
-		}},
-		DepthStencilAttachment: &wgpu.RenderPassDepthStencilAttachment{
-			View: r.depthView,
-			DepthLoadOp: gputypes.LoadOpClear,
-			DepthStoreOp: gputypes.StoreOpStore,
-			DepthClearValue: 1,
-			DepthReadOnly: false,
-		},
-	})
-	if err != nil {
-		r.surface.DiscardTexture()
-		return err
-	}
-
-	pass.SetPipeline(r.opaquePipeline)
-	pass.SetBindGroup(0, r.bindGroup, nil)
-	for _, section := range cache.visible {
-		if err := r.drawMeshMap(pass, section.chunk.opaqueMeshes[section.sec], cache); err != nil {
-			_ = pass.End()
-			r.surface.DiscardTexture()
-			return err
-		}
-		if err := r.drawMeshMap(pass, section.chunk.cutoutMeshes[section.sec], cache); err != nil {
-			_ = pass.End()
-			r.surface.DiscardTexture()
-			return err
-		}
-	}
-
-	pass.SetPipeline(r.translucentPipeline)
-	pass.SetBindGroup(0, r.bindGroup, nil)
-	for _, item := range cache.translucent {
-		section := item.section
-		meshes := section.chunk.waterMeshes[section.sec]
-		if item.glass {
-			meshes = section.chunk.glassMeshes[section.sec]
-		}
-		if err := r.drawMeshMap(pass, meshes, cache); err != nil {
-			_ = pass.End()
-			r.surface.DiscardTexture()
-			return err
-		}
-	}
-	if err := pass.End(); err != nil {
-		r.surface.DiscardTexture()
-		return err
-	}
-	commandBuffer, err := encoder.Finish()
-	if err != nil {
-		r.surface.DiscardTexture()
-		return err
-	}
-	defer commandBuffer.Release()
-	if _, err := r.queue.Submit(commandBuffer); err != nil {
-		r.surface.DiscardTexture()
-		return err
-	}
-	return r.surface.Present(surfaceTexture)
 }
 
 func (r *webGPUWorldRenderer) Close() {
