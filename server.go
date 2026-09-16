@@ -54,7 +54,8 @@ type ClientConnection struct {
 	closeOnce   sync.Once
 	Name        string
 	Conn        net.Conn
-	Send        chan Packet // Buffer for outgoing packets
+	Send        chan Packet // Critical/gameplay packets.
+	StreamSend  chan Packet // Chunk/light snapshots; bounded separately so bulk traffic cannot evict gameplay state.
 	KnownChunks map[chunkKey]bool
 	LastChunkX  int
 	LastChunkZ  int
