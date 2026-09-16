@@ -21,6 +21,7 @@ func (s *Server) UpdateEntities() {
 	// Handle Item Pickup & Remove dead entities
 	s.World.entitiesMu.Lock()
 	var toRemove []string
+	inventoryDirty := make(map[*PlayerEntity]bool)
 
 	// Collect Players for distance check
 	var players []*PlayerEntity
@@ -52,9 +53,11 @@ func (s *Server) UpdateEntities() {
 					// Try add to inventory
 					rem := player.Inventory.AddStack(item.ItemStack)
 					if rem < int32(item.Count) {
-						// Some or all picked up
-						// Sync Inventory
-						s.SendInventory(player)
+						// Some or all picked up. Multiple nearby drops can be
+						// collected in one server tick (death piles and water often
+						// cluster them), so defer the full 36-slot sync and send it
+						// once per affected player after the pickup pass.
+						inventoryDirty[player] = true
 
 						if rem == 0 {
 							item.Dead = true
@@ -88,6 +91,13 @@ func (s *Server) UpdateEntities() {
 		delete(s.LastSentMeta, uuid)
 	}
 	s.World.entitiesMu.Unlock()
+
+	// A full inventory snapshot is 36 authoritative packets. Sending one for
+	// every item collected in the same tick can overflow the 128-packet gameplay
+	// queue even though the final inventory state only needs one snapshot.
+	for player := range inventoryDirty {
+		s.SendInventory(player)
+	}
 
 	s.World.entitiesMu.RLock()
 	defer s.World.entitiesMu.RUnlock()
