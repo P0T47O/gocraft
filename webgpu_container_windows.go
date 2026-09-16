@@ -5,7 +5,6 @@ package main
 import (
 	"fmt"
 
-	rl "github.com/gen2brain/raylib-go/raylib"
 	"github.com/gogpu/wgpu"
 )
 
@@ -53,7 +52,7 @@ func drawWebGPUContainerOverlay(pass *wgpu.RenderPassEncoder, worldRenderer *web
 	}
 
 	inv := inventoryFor(client)
-	mouse := rl.GetMousePosition()
+	mouse := webGPUMousePosition()
 	hovered := ItemStack{}
 	hasHover := false
 	for i := 0; i < len(container.Slots)+36; i++ {
@@ -66,7 +65,7 @@ func drawWebGPUContainerOverlay(pass *wgpu.RenderPassEncoder, worldRenderer *web
 		r := containerUISlot(layout, container.Kind, i)
 		shapes.rect(r.X, r.Y, r.Width, r.Height, webGPUUISlot)
 		shapes.border(r.X, r.Y, r.Width, r.Height, max(scale, 1), webGPUUILine)
-		if rl.CheckCollisionPointRec(mouse, r) {
+		if mouse.X >= r.X && mouse.X <= r.X+r.Width && mouse.Y >= r.Y && mouse.Y <= r.Y+r.Height {
 			shapes.border(r.X-2*scale, r.Y-2*scale, r.Width+4*scale, r.Height+4*scale, max(2*scale, 2), webGPUUIAccent)
 			hovered = stack
 			hasHover = true
