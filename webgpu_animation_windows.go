@@ -32,7 +32,7 @@ func updateWebGPUAtlasAnimations(r *webGPUWorldRenderer, now float32) error {
 			&wgpu.ImageCopyTexture{
 				Texture:  r.atlasTexture,
 				MipLevel: 0,
-				Origin: gputypes.Origin3D{
+				Origin: wgpu.Origin3D{
 					X: animation.atlasX,
 					Y: animation.atlasY,
 					Z: 0,
