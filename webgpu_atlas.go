@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"image"
-	"image/color"
 	"image/draw"
 	_ "image/png"
 	"os"
@@ -16,6 +15,44 @@ type webGPUBlockAtlas struct {
 	pixels        []byte
 	width, height int
 	uvs           map[string]rl.Rectangle
+}
+
+const webGPUAtlasMaxTileExtent = 64
+
+func webGPUAtlasSourceCoordinate(pixel, extent int) int {
+	return max(0, min(extent-1, pixel-atlasPadding))
+}
+
+func webGPUAtlasTile(path string, img image.Image) (*image.NRGBA, int, int) {
+	bounds := img.Bounds()
+	if path == "textures/block/torch.png" && bounds.Dx() < atlasTileSize {
+		tile := image.NewNRGBA(image.Rect(0, 0, atlasTileSize, atlasTileSize))
+		dx := (atlasTileSize - min(atlasTileSize, bounds.Dx())) / 2
+		dst := image.Rect(dx, 0, dx+min(atlasTileSize, bounds.Dx()), min(atlasTileSize, bounds.Dy()))
+		draw.Draw(tile, dst, img, bounds.Min, draw.Src)
+		return tile, atlasTileSize, atlasTileSize
+	}
+
+	tileW := min(webGPUAtlasMaxTileExtent, bounds.Dx())
+	tileH := min(webGPUAtlasMaxTileExtent, bounds.Dy())
+	tileW = max(tileW, 1)
+	tileH = max(tileH, 1)
+	tile := image.NewNRGBA(image.Rect(0, 0, tileW, tileH))
+	if bounds.Dx() == tileW && bounds.Dy() == tileH {
+		draw.Draw(tile, tile.Bounds(), img, bounds.Min, draw.Src)
+		return tile, tileW, tileH
+	}
+
+	// Oversized sources are reduced with nearest-neighbor sampling. Mob skins are
+	// currently 64x64, so they stay lossless instead of collapsing to a 16x16 tile.
+	for y := 0; y < tileH; y++ {
+		sy := bounds.Min.Y + y*bounds.Dy()/tileH
+		for x := 0; x < tileW; x++ {
+			sx := bounds.Min.X + x*bounds.Dx()/tileW
+			tile.Set(x, y, img.At(sx, sy))
+		}
+	}
+	return tile, tileW, tileH
 }
 
 // buildWebGPUBlockAtlas builds a CPU-side RGBA atlas containing every texture
@@ -33,7 +70,6 @@ func buildWebGPUBlockAtlas() (*webGPUBlockAtlas, error) {
 			if path != "" {
 				pathsSet[path] = struct{}{}
 			}
-		}
 	}
 
 	// Standalone tools/items do not have block faces but still need to appear in
@@ -44,9 +80,8 @@ func buildWebGPUBlockAtlas() (*webGPUBlockAtlas, error) {
 		}
 	}
 
-	// Mob skins are larger than block tiles. They are reduced with nearest-neighbor
-	// sampling into a single atlas cell; normalized sub-UVs still address the same
-	// regions, which keeps the content-driven bone UV layout intact.
+	// Preserve native mob skin resolution inside the atlas cell. The existing
+	// 256px cell with 112px left/top padding leaves room for current 64x64 skins.
 	for _, model := range mobContent.Models {
 		if model.Texture != "" {
 			pathsSet[model.Texture] = struct{}{}
@@ -90,33 +125,13 @@ func buildWebGPUBlockAtlas() (*webGPUBlockAtlas, error) {
 			return nil, fmt.Errorf("decode %s: %w", path, decodeErr)
 		}
 
-		tile := image.NewNRGBA(image.Rect(0, 0, atlasTileSize, atlasTileSize))
-		bounds := img.Bounds()
-		switch {
-		case bounds.Dx() > atlasTileSize || bounds.Dy() > atlasTileSize:
-			for y := 0; y < atlasTileSize; y++ {
-				sy := bounds.Min.Y + y*bounds.Dy()/atlasTileSize
-				for x := 0; x < atlasTileSize; x++ {
-					sx := bounds.Min.X + x*bounds.Dx()/atlasTileSize
-					c := color.NRGBAModel.Convert(img.At(sx, sy)).(color.NRGBA)
-					tile.SetNRGBA(x, y, c)
-				}
-			}
-		case path == "textures/block/torch.png" && bounds.Dx() < atlasTileSize:
-			dx := (atlasTileSize - min(atlasTileSize, bounds.Dx())) / 2
-			dst := image.Rect(dx, 0, dx+min(atlasTileSize, bounds.Dx()), min(atlasTileSize, bounds.Dy()))
-			draw.Draw(tile, dst, img, bounds.Min, draw.Src)
-		default:
-			dst := image.Rect(0, 0, min(atlasTileSize, bounds.Dx()), min(atlasTileSize, bounds.Dy()))
-			draw.Draw(tile, dst, img, bounds.Min, draw.Src)
-		}
-
+		tile, tileW, tileH := webGPUAtlasTile(path, img)
 		col := i % side
 		row := i / side
 		for py := 0; py < atlasCellSize; py++ {
-			sy := atlasSourceCoordinate(py)
+			sy := webGPUAtlasSourceCoordinate(py, tileH)
 			for px := 0; px < atlasCellSize; px++ {
-				sx := atlasSourceCoordinate(px)
+				sx := webGPUAtlasSourceCoordinate(px, tileW)
 				c := tile.NRGBAAt(sx, sy)
 				dstX := col*atlasCellSize + px
 				dstY := row*atlasCellSize + py
@@ -131,8 +146,8 @@ func buildWebGPUBlockAtlas() (*webGPUBlockAtlas, error) {
 		uvs[path] = rl.NewRectangle(
 			float32(col*atlasCellSize+atlasPadding)/float32(width),
 			float32(row*atlasCellSize+atlasPadding)/float32(height),
-			float32(atlasTileSize)/float32(width),
-			float32(atlasTileSize)/float32(height),
+			float32(tileW)/float32(width),
+			float32(tileH)/float32(height),
 		)
 	}
 
