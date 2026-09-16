@@ -25,11 +25,10 @@ func (r *webGPUWorldRenderer) DrawGameplay(world *World, frame webGPUFrameContex
 			return err
 		}
 	}
-	camera := webGPULegacyCamera(frame.Camera)
-	if err := r.updateScene(camera); err != nil {
+	if err := r.updateSceneCamera(frame.Camera); err != nil {
 		return fmt.Errorf("update WebGPU gameplay scene: %w", err)
 	}
-	r.collectVisible(world, camera)
+	r.collectVisibleCamera(world, frame.Camera)
 	cache := &world.render
 	defer func() {
 		clear(cache.visible)
