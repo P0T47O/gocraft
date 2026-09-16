@@ -30,9 +30,23 @@ func (s *Server) chunkOrderNeedsRefresh(now time.Time) bool {
 	return len(s.chunkOrder) == 0 || now.Sub(s.chunkOrderAt) >= 50*time.Millisecond
 }
 
-// Leave half the outbound queue for authoritative gameplay bursts. A full
-// inventory snapshot currently emits 36 packets, so the old 25% reserve on a
-// 128-slot queue could be exhausted by one inventory sync while chunks loaded.
+func chunkStreamQueue(c *ClientConnection) chan Packet {
+	if c == nil {
+		return nil
+	}
+	if c.StreamSend != nil {
+		return c.StreamSend
+	}
+	// Keep tests/legacy in-process connections working while real TCP clients use
+	// the dedicated stream queue.
+	return c.Send
+}
+
+// Chunk/light snapshots are backpressured independently from authoritative
+// gameplay packets. A shallow bulk queue bounds memory and naturally pauses
+// streaming when the socket/client application cannot consume snapshots fast
+// enough, without consuming the reliable gameplay queue.
 func chunkSendHasRoom(c *ClientConnection) bool {
-	return c != nil && len(c.Send) < max(1, cap(c.Send)/2)
+	q := chunkStreamQueue(c)
+	return q != nil && len(q) < cap(q)
 }
