@@ -38,8 +38,8 @@ func resolvePlayerCollision(w *World, p, delta gameVec3) gameVec3 {
 	result.Y += playerEyeY
 	return result
 }
-func feetSupported(w *World, p gameVec3) bool { return playerCollides(w, offsetAxis(p, 1, -0.06)) }
-func touchesLiquid(w *World, p gameVec3, id byte) bool {
+func feetSupportedCore(w *World, p gameVec3) bool { return playerCollides(w, offsetAxis(p, 1, -0.06)) }
+func touchesLiquidCore(w *World, p gameVec3, id byte) bool {
 	for _, dy := range []float32{-playerEyeY + 0.1, -0.8, 0} {
 		if blockAtPosition(w, float64(p.X), float64(p.Y+dy), float64(p.Z)) == id {
 			return true
@@ -51,7 +51,7 @@ func touchesLiquid(w *World, p gameVec3, id byte) bool {
 func (s *InputState) stepMovementCore(w *World, p gameVec3, dt float32, c MovementControls, creative bool) gameVec3 {
 	dt = min(max(dt, 0), 0.1)
 	s.IsSneaking = c.Sneak && !creative
-	s.IsSwimming = !creative && touchesLiquid(w, p, blockWater)
+	s.IsSwimming = !creative && touchesLiquidCore(w, p, blockWater)
 	s.IsRunning = !creative && !s.IsSwimming && !c.Sneak && c.Sprint && c.Forward > 0
 	sn, cs := float32(math.Sin(float64(s.Yaw))), float32(math.Cos(float64(s.Yaw)))
 	move := gameVec3{X: sn*c.Forward - cs*c.Side, Z: cs*c.Forward + sn*c.Side}
@@ -86,14 +86,14 @@ func (s *InputState) stepMovementCore(w *World, p gameVec3, dt float32, c Moveme
 	for remaining > 0 {
 		step := min(remaining, float32(1.0/60))
 		remaining -= step
-		grounded := feetSupported(w, p)
-		wet := touchesLiquid(w, p, blockWater)
+		grounded := feetSupportedCore(w, p)
+		wet := touchesLiquidCore(w, p, blockWater)
 		next := resolvePlayerCollision(w, p, gameVec3Scale(move, speed*step))
 		if c.Sneak && grounded && !wet && !c.Jump {
-			if !feetSupported(w, gameVec3{X: next.X, Y: p.Y, Z: p.Z}) {
+			if !feetSupportedCore(w, gameVec3{X: next.X, Y: p.Y, Z: p.Z}) {
 				next.X = p.X
 			}
-			if !feetSupported(w, gameVec3{X: next.X, Y: p.Y, Z: next.Z}) {
+			if !feetSupportedCore(w, gameVec3{X: next.X, Y: p.Y, Z: next.Z}) {
 				next.Z = p.Z
 			}
 		}
@@ -127,7 +127,7 @@ func (s *InputState) stepMovementCore(w *World, p gameVec3, dt float32, c Moveme
 			s.VelocityY = 0
 		}
 		p = next
-		s.OnGround = feetSupported(w, p)
+		s.OnGround = feetSupportedCore(w, p)
 	}
 	return p
 }
