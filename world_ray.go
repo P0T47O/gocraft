@@ -2,10 +2,6 @@ package main
 
 import "math"
 
-func (w *World) HitTest(originX, originY, originZ, dirX, dirY, dirZ, maxDist float32) hitInfo {
-	return w.rayCast(originX, originY, originZ, dirX, dirY, dirZ, maxDist)
-}
-
 func (w *World) rayCast(originX, originY, originZ, dirX, dirY, dirZ, maxDist float32) hitInfo {
 	if dirX == 0 && dirY == 0 && dirZ == 0 {
 		return hitInfo{}
