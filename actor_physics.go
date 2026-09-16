@@ -4,7 +4,7 @@ import "math"
 
 type Collider struct{ Width, Depth, Height, StepHeight float32 }
 
-func moveCollider(world *World, pos, delta gameVec3, shape Collider) gameVec3 {
+func moveColliderCore(world *World, pos, delta gameVec3, shape Collider) gameVec3 {
 	// Sweep short segments, then bisect a blocked axis to land flush with surfaces.
 	steps := int(math.Ceil(float64(max(abs32(delta.X), abs32(delta.Y), abs32(delta.Z))) / 0.2))
 	if steps < 1 {
@@ -24,14 +24,14 @@ func moveCollider(world *World, pos, delta gameVec3, shape Collider) gameVec3 {
 				continue
 			}
 			target := offsetAxis(pos, axis, d)
-			if !colliderHits(world, target, shape) {
+			if !colliderHitsCore(world, target, shape) {
 				pos = target
 				continue
 			}
 			low, high := float32(0), float32(1)
 			for j := 0; j < 10; j++ {
 				mid := (low + high) / 2
-				if colliderHits(world, offsetAxis(pos, axis, d*mid), shape) {
+				if colliderHitsCore(world, offsetAxis(pos, axis, d*mid), shape) {
 					high = mid
 				} else {
 					low = mid
@@ -43,7 +43,7 @@ func moveCollider(world *World, pos, delta gameVec3, shape Collider) gameVec3 {
 	return pos
 }
 
-func colliderHits(world *World, pos gameVec3, shape Collider) bool {
+func colliderHitsCore(world *World, pos gameVec3, shape Collider) bool {
 	feetY := pos.Y
 	minX := pos.X - shape.Width/2 - 0.001
 	maxX := pos.X + shape.Width/2 + 0.001
