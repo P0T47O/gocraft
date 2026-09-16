@@ -20,6 +20,14 @@ func colliderHits(world *World, pos rl.Vector3, shape Collider) bool {
 	return colliderHitsCore(world, gameVec3FromRaylib(pos), shape)
 }
 
+func feetSupported(w *World, p rl.Vector3) bool {
+	return feetSupportedCore(w, gameVec3FromRaylib(p))
+}
+
+func touchesLiquid(w *World, p rl.Vector3, id byte) bool {
+	return touchesLiquidCore(w, gameVec3FromRaylib(p), id)
+}
+
 func (s *InputState) StepMovement(w *World, p rl.Vector3, dt float32, c MovementControls, creative bool) rl.Vector3 {
 	return raylibVec3FromGame(s.stepMovementCore(w, gameVec3FromRaylib(p), dt, c, creative))
 }
