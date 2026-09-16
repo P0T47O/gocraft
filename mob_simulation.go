@@ -1,15 +1,12 @@
 package main
 
-import (
-	rl "github.com/gen2brain/raylib-go/raylib"
-	"math"
-)
+import "math"
 
 type MobEntity struct {
 	BaseEntity
 	Kind                     string
 	Health                   int
-	Velocity                 rl.Vector3
+	Velocity                 gameVec3
 	State                    string
 	Timer, Flee, Hurt, Death int
 	RNG                      uint32
@@ -41,7 +38,7 @@ func (m *MobEntity) hasBehavior(name string) bool {
 	}
 	return false
 }
-func colliderLoaded(w *World, pos rl.Vector3, c Collider) bool {
+func colliderLoaded(w *World, pos gameVec3, c Collider) bool {
 	for _, x := range []float32{pos.X - c.Width/2, pos.X + c.Width/2} {
 		for _, z := range []float32{pos.Z - c.Depth/2, pos.Z + c.Depth/2} {
 			if w.getChunkIfGenerated(divFloor(blockIndexFromCoord(x), chunkWidth), divFloor(blockIndexFromCoord(z), chunkWidth)) == nil {
@@ -70,7 +67,7 @@ func (m *MobEntity) Tick(w *World) {
 	if m.Hurt > 0 {
 		m.Hurt--
 	}
-	pos := rl.NewVector3(float32(m.X), float32(m.Y), float32(m.Z))
+	pos := gameVec3{X: float32(m.X), Y: float32(m.Y), Z: float32(m.Z)}
 	if !colliderLoaded(w, pos, d.Collider) {
 		return
 	}
@@ -97,25 +94,25 @@ func (m *MobEntity) Tick(w *World) {
 	if m.State == "flee" {
 		speed = d.FleeSpeed
 	}
-	delta := rl.NewVector3(float32(math.Sin(float64(m.Yaw)))*speed*.05, 0, float32(math.Cos(float64(m.Yaw)))*speed*.05)
+	delta := gameVec3{X: float32(math.Sin(float64(m.Yaw))) * speed * .05, Z: float32(math.Cos(float64(m.Yaw))) * speed * .05}
 	delta.X += m.Velocity.X * .05
 	delta.Z += m.Velocity.Z * .05
 	m.Velocity.X *= .8
 	m.Velocity.Z *= .8
-	grounded := colliderHits(w, offsetAxis(pos, 1, -.06), d.Collider)
-	next := moveCollider(w, pos, delta, d.Collider)
+	grounded := colliderHitsCore(w, offsetAxis(pos, 1, -.06), d.Collider)
+	next := moveColliderCore(w, pos, delta, d.Collider)
 	blocked := abs32(next.X-pos.X)+abs32(next.Z-pos.Z) < (abs32(delta.X)+abs32(delta.Z))*.4
 	if blocked && grounded && d.Collider.StepHeight > 0 {
-		raised := moveCollider(w, pos, rl.NewVector3(0, d.Collider.StepHeight+.02, 0), d.Collider)
-		stepped := moveCollider(w, raised, delta, d.Collider)
-		landed := moveCollider(w, stepped, rl.NewVector3(0, -d.Collider.StepHeight-.02, 0), d.Collider)
-		if abs32(stepped.X-pos.X)+abs32(stepped.Z-pos.Z) > (abs32(delta.X)+abs32(delta.Z))*.8 && colliderHits(w, offsetAxis(landed, 1, -.06), d.Collider) {
+		raised := moveColliderCore(w, pos, gameVec3{Y: d.Collider.StepHeight + .02}, d.Collider)
+		stepped := moveColliderCore(w, raised, delta, d.Collider)
+		landed := moveColliderCore(w, stepped, gameVec3{Y: -d.Collider.StepHeight - .02}, d.Collider)
+		if abs32(stepped.X-pos.X)+abs32(stepped.Z-pos.Z) > (abs32(delta.X)+abs32(delta.Z))*.8 && colliderHitsCore(w, offsetAxis(landed, 1, -.06), d.Collider) {
 			next = landed
 			blocked = false
 		}
 	}
 	// Avoid unloaded terrain and drops over one block during intentional movement.
-	if !colliderLoaded(w, next, d.Collider) || (grounded && !colliderHits(w, offsetAxis(next, 1, -1.05), d.Collider)) {
+	if !colliderLoaded(w, next, d.Collider) || (grounded && !colliderHitsCore(w, offsetAxis(next, 1, -1.05), d.Collider)) {
 		next = pos
 		blocked = true
 	}
@@ -130,7 +127,7 @@ func (m *MobEntity) Tick(w *World) {
 		m.Velocity.Y = max(m.Velocity.Y-20*.05, float32(-30))
 	}
 	oldY := next.Y
-	next = moveCollider(w, next, rl.NewVector3(0, m.Velocity.Y*.05, 0), d.Collider)
+	next = moveColliderCore(w, next, gameVec3{Y: m.Velocity.Y * .05}, d.Collider)
 	if abs32(next.Y-oldY) < abs32(m.Velocity.Y*.05)*.5 {
 		m.Velocity.Y = 0
 	}
@@ -138,9 +135,6 @@ func (m *MobEntity) Tick(w *World) {
 	m.Dirty = true
 }
 
-func mobBox(pos rl.Vector3, c Collider) rl.BoundingBox {
-	return rl.BoundingBox{Min: rl.NewVector3(pos.X-c.Width/2, pos.Y, pos.Z-c.Depth/2), Max: rl.NewVector3(pos.X+c.Width/2, pos.Y+c.Height, pos.Z+c.Depth/2)}
-}
 func (m *MobEntity) hit(damage int, awayX, awayZ float32) bool {
 	if m.Health <= 0 || m.Hurt > 0 {
 		return false
@@ -156,7 +150,7 @@ func (m *MobEntity) hit(damage int, awayX, awayZ float32) bool {
 		awayZ /= length
 	}
 	m.Yaw = float32(math.Atan2(float64(awayX), float64(awayZ)))
-	m.Velocity = rl.NewVector3(awayX*3, 3, awayZ*3)
+	m.Velocity = gameVec3{X: awayX * 3, Y: 3, Z: awayZ * 3}
 	m.Dirty = true
 	if m.Health == 0 {
 		m.State = "dead"
