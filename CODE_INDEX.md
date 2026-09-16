@@ -55,7 +55,7 @@
 | 生成机制及限制 | [GENERATION.md](GENERATION.md) |
 | 光照传播 | [world_light.go](world_light.go) |
 | 六面逐顶点光照、AO、防拐角漏光、四边形对角线选择 | [mesh_lighting.go](mesh_lighting.go)、[mesh_lighting_test.go](mesh_lighting_test.go)、[mesh_lighting_preview_test.go](mesh_lighting_preview_test.go)；范围与实测：[LIGHTING.md](LIGHTING.md) |
-| 客户端区块消息应用、后端中立 DDA 射线查询与临时 Raylib 输入适配 | [world_packets.go](world_packets.go)、[world_ray.go](world_ray.go)、[world_ray_raylib.go](world_ray_raylib.go) |
+| 客户端区块消息应用、后端中立 DDA 射线查询与 gameplay-vector HitTest 外壳 | [world_packets.go](world_packets.go)、[world_ray.go](world_ray.go)、[world_ray_raylib.go](world_ray_raylib.go) |
 | 客户端光照增量、精确网格失效范围与更新合并 | [world_packet_light.go](world_packet_light.go)、[world_mesh_dirty.go](world_mesh_dirty.go)、[world_mesh_dirty_test.go](world_mesh_dirty_test.go) |
 | 网格任务与快照 | [world_mesh.go](world_mesh.go) |
 | 方块表面网格构建 | [chunk_mesher.go](chunk_mesher.go) |
@@ -81,7 +81,7 @@
 
 | 功能 | 文件 |
 | --- | --- |
-| 输入、交互、挖掘入口与临时 Raylib 物理适配 | [input.go](input.go)、[input_physics_raylib.go](input_physics_raylib.go) |
+| 输入、交互、挖掘入口与临时 Raylib camera/物理适配；方块/生物瞄准已使用 `gameVec3` | [input.go](input.go)、[input_physics_raylib.go](input_physics_raylib.go) |
 | 后端中立 gameplay 向量、玩家运动与通用碰撞 | [game_math.go](game_math.go)、[player_movement.go](player_movement.go)、[actor_physics.go](actor_physics.go) |
 | 生命、伤害、死亡、重生与区块保护（服务端生命 tick 已使用后端中立向量） | [player_vitals.go](player_vitals.go)、[vitals_ui.go](vitals_ui.go) |
 | 方块/物品定义、硬度和工具 | [block_registry.go](block_registry.go)、[item_registry.go](item_registry.go)、[mining_data.go](mining_data.go)、[tool_system.go](tool_system.go) |
@@ -118,4 +118,4 @@
 `chunk_mesher.go` 的 `buildAllMeshData`、`server_packets.go` 的 `HandlePacket`、
 `input.go` 仍包含较大的单体流程。这轮保留其内部实现，避免整理目录时混入算法修改。
 后续分别适合抽取面生成策略、按消息域处理函数、输入与交互状态机。
-工程仍使用 package main；WebGPU 实验现已接管 Playing 的 world、实体/effects、主要 HUD/text、inventory/container presentation。HUD、inventory、container、gameplay compositor、WebGPU camera/world renderer 和 WebGPU atlas builder 已不再直接 import Raylib；camera/time/screen snapshot 与鼠标桥接暂时集中在 `webgpu_game_windows.go`。依赖清理已进入 gameplay/world 层：`client.go` 网络传输、`world_ray.go` DDA、`mob_protocol.go` 权威攻击校验、`actor_physics.go`、`player_movement.go` 的运动核心、`mob_simulation.go`/`mob_server.go` 以及 `player_vitals.go` 已去除 Raylib。当前 Raylib 向量兼容集中在 `input_physics_raylib.go` 和 reference renderer；下一步重点是输入侧 `rl.Ray`/摄像机与 window/input owner，最后才删除 legacy OpenGL renderer。
+工程仍使用 package main；WebGPU 实验现已接管 Playing 的 world、实体/effects、主要 HUD/text、inventory/container presentation。HUD、inventory、container、gameplay compositor、WebGPU camera/world renderer 和 WebGPU atlas builder 已不再直接 import Raylib；camera/time/screen snapshot 与鼠标桥接暂时集中在 `webgpu_game_windows.go`。依赖清理已进入 gameplay/world 层：`client.go` 网络传输、`world_ray.go` DDA、`world_ray_raylib.go` 的 HitTest 外壳、`mob_protocol.go` 权威攻击校验、`actor_physics.go`、`player_movement.go` 的运动核心、`mob_simulation.go`/`mob_server.go` 以及 `player_vitals.go` 已去除 Raylib；`input.go` 的方块/生物瞄准也不再构造 `rl.Ray` 或调用 Raylib AABB 射线测试。当前 Raylib 向量兼容集中在 `input_physics_raylib.go` 和 camera/input UI 边界，下一步重点是摄像机/input owner 与 window owner，最后才删除 legacy OpenGL renderer。
