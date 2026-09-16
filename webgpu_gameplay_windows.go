@@ -11,9 +11,9 @@ import (
 )
 
 // DrawGameplay is the live WebGPU gameplay presentation path. World geometry,
-// the shape/icon HUD, text overlay, and inventory are encoded into one render
-// pass so the Raylib/OpenGL presenter remains completely idle while StatePlaying
-// owns the HWND through WebGPU.
+// the shape/icon HUD, text overlay, inventory and container screens are encoded
+// into one render pass so the Raylib/OpenGL presenter remains completely idle
+// while StatePlaying owns the HWND through WebGPU.
 func (r *webGPUWorldRenderer) DrawGameplay(world *World, camera rl.Camera3D, state *InputState) error {
 	if world == nil {
 		return nil
@@ -125,6 +125,11 @@ func (r *webGPUWorldRenderer) DrawGameplay(world *World, camera rl.Camera3D, sta
 		return err
 	}
 	if err := drawWebGPUInventoryOverlay(pass, r, state); err != nil {
+		_ = pass.End()
+		r.surface.DiscardTexture()
+		return err
+	}
+	if err := drawWebGPUContainerOverlay(pass, r, state); err != nil {
 		_ = pass.End()
 		r.surface.DiscardTexture()
 		return err
