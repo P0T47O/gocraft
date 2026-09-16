@@ -5,7 +5,6 @@ package main
 import (
 	"fmt"
 
-	rl "github.com/gen2brain/raylib-go/raylib"
 	"github.com/gogpu/gputypes"
 	"github.com/gogpu/wgpu"
 )
@@ -14,18 +13,19 @@ import (
 // entities/effects, HUD, text, inventory and container screens are encoded into
 // one render pass so the Raylib/OpenGL presenter remains completely idle while
 // StatePlaying owns the HWND through WebGPU.
-func (r *webGPUWorldRenderer) DrawGameplay(world *World, camera rl.Camera3D, state *InputState) error {
+func (r *webGPUWorldRenderer) DrawGameplay(world *World, frame webGPUFrameContext, state *InputState) error {
 	if world == nil {
 		return nil
 	}
-	width := uint32(max(1, rl.GetScreenWidth()))
-	height := uint32(max(1, rl.GetScreenHeight()))
+	width := max(uint32(1), frame.Width)
+	height := max(uint32(1), frame.Height)
 	if width != r.width || height != r.height {
 		r.width, r.height = width, height
 		if err := r.configureSurface(); err != nil {
 			return err
 		}
 	}
+	camera := webGPULegacyCamera(frame.Camera)
 	if err := r.updateScene(camera); err != nil {
 		return fmt.Errorf("update WebGPU gameplay scene: %w", err)
 	}
@@ -93,8 +93,7 @@ func (r *webGPUWorldRenderer) DrawGameplay(world *World, camera rl.Camera3D, sta
 		r.surface.DiscardTexture()
 		return err
 	}
-	now := float32(rl.GetTime())
-	if err := entities.Draw(pass, r, state, now); err != nil {
+	if err := entities.Draw(pass, r, state, frame.Time); err != nil {
 		_ = pass.End()
 		r.surface.DiscardTexture()
 		return err
