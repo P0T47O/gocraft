@@ -141,7 +141,7 @@ func (m *MobEntity) Tick(w *World) {
 func mobBox(pos rl.Vector3, c Collider) rl.BoundingBox {
 	return rl.BoundingBox{Min: rl.NewVector3(pos.X-c.Width/2, pos.Y, pos.Z-c.Depth/2), Max: rl.NewVector3(pos.X+c.Width/2, pos.Y+c.Height, pos.Z+c.Depth/2)}
 }
-func (m *MobEntity) hit(damage int, away rl.Vector3) bool {
+func (m *MobEntity) hit(damage int, awayX, awayZ float32) bool {
 	if m.Health <= 0 || m.Hurt > 0 {
 		return false
 	}
@@ -150,9 +150,13 @@ func (m *MobEntity) hit(damage int, away rl.Vector3) bool {
 	m.Flee = mobContent.Definitions[m.Kind].FleeTicks
 	m.Timer = 1
 	m.State = "flee"
-	m.Yaw = float32(math.Atan2(float64(away.X), float64(away.Z)))
-	m.Velocity = rl.Vector3Scale(away, 3)
-	m.Velocity.Y = 3
+	length := float32(math.Sqrt(float64(awayX*awayX + awayZ*awayZ)))
+	if length > 0 {
+		awayX /= length
+		awayZ /= length
+	}
+	m.Yaw = float32(math.Atan2(float64(awayX), float64(awayZ)))
+	m.Velocity = rl.NewVector3(awayX*3, 3, awayZ*3)
 	m.Dirty = true
 	if m.Health == 0 {
 		m.State = "dead"
