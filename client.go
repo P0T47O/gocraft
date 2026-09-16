@@ -56,6 +56,7 @@ func ConnectTCP(addr string, name string) (*Client, error) {
 					return
 				}
 			}
+		}
 	}()
 
 	// Reader Loop
