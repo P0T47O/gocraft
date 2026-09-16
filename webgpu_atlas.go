@@ -7,14 +7,16 @@ import (
 	_ "image/png"
 	"os"
 	"sort"
-
-	rl "github.com/gen2brain/raylib-go/raylib"
 )
+
+type webGPUUVRect struct {
+	X, Y, Width, Height float32
+}
 
 type webGPUBlockAtlas struct {
 	pixels        []byte
 	width, height int
-	uvs           map[string]rl.Rectangle
+	uvs           map[string]webGPUUVRect
 }
 
 const webGPUAtlasMaxTileExtent = 64
@@ -57,8 +59,8 @@ func webGPUAtlasTile(path string, img image.Image) (*image.NRGBA, int, int) {
 
 // buildWebGPUBlockAtlas builds a CPU-side RGBA atlas containing every texture
 // referenced by the current block/item registries plus mob skins and mining
-// crack stages. The returned UV map is installed on RenderAssets so all native
-// WebGPU gameplay presentation can share one texture without Raylib GPU state.
+// crack stages. UV metadata is kept backend-neutral; the temporary Raylib
+// bridge is applied only at the legacy mesh-generation boundary.
 func buildWebGPUBlockAtlas() (*webGPUBlockAtlas, error) {
 	pathsSet := make(map[string]struct{})
 	for _, def := range Blocks {
@@ -70,7 +72,6 @@ func buildWebGPUBlockAtlas() (*webGPUBlockAtlas, error) {
 			if path != "" {
 				pathsSet[path] = struct{}{}
 			}
-		}
 	}
 
 	// Standalone tools/items do not have block faces but still need to appear in
@@ -113,7 +114,7 @@ func buildWebGPUBlockAtlas() (*webGPUBlockAtlas, error) {
 	width := side * atlasCellSize
 	height := side * atlasCellSize
 	pixels := make([]byte, width*height*4)
-	uvs := make(map[string]rl.Rectangle, len(paths))
+	uvs := make(map[string]webGPUUVRect, len(paths))
 
 	for i, path := range paths {
 		file, err := os.Open(path)
@@ -144,12 +145,12 @@ func buildWebGPUBlockAtlas() (*webGPUBlockAtlas, error) {
 			}
 		}
 
-		uvs[path] = rl.NewRectangle(
-			float32(col*atlasCellSize+atlasPadding)/float32(width),
-			float32(row*atlasCellSize+atlasPadding)/float32(height),
-			float32(tileW)/float32(width),
-			float32(tileH)/float32(height),
-		)
+		uvs[path] = webGPUUVRect{
+			X:      float32(col*atlasCellSize+atlasPadding) / float32(width),
+			Y:      float32(row*atlasCellSize+atlasPadding) / float32(height),
+			Width:  float32(tileW) / float32(width),
+			Height: float32(tileH) / float32(height),
+		}
 	}
 
 	return &webGPUBlockAtlas{pixels: pixels, width: width, height: height, uvs: uvs}, nil
