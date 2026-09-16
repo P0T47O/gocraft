@@ -61,7 +61,7 @@
 | 方块表面网格构建 | [chunk_mesher.go](chunk_mesher.go) |
 | 后端中立网格上传接口、OpenGL/WebGPU GPU buffer | [render_mesh.go](render_mesh.go)、[platform/renderer.go](platform/renderer.go)、[platform/mesh.go](platform/mesh.go)、[platform/webgpu_backend.go](platform/webgpu_backend.go) |
 | OpenGL 可见区块、透明排序、雾距 | [world_render.go](world_render.go)、[render_cull.go](render_cull.go) |
-| WebGPU 世界渲染（camera matrices、scene uniform、surface/depth、atlas、opaque/cutout、water/glass、fog、可见 section 提交） | [webgpu_camera_windows.go](webgpu_camera_windows.go)、[webgpu_world_renderer_windows.go](webgpu_world_renderer_windows.go)、[webgpu_atlas.go](webgpu_atlas.go) |
+| WebGPU 世界渲染（camera matrices、scene uniform、surface/depth、atlas、atlas 内水/岩浆逐帧更新、opaque/cutout、water/glass、fog、可见 section 提交） | [webgpu_camera_windows.go](webgpu_camera_windows.go)、[webgpu_world_renderer_windows.go](webgpu_world_renderer_windows.go)、[webgpu_atlas.go](webgpu_atlas.go)、[webgpu_animation_windows.go](webgpu_animation_windows.go) |
 | WebGPU 实体/效果（远程玩家、掉落物、JSON bone 生物动画、挖掘裂纹） | [webgpu_entities_windows.go](webgpu_entities_windows.go) |
 | WebGPU gameplay HUD / 文本（准星、热键栏、生命、像素字体、聊天、debug、暂停/死亡提示） | [webgpu_hud_windows.go](webgpu_hud_windows.go)、[webgpu_text_windows.go](webgpu_text_windows.go) |
 | WebGPU 背包/容器与物品工具图标 | [webgpu_inventory_windows.go](webgpu_inventory_windows.go)、[webgpu_container_windows.go](webgpu_container_windows.go) |
@@ -104,7 +104,7 @@
 - 存档与协议：`save_file_test.go`、`protocol_varint_test.go`，各玩法测试也覆盖消息往返。
 - 重生与生命：`player_vitals_test.go`；视距：`settings_distance_test.go`、`world_fog_test.go`。
 - 界面预览：`*_preview_test.go`；性能：`engine_bench_test.go`。
-- WebGPU 实机路径：Windows 下 `go run . -webgpu`，菜单仍由 Raylib/OpenGL 绘制，进入 Playing 后 WebGPU 独占 present；当前 world、实体/掉落物、JSON 生物模型与动画、挖掘裂纹、准星/热键栏/生命 HUD、ASCII 文本/聊天/debug/暂停死亡提示、创造/生存背包和箱子/熔炉容器已迁移；完整暂停菜单控件、特殊/动画非 atlas 材质仍待迁移。当前进入依赖清理阶段，不再新增 reference renderer 原本没有的表现功能。
+- WebGPU 实机路径：Windows 下 `go run . -webgpu`，菜单仍由 Raylib/OpenGL 绘制，进入 Playing 后 WebGPU 独占 present；当前 world、atlas 内水/岩浆动画、实体/掉落物、JSON 生物模型与动画、挖掘裂纹、准星/热键栏/生命 HUD、ASCII 文本/聊天/debug/暂停死亡提示、创造/生存背包和箱子/熔炉容器已迁移；完整暂停菜单控件、特殊非 atlas 材质仍待迁移。当前进入依赖清理阶段，不再新增 reference renderer 原本没有的表现功能。
 - 纹理过滤：`render_filter_test.go` 检查设置往返与图集留白；设置 `GOCRAFT_FILTER_GPU_TEST=1` 后运行 `go test . -run TestTextureFilterGPU`，实测倍率、mipmap 开关回读及 GL 错误。
 - 过滤设置默认 mipmap 开启、AF 8×，即时生效并保存；AF 自动限制到硬件能力。图集使用加宽留白，8× 保留 0–4 级，16× 限至 0–3 级；关闭 mipmap 仅停用采样，不释放层级内存。
 - 新增功能或移动职责时，同一批修改更新本页；符号清单运行 `go run ./tools/codeindex -write` 更新。
