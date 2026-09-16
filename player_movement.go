@@ -1,9 +1,6 @@
 package main
 
-import (
-	rl "github.com/gen2brain/raylib-go/raylib"
-	"math"
-)
+import "math"
 
 type MovementControls struct {
 	Forward, Side       float32
@@ -16,7 +13,7 @@ func abs32(v float32) float32 {
 	}
 	return v
 }
-func offsetAxis(p rl.Vector3, axis int, d float32) rl.Vector3 {
+func offsetAxis(p gameVec3, axis int, d float32) gameVec3 {
 	switch axis {
 	case 0:
 		p.X += d
@@ -30,8 +27,8 @@ func offsetAxis(p rl.Vector3, axis int, d float32) rl.Vector3 {
 func blockAtPosition(w *World, x, y, z float64) byte {
 	return w.BlockAt(int(math.Floor(x+0.5)), int(math.Floor(y+0.5)), int(math.Floor(z+0.5)))
 }
-func feetSupported(w *World, p rl.Vector3) bool { return collides(w, offsetAxis(p, 1, -0.06)) }
-func touchesLiquid(w *World, p rl.Vector3, id byte) bool {
+func feetSupported(w *World, p gameVec3) bool { return collides(w, offsetAxis(p, 1, -0.06)) }
+func touchesLiquid(w *World, p gameVec3, id byte) bool {
 	for _, dy := range []float32{-playerEyeY + 0.1, -0.8, 0} {
 		if blockAtPosition(w, float64(p.X), float64(p.Y+dy), float64(p.Z)) == id {
 			return true
@@ -40,15 +37,15 @@ func touchesLiquid(w *World, p rl.Vector3, id byte) bool {
 	return false
 }
 
-func (s *InputState) StepMovement(w *World, p rl.Vector3, dt float32, c MovementControls, creative bool) rl.Vector3 {
+func (s *InputState) StepMovement(w *World, p gameVec3, dt float32, c MovementControls, creative bool) gameVec3 {
 	dt = min(max(dt, 0), 0.1)
 	s.IsSneaking = c.Sneak && !creative
 	s.IsSwimming = !creative && touchesLiquid(w, p, blockWater)
 	s.IsRunning = !creative && !s.IsSwimming && !c.Sneak && c.Sprint && c.Forward > 0
 	sn, cs := float32(math.Sin(float64(s.Yaw))), float32(math.Cos(float64(s.Yaw)))
-	move := rl.NewVector3(sn*c.Forward-cs*c.Side, 0, cs*c.Forward+sn*c.Side)
-	if rl.Vector3Length(move) > 1 {
-		move = rl.Vector3Normalize(move)
+	move := gameVec3{X: sn*c.Forward - cs*c.Side, Z: cs*c.Forward + sn*c.Side}
+	if gameVec3Length(move) > 1 {
+		move = gameVec3Normalize(move)
 	}
 	if creative {
 		s.VelocityY = 0
@@ -59,10 +56,10 @@ func (s *InputState) StepMovement(w *World, p rl.Vector3, dt float32, c Movement
 		if c.Sneak {
 			move.Y--
 		}
-		if rl.Vector3Length(move) > 1 {
-			move = rl.Vector3Normalize(move)
+		if gameVec3Length(move) > 1 {
+			move = gameVec3Normalize(move)
 		}
-		return resolveCollision(w, p, rl.Vector3Scale(move, flySpeed*dt))
+		return resolveCollision(w, p, gameVec3Scale(move, flySpeed*dt))
 	}
 	speed := float32(walkSpeed)
 	if s.IsRunning {
@@ -80,12 +77,12 @@ func (s *InputState) StepMovement(w *World, p rl.Vector3, dt float32, c Movement
 		remaining -= step
 		grounded := feetSupported(w, p)
 		wet := touchesLiquid(w, p, blockWater)
-		next := resolveCollision(w, p, rl.Vector3Scale(move, speed*step))
+		next := resolveCollision(w, p, gameVec3Scale(move, speed*step))
 		if c.Sneak && grounded && !wet && !c.Jump {
-			if !feetSupported(w, rl.NewVector3(next.X, p.Y, p.Z)) {
+			if !feetSupported(w, gameVec3{X: next.X, Y: p.Y, Z: p.Z}) {
 				next.X = p.X
 			}
-			if !feetSupported(w, rl.NewVector3(next.X, p.Y, next.Z)) {
+			if !feetSupported(w, gameVec3{X: next.X, Y: p.Y, Z: next.Z}) {
 				next.Z = p.Z
 			}
 		}
@@ -114,7 +111,7 @@ func (s *InputState) StepMovement(w *World, p rl.Vector3, dt float32, c Movement
 			s.VelocityY = max(s.VelocityY-gravity*step, float32(-terminalVel))
 		}
 		before := next.Y
-		next = resolveCollision(w, next, rl.NewVector3(0, s.VelocityY*step, 0))
+		next = resolveCollision(w, next, gameVec3{Y: s.VelocityY * step})
 		if abs32((next.Y-before)-s.VelocityY*step) > 0.001 {
 			s.VelocityY = 0
 		}
