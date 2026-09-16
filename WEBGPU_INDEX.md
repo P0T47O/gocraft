@@ -13,20 +13,19 @@ This supplements `CODE_INDEX.md` without replacing the main project's complete n
 | CPU-built WebGPU texture atlas, including block/item sprites, mob skins and crack stages | `webgpu_atlas.go` |
 | Live WebGPU world renderer: camera, depth, opaque/cutout, water/glass, fog, visible sections | `webgpu_world_renderer_windows.go` |
 | Live WebGPU entity/effect batch: remote players, dropped items, content-driven animated mobs, mining cracks | `webgpu_entities_windows.go` |
-| First-person held-item/viewmodel overlay with mining swing | `webgpu_viewmodel_windows.go` |
 | Live WebGPU shape/icon HUD: crosshair, hotbar, vitals | `webgpu_hud_windows.go` |
 | Live WebGPU text overlay: built-in pixel font, hotbar labels/counts, chat, debug, pause/death text | `webgpu_text_windows.go` |
 | WebGPU creative/survival inventory and item/tool presentation | `webgpu_inventory_windows.go` |
 | WebGPU chest/furnace container presentation | `webgpu_container_windows.go` |
 | Single-pass live gameplay compositor | `webgpu_gameplay_windows.go`: `DrawGameplay` |
-| `-webgpu` Playing-state lifetime and renderer handoff | `webgpu_game_windows.go` |
+| `-webgpu` Playing-state lifetime and temporary Raylib window/input bridge | `webgpu_game_windows.go` |
 
-Current state: on real Windows hardware the Raylib-created HWND is presented by WebGPU through the GoGPU Vulkan backend. The live `-webgpu` path renders streamed chunk terrain, atlas textures, cutout foliage, transparent water/glass, fog, remote players, dropped block/tool items, content-driven mobs, mining crack overlays, a first-person held-item viewmodel, crosshair/hotbar/vitals, ASCII text, creative/survival inventories, standalone item/tool sprites, and chest/furnace container screens while Raylib/OpenGL presentation stays idle during `StatePlaying`.
+Current state: on real Windows hardware the Raylib-created HWND is presented by WebGPU through the GoGPU Vulkan backend. The live `-webgpu` path renders streamed chunk terrain, atlas textures, cutout foliage, transparent water/glass, fog, remote players, dropped block/tool items, content-driven mobs, mining crack overlays, crosshair/hotbar/vitals, ASCII text, creative/survival inventories, standalone item/tool sprites, and chest/furnace container screens while Raylib/OpenGL presentation stays idle during `StatePlaying`.
 
 Entity presentation uses one dynamic WebGPU vertex/index batch in world space. Mob geometry follows the JSON bone model and animation channels already used by the reference renderer, including walk/flee leg swing, hurt tint and death tilt. Larger mob skins are stored in the atlas at their native resolution within the padded cell. Mining cracks reuse the same batch as a slightly expanded textured cube to avoid z-fighting.
 
-The first-person viewmodel is currently a screen-space textured item using the shared atlas. It is hidden for inventory, pause and death screens, uses a slight trapezoid/rotation to read as a held object, and follows mining progress with a compact swing. A later polish pass can replace block items with true 3D cube viewmodels and add explicit attack/place swing state.
+No new gameplay presentation is being added during the dependency-removal phase. The experimental viewmodel prototype was removed because the reference game did not have that feature. Container presentation no longer imports Raylib directly; mouse position is funneled through the temporary Windows game-boundary bridge instead. The target architecture remains zero-Raylib on the WebGPU branch.
 
-Container and inventory input still reuse the existing Raylib-driven hit testing and authoritative networking logic; this stage migrates presentation first. The target architecture remains zero-Raylib on the WebGPU branch. Raylib is temporarily retained for the native window/input owner, camera/vector/rectangle types, menus, the OpenGL reference renderer, and several shared gameplay/server type leaks. Animated/special materials, Unicode text, full pause controls, and final window/input/type decoupling are still pending.
+Raylib is still retained for the native window/input owner, camera/vector/rectangle types, menus, the OpenGL reference renderer, atlas UV compatibility with the legacy mesher, and several shared gameplay/server type leaks. The next removal steps are to narrow those type leaks, replace direct Raylib window/input calls with the platform boundary, then delete the OpenGL/Raylib renderer once the existing feature set reaches parity.
 
 Local validation for the live path: `go test ./...`, `go vet ./...`, `go build .`, then `go run . -webgpu`. Preview tests are opt-in only and are no longer part of the normal iteration loop. After new Go symbols stabilize, run `go run ./tools/codeindex -write` and `go run ./tools/codeindex -check` before considering the branch clean.
