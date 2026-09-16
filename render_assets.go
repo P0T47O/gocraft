@@ -2,8 +2,9 @@ package main
 
 import (
 	"fmt"
-	rl "github.com/gen2brain/raylib-go/raylib"
 	"sync"
+
+	rl "github.com/gen2brain/raylib-go/raylib"
 )
 
 type RenderAssets struct {
@@ -31,9 +32,13 @@ type AnimatedTexture struct {
 	Index        int
 }
 
+type AtlasRect struct {
+	X, Y, Width, Height float32
+}
+
 type TextureAtlas struct {
 	Texture rl.Texture2D
-	UVs     map[string]rl.Rectangle
+	UVs     map[string]AtlasRect
 }
 
 func loadRenderAssets() *RenderAssets {
