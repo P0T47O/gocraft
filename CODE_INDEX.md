@@ -16,7 +16,7 @@
 | 游戏场景绘制 | [game_render.go](game_render.go) |
 | WebGPU Playing 状态接入/退出 | [webgpu_game_windows.go](webgpu_game_windows.go)、[webgpu_game_stub.go](webgpu_game_stub.go) |
 | WebGPU Playing 单 pass 合成（world + entities/effects + HUD/text + inventory/container） | [webgpu_gameplay_windows.go](webgpu_gameplay_windows.go)：`DrawGameplay` |
-| 客户端连接与收发 | [client.go](client.go) |
+| 客户端连接与收发（网络层不依赖 Raylib；位置/朝向以标量传入） | [client.go](client.go) |
 | 配置、渲染距离 | [settings.go](settings.go)、[menu_screens.go](menu_screens.go) |
 
 ## 服务端与协议
@@ -39,7 +39,7 @@
 | 登录、玩家移动与出生点消息 | [protocol_player.go](protocol_player.go) |
 | 实体消息 | [protocol_entities.go](protocol_entities.go) |
 | 背包、交互、聊天等操作消息 | [protocol_actions.go](protocol_actions.go) |
-| 容器/生物/生命消息 | [container_protocol.go](container_protocol.go)、[mob_protocol.go](mob_protocol.go)、[player_vitals.go](player_vitals.go) |
+| 容器/生物/生命消息；生物攻击距离/AABB 权威校验已不依赖 Raylib | [container_protocol.go](container_protocol.go)、[mob_protocol.go](mob_protocol.go)、[player_vitals.go](player_vitals.go) |
 
 ## 世界、地形与渲染
 
@@ -55,7 +55,7 @@
 | 生成机制及限制 | [GENERATION.md](GENERATION.md) |
 | 光照传播 | [world_light.go](world_light.go) |
 | 六面逐顶点光照、AO、防拐角漏光、四边形对角线选择 | [mesh_lighting.go](mesh_lighting.go)、[mesh_lighting_test.go](mesh_lighting_test.go)、[mesh_lighting_preview_test.go](mesh_lighting_preview_test.go)；范围与实测：[LIGHTING.md](LIGHTING.md) |
-| 客户端区块消息应用、射线查询 | [world_packets.go](world_packets.go)、[world_ray.go](world_ray.go) |
+| 客户端区块消息应用、后端中立 DDA 射线查询与临时 Raylib 输入适配 | [world_packets.go](world_packets.go)、[world_ray.go](world_ray.go)、[world_ray_raylib.go](world_ray_raylib.go) |
 | 客户端光照增量、精确网格失效范围与更新合并 | [world_packet_light.go](world_packet_light.go)、[world_mesh_dirty.go](world_mesh_dirty.go)、[world_mesh_dirty_test.go](world_mesh_dirty_test.go) |
 | 网格任务与快照 | [world_mesh.go](world_mesh.go) |
 | 方块表面网格构建 | [chunk_mesher.go](chunk_mesher.go) |
@@ -118,4 +118,4 @@
 `chunk_mesher.go` 的 `buildAllMeshData`、`server_packets.go` 的 `HandlePacket`、
 `input.go` 仍包含较大的单体流程。这轮保留其内部实现，避免整理目录时混入算法修改。
 后续分别适合抽取面生成策略、按消息域处理函数、输入与交互状态机。
-工程仍使用 package main；WebGPU 实验现已接管 Playing 的 world、实体/effects、主要 HUD/text、inventory/container presentation。HUD、inventory、container 和 gameplay compositor 已不再直接 import Raylib；camera/time/screen snapshot 与鼠标桥接暂时集中在 `webgpu_game_windows.go`，WebGPU gameplay 已直接使用自有 camera math。特殊材质，以及 window/input、legacy world-renderer entry 与其余 Raylib 类型解耦仍未完成。
+工程仍使用 package main；WebGPU 实验现已接管 Playing 的 world、实体/effects、主要 HUD/text、inventory/container presentation。HUD、inventory、container、gameplay compositor、WebGPU camera/world renderer 和 WebGPU atlas builder 已不再直接 import Raylib；camera/time/screen snapshot 与鼠标桥接暂时集中在 `webgpu_game_windows.go`。依赖清理已进入 gameplay/world 层：`client.go` 网络传输、`world_ray.go` DDA 和 `mob_protocol.go` 权威攻击校验已去除 Raylib，当前剩余重点是输入侧 `rl.Ray` 适配、actor/mob movement 的 `rl.Vector3`、window/input owner，以及 legacy OpenGL renderer。
