@@ -55,7 +55,7 @@ func (a *RenderAssets) generateAtlas() {
 	atlasHeight := int32(rows * size)
 
 	atlasImg := rl.GenImageColor(int(atlasWidth), int(atlasHeight), rl.Blank)
-	uvs := map[string]rl.Rectangle{}
+	uvs := map[string]AtlasRect{}
 
 	for i, path := range paths {
 		var img *rl.Image
@@ -148,7 +148,7 @@ func (a *RenderAssets) generateAtlas() {
 		uvW := float32(img.Width) / float32(atlasWidth)
 		uvH := float32(img.Height) / float32(atlasHeight)
 
-		uvs[path] = rl.NewRectangle(uvX, uvY, uvW, uvH)
+		uvs[path] = AtlasRect{X: uvX, Y: uvY, Width: uvW, Height: uvH}
 
 		rl.UnloadImage(img)
 	}
@@ -163,9 +163,9 @@ func (a *RenderAssets) generateAtlas() {
 	}
 }
 
-func (a *RenderAssets) getAtlasUV(path string) (rl.Rectangle, bool) {
+func (a *RenderAssets) getAtlasUV(path string) (AtlasRect, bool) {
 	if a.atlas == nil {
-		return rl.NewRectangle(0, 0, 1, 1), false
+		return AtlasRect{X: 0, Y: 0, Width: 1, Height: 1}, false
 	}
 	uv, ok := a.atlas.UVs[path]
 	return uv, ok
