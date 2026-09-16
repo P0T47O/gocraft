@@ -6,6 +6,8 @@ import (
 	"time"
 )
 
+const serverStreamQueueCapacity = 8
+
 // ListenTCP establishes readiness synchronously, including an OS-assigned local port.
 func (s *Server) ListenTCP(addr string) error {
 	ln, err := net.Listen("tcp", addr)
@@ -75,9 +77,9 @@ func (c *ClientConnection) close() {
 	})
 }
 
-// Critical messages never block the world loop. Streaming leaves a large
-// reserve for gameplay bursts; if that reserve is still exhausted, reconnect
-// rather than silently losing authoritative inventory/block changes.
+// Critical messages never block the world loop. Streaming uses a separate,
+// shallow queue so a slow chunk consumer cannot occupy every slot needed by
+// authoritative inventory/block/container transitions.
 func (c *ClientConnection) enqueue(p Packet) bool {
 	select {
 	case <-c.done:
@@ -108,7 +110,14 @@ func (s *Server) handleNewConnection(conn net.Conn) {
 	}
 	_ = conn.SetReadDeadline(time.Time{})
 	name := login.Username
-	cc := &ClientConnection{Name: name, Conn: conn, Send: make(chan Packet, 128), KnownChunks: make(map[chunkKey]bool), done: make(chan struct{})}
+	cc := &ClientConnection{
+		Name:        name,
+		Conn:        conn,
+		Send:        make(chan Packet, 128),
+		StreamSend:  make(chan Packet, serverStreamQueueCapacity),
+		KnownChunks: make(map[chunkKey]bool),
+		done:        make(chan struct{}),
+	}
 	s.ClientsMu.Lock()
 	if old := s.Clients[name]; old != nil {
 		old.close()
@@ -119,17 +128,39 @@ func (s *Server) handleNewConnection(conn net.Conn) {
 	go func() {
 		defer close(writerDone)
 		defer cc.close()
+
+		write := func(p Packet) bool {
+			start := time.Now()
+			err := WritePacket(conn, p)
+			if p.ID() == IDChunkData || p.ID() == IDChunkLight {
+				perfMon.recordLoading(phaseNetworkWrite, start)
+			}
+			return err == nil
+		}
+
 		for {
+			// Give already-queued authoritative traffic first refusal before
+			// taking another large chunk snapshot.
 			select {
 			case <-cc.done:
 				return
 			case p := <-cc.Send:
-				start := time.Now()
-				err := WritePacket(conn, p)
-				if p.ID() == IDChunkData || p.ID() == IDChunkLight {
-					perfMon.recordLoading(phaseNetworkWrite, start)
+				if !write(p) {
+					return
 				}
-				if err != nil {
+				continue
+			default:
+			}
+
+			select {
+			case <-cc.done:
+				return
+			case p := <-cc.Send:
+				if !write(p) {
+					return
+				}
+			case p := <-cc.StreamSend:
+				if !write(p) {
 					return
 				}
 			}
