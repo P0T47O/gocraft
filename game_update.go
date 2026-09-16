@@ -146,7 +146,7 @@ Loop:
 	// Client-Pull: Request any missing chunks
 	requestMissingChunks()
 
-	client.Update(&camera, input)
+	client.Update(camera.Position.X, camera.Position.Y, camera.Position.Z, input.Yaw, input.Pitch)
 
 	updateEntities(dt)
 	updateInterpolation(dt)
