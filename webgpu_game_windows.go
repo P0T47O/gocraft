@@ -50,19 +50,6 @@ func webGPUFrameFromRaylib() webGPUFrameContext {
 	}
 }
 
-// webGPULegacyCamera is temporary while the world renderer still accepts the
-// legacy Raylib camera type. Keep that conversion at this boundary so gameplay
-// composition no longer imports or queries Raylib directly.
-func webGPULegacyCamera(camera webGPUCamera) rl.Camera3D {
-	return rl.Camera3D{
-		Position:   rl.Vector3{X: camera.Position.X, Y: camera.Position.Y, Z: camera.Position.Z},
-		Target:     rl.Vector3{X: camera.Target.X, Y: camera.Target.Y, Z: camera.Target.Z},
-		Up:         rl.Vector3{X: camera.Up.X, Y: camera.Up.Y, Z: camera.Up.Z},
-		Fovy:       camera.Fovy,
-		Projection: rl.CameraPerspective,
-	}
-}
-
 func ensureExperimentalWebGPURenderer() error {
 	if activeWebGPUWorldRenderer != nil {
 		return nil
