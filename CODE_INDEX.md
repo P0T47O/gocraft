@@ -61,7 +61,7 @@
 | 方块表面网格构建 | [chunk_mesher.go](chunk_mesher.go) |
 | 后端中立网格上传接口、OpenGL/WebGPU GPU buffer | [render_mesh.go](render_mesh.go)、[platform/renderer.go](platform/renderer.go)、[platform/mesh.go](platform/mesh.go)、[platform/webgpu_backend.go](platform/webgpu_backend.go) |
 | OpenGL 可见区块、透明排序、雾距 | [world_render.go](world_render.go)、[render_cull.go](render_cull.go) |
-| WebGPU 世界渲染（surface、depth、atlas、opaque/cutout、water/glass、fog、可见 section 提交） | [webgpu_world_renderer_windows.go](webgpu_world_renderer_windows.go)、[webgpu_atlas.go](webgpu_atlas.go) |
+| WebGPU 世界渲染（camera matrices、scene uniform、surface/depth、atlas、opaque/cutout、water/glass、fog、可见 section 提交） | [webgpu_camera_windows.go](webgpu_camera_windows.go)、[webgpu_world_renderer_windows.go](webgpu_world_renderer_windows.go)、[webgpu_atlas.go](webgpu_atlas.go) |
 | WebGPU 实体/效果（远程玩家、掉落物、JSON bone 生物动画、挖掘裂纹） | [webgpu_entities_windows.go](webgpu_entities_windows.go) |
 | WebGPU gameplay HUD / 文本（准星、热键栏、生命、像素字体、聊天、debug、暂停/死亡提示） | [webgpu_hud_windows.go](webgpu_hud_windows.go)、[webgpu_text_windows.go](webgpu_text_windows.go) |
 | WebGPU 背包/容器与物品工具图标 | [webgpu_inventory_windows.go](webgpu_inventory_windows.go)、[webgpu_container_windows.go](webgpu_container_windows.go) |
@@ -118,4 +118,4 @@
 `chunk_mesher.go` 的 `buildAllMeshData`、`server_packets.go` 的 `HandlePacket`、
 `input.go` 仍包含较大的单体流程。这轮保留其内部实现，避免整理目录时混入算法修改。
 后续分别适合抽取面生成策略、按消息域处理函数、输入与交互状态机。
-工程仍使用 package main；WebGPU 实验现已接管 Playing 的 world、实体/effects、主要 HUD/text、inventory/container presentation。容器 presentation 已不再直接 import Raylib，输入桥接暂时集中在 `webgpu_game_windows.go`；特殊材质，以及 window/input 与 Raylib 类型解耦仍未完成。
+工程仍使用 package main；WebGPU 实验现已接管 Playing 的 world、实体/effects、主要 HUD/text、inventory/container presentation。HUD、inventory、container 和 gameplay compositor 已不再直接 import Raylib；camera/time/screen snapshot 与鼠标桥接暂时集中在 `webgpu_game_windows.go`，WebGPU gameplay 已直接使用自有 camera math。特殊材质，以及 window/input、legacy world-renderer entry 与其余 Raylib 类型解耦仍未完成。
