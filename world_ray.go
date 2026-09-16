@@ -1,47 +1,41 @@
 package main
 
-import (
-	"math"
+import "math"
 
-	rl "github.com/gen2brain/raylib-go/raylib"
-)
-
-func (w *World) HitTest(ray rl.Ray, maxDist float32) hitInfo {
-	return w.rayCast(ray, maxDist)
+func (w *World) HitTest(originX, originY, originZ, dirX, dirY, dirZ, maxDist float32) hitInfo {
+	return w.rayCast(originX, originY, originZ, dirX, dirY, dirZ, maxDist)
 }
 
-func (w *World) rayCast(ray rl.Ray, maxDist float32) hitInfo {
-	dir := ray.Direction
-	if dir.X == 0 && dir.Y == 0 && dir.Z == 0 {
+func (w *World) rayCast(originX, originY, originZ, dirX, dirY, dirZ, maxDist float32) hitInfo {
+	if dirX == 0 && dirY == 0 && dirZ == 0 {
 		return hitInfo{}
 	}
-	ox := ray.Position.X
-	oy := ray.Position.Y
-	oz := ray.Position.Z
 
 	// Centered coordinates: Block 0 is [-0.5, 0.5]
-	x := int(math.Floor(float64(ox + 0.5)))
-	y := int(math.Floor(float64(oy + 0.5)))
-	z := int(math.Floor(float64(oz + 0.5)))
+	x := int(math.Floor(float64(originX + 0.5)))
+	y := int(math.Floor(float64(originY + 0.5)))
+	z := int(math.Floor(float64(originZ + 0.5)))
 
 	if w.BlockAt(x, y, z) != blockAir && w.BlockAt(x, y, z) != blockWater {
 		return hitInfo{x: x, y: y, z: z, hit: true}
 	}
 
-	stepX := sign(dir.X)
-	stepY := sign(dir.Y)
-	stepZ := sign(dir.Z)
+	stepX := sign(dirX)
+	stepY := sign(dirY)
+	stepZ := sign(dirZ)
 
-	tDeltaX := axisDelta(dir.X)
-	tDeltaY := axisDelta(dir.Y)
-	tDeltaZ := axisDelta(dir.Z)
+	tDeltaX := axisDelta(dirX)
+	tDeltaY := axisDelta(dirY)
+	tDeltaZ := axisDelta(dirZ)
 
-	tMaxX := axisMax(ox, float32(x), dir.X, stepX)
-	tMaxY := axisMax(oy, float32(y), dir.Y, stepY)
-	tMaxZ := axisMax(oz, float32(z), dir.Z, stepZ)
+	tMaxX := axisMax(originX, float32(x), dirX, stepX)
+	tMaxY := axisMax(originY, float32(y), dirY, stepY)
+	tMaxZ := axisMax(originZ, float32(z), dirZ, stepZ)
 
 	var dist float32
-	var normal rl.Vector3
+	var normal struct {
+		X, Y, Z float32
+	}
 
 	for dist <= maxDist {
 		if tMaxX < tMaxY {
@@ -49,24 +43,32 @@ func (w *World) rayCast(ray rl.Ray, maxDist float32) hitInfo {
 				x += stepX
 				dist = tMaxX
 				tMaxX += tDeltaX
-				normal = rl.NewVector3(float32(-stepX), 0, 0)
+				normal = struct {
+					X, Y, Z float32
+				}{X: float32(-stepX)}
 			} else {
 				z += stepZ
 				dist = tMaxZ
 				tMaxZ += tDeltaZ
-				normal = rl.NewVector3(0, 0, float32(-stepZ))
+				normal = struct {
+					X, Y, Z float32
+				}{Z: float32(-stepZ)}
 			}
 		} else {
 			if tMaxY < tMaxZ {
 				y += stepY
 				dist = tMaxY
 				tMaxY += tDeltaY
-				normal = rl.NewVector3(0, float32(-stepY), 0)
+				normal = struct {
+					X, Y, Z float32
+				}{Y: float32(-stepY)}
 			} else {
 				z += stepZ
 				dist = tMaxZ
 				tMaxZ += tDeltaZ
-				normal = rl.NewVector3(0, 0, float32(-stepZ))
+				normal = struct {
+					X, Y, Z float32
+				}{Z: float32(-stepZ)}
 			}
 		}
 		if dist > maxDist {
