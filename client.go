@@ -110,13 +110,27 @@ func (c *Client) Send(p Packet) {
 	default:
 	}
 
-	// Player movement and chunk-unload notifications are replaceable hints. A
-	// respawn or teleport can discard hundreds of old chunks in one frame; those
-	// notifications must not crowd authoritative gameplay requests out of the
-	// bounded writer queue. If an unload hint is dropped, explicit client-pull
-	// PacketChunkRequest traffic can still recover the chunk later because the
-	// server serves explicit requests independently of KnownChunks.
-	if p.ID() == IDPlayerMove || p.ID() == IDUnloadChunk {
+	// Player movement is a latest-state snapshot. If the writer is temporarily
+	// behind, dropping one movement sample is preferable to blocking a frame.
+	if p.ID() == IDPlayerMove {
+		select {
+		case c.Outgoing <- p:
+		case <-c.done:
+		default:
+		}
+		return
+	}
+
+	// Chunk unloads are replaceable hints too, but unlike movement they can arrive
+	// in a burst of hundreds after respawn/teleport. Keep half of the queue free
+	// for authoritative requests and client-pull chunk requests. Dropped unload
+	// hints are safe: if the server still believes a discarded chunk is known,
+	// requestMissingChunks sends an explicit PacketChunkRequest and the server
+	// serves explicit requests independently of KnownChunks.
+	if p.ID() == IDUnloadChunk {
+		if cap(c.Outgoing) > 1 && len(c.Outgoing) >= cap(c.Outgoing)/2 {
+			return
+		}
 		select {
 		case c.Outgoing <- p:
 		case <-c.done:
