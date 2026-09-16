@@ -7,14 +7,12 @@ import (
 	_ "image/png"
 	"os"
 	"sort"
-
-	rl "github.com/gen2brain/raylib-go/raylib"
 )
 
 type webGPUBlockAtlas struct {
 	pixels        []byte
 	width, height int
-	uvs           map[string]rl.Rectangle
+	uvs           map[string]AtlasRect
 }
 
 const webGPUAtlasMaxTileExtent = 64
@@ -113,7 +111,7 @@ func buildWebGPUBlockAtlas() (*webGPUBlockAtlas, error) {
 	width := side * atlasCellSize
 	height := side * atlasCellSize
 	pixels := make([]byte, width*height*4)
-	uvs := make(map[string]rl.Rectangle, len(paths))
+	uvs := make(map[string]AtlasRect, len(paths))
 
 	for i, path := range paths {
 		file, err := os.Open(path)
@@ -144,12 +142,12 @@ func buildWebGPUBlockAtlas() (*webGPUBlockAtlas, error) {
 			}
 		}
 
-		uvs[path] = rl.NewRectangle(
-			float32(col*atlasCellSize+atlasPadding)/float32(width),
-			float32(row*atlasCellSize+atlasPadding)/float32(height),
-			float32(tileW)/float32(width),
-			float32(tileH)/float32(height),
-		)
+		uvs[path] = AtlasRect{
+			X:      float32(col*atlasCellSize+atlasPadding) / float32(width),
+			Y:      float32(row*atlasCellSize+atlasPadding) / float32(height),
+			Width:  float32(tileW) / float32(width),
+			Height: float32(tileH) / float32(height),
+		}
 	}
 
 	return &webGPUBlockAtlas{pixels: pixels, width: width, height: height, uvs: uvs}, nil
