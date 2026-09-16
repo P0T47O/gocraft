@@ -2,15 +2,11 @@ package main
 
 import (
 	"fmt"
-	rl "github.com/gen2brain/raylib-go/raylib"
 	"math"
 	"sort"
 	"time"
 )
 
-func viewDirection(yaw, pitch float32) rl.Vector3 {
-	return rl.NewVector3(float32(math.Sin(float64(yaw))*math.Cos(float64(pitch))), float32(math.Sin(float64(pitch))), float32(math.Cos(float64(yaw))*math.Cos(float64(pitch))))
-}
 func (s *Server) updateMobs() {
 	var drops []*ItemEntity
 	var removed []string
@@ -101,9 +97,9 @@ func (s *Server) spawnNearbyMobs() {
 			if s.World.BlockAt(x, y, z) != blockGrass {
 				continue
 			}
-			pos := rl.NewVector3(float32(x), float32(y)+.501, float32(z))
+			pos := gameVec3{X: float32(x), Y: float32(y) + .501, Z: float32(z)}
 			shape := def.Collider
-			if !colliderLoaded(s.World, pos, shape) || colliderHits(s.World, pos, shape) {
+			if !colliderLoaded(s.World, pos, shape) || colliderHitsCore(s.World, pos, shape) {
 				break
 			}
 			near := false
