@@ -45,6 +45,45 @@ func TestStreamingBackpressureLeavesGameplayQueueFree(t *testing.T) {
 			t.Fatalf("inventory burst saturated gameplay queue at packet %d", i)
 		}
 	}
+
+	// Several drops can be collected in one tick (notably a death pile or
+	// clustered items in water). The final inventory state only needs one full
+	// 36-slot snapshot, not one snapshot per collected entity.
+	initBlockRegistry()
+	w := NewClientWorld()
+	defer w.Close()
+	chunk := lifecycleChunk(w, chunkKey{0, 0})
+	chunk.blocks[2][70][2] = blockStone
+	player := &PlayerEntity{BaseEntity: BaseEntity{UUID: "collector", Type: EntityPlayer, X: 2, Y: 71.2, Z: 2}, GameMode: ModeSurvival}
+	burst := &ClientConnection{Name: player.UUID, Send: make(chan Packet, 128), StreamSend: make(chan Packet, serverStreamQueueCapacity), KnownChunks: make(map[chunkKey]bool), done: make(chan struct{})}
+	w.entities = []Entity{player}
+	for i, id := range []string{"drop-a", "drop-b", "drop-c", "drop-d"} {
+		w.entities = append(w.entities, &ItemEntity{
+			BaseEntity: BaseEntity{UUID: id, Type: EntityItem, X: 2, Y: 71.2, Z: 2},
+			ItemStack:  Item{ID: int32(itemWoodPickaxe), Count: 1, Damage: int32(i)},
+		})
+	}
+	srv := &Server{
+		World:        w,
+		Clients:      map[string]*ClientConnection{player.UUID: burst},
+		LastSentPos:  make(map[string][3]float64),
+		LastSentMeta: make(map[string]int32),
+	}
+	srv.UpdateEntities()
+	inventoryUpdates := 0
+	for len(burst.Send) > 0 {
+		if (<-burst.Send).ID() == IDInventoryUpdate {
+			inventoryUpdates++
+		}
+	}
+	if inventoryUpdates != len(player.Inventory.Slots) {
+		t.Fatalf("pickup burst sent %d inventory updates, want one %d-slot snapshot", inventoryUpdates, len(player.Inventory.Slots))
+	}
+	select {
+	case <-burst.done:
+		t.Fatal("pickup burst disconnected client")
+	default:
+	}
 }
 
 func TestStreamingFullPeerDoesNotBlockReadyPeer(t *testing.T) {
