@@ -12,14 +12,14 @@ func TestStreamingBudgetsAndBackpressure(t *testing.T) {
 			t.Fatal(tc)
 		}
 	}
-	c := &ClientConnection{Send: make(chan Packet, 8)}
-	for i := 0; i < 4; i++ {
-		c.Send <- &PacketChunkData{}
+	c := &ClientConnection{Send: make(chan Packet, 8), StreamSend: make(chan Packet, 4)}
+	for i := 0; i < cap(c.StreamSend); i++ {
+		c.StreamSend <- &PacketChunkData{}
 	}
 	if chunkSendHasRoom(c) {
-		t.Fatal("bulk traffic must reserve gameplay space")
+		t.Fatal("full bulk queue must stop chunk streaming")
 	}
-	<-c.Send
+	<-c.StreamSend
 	if !chunkSendHasRoom(c) {
 		t.Fatal("drained peer did not resume")
 	}
@@ -32,17 +32,17 @@ func TestStreamingBudgetsAndBackpressure(t *testing.T) {
 	}
 }
 
-func TestStreamingReserveCoversInventoryBurst(t *testing.T) {
-	c := &ClientConnection{Send: make(chan Packet, 128)}
+func TestStreamingBackpressureLeavesGameplayQueueFree(t *testing.T) {
+	c := &ClientConnection{Send: make(chan Packet, 128), StreamSend: make(chan Packet, serverStreamQueueCapacity), done: make(chan struct{})}
 	for chunkSendHasRoom(c) {
-		c.Send <- &PacketChunkData{}
+		c.StreamSend <- &PacketChunkData{}
 	}
-	if reserve := cap(c.Send) - len(c.Send); reserve < 36 {
-		t.Fatalf("streaming reserve too small for full inventory sync: %d", reserve)
+	if len(c.Send) != 0 {
+		t.Fatalf("bulk traffic leaked into gameplay queue: %d", len(c.Send))
 	}
 	for i := 0; i < 36; i++ {
 		if !c.enqueue(&PacketInventoryUpdate{SlotID: int32(i)}) {
-			t.Fatalf("inventory burst saturated queue at packet %d", i)
+			t.Fatalf("inventory burst saturated gameplay queue at packet %d", i)
 		}
 	}
 }
@@ -54,18 +54,18 @@ func TestStreamingFullPeerDoesNotBlockReadyPeer(t *testing.T) {
 	key := chunkKey{}
 	c := w.ensureChunk(0, 0)
 	c.generated = true
-	full := &ClientConnection{Send: make(chan Packet, 8), KnownChunks: map[chunkKey]bool{}}
-	ready := &ClientConnection{Send: make(chan Packet, 8), KnownChunks: map[chunkKey]bool{}}
-	for i := 0; i < 4; i++ {
-		full.Send <- &PacketChat{}
+	full := &ClientConnection{Send: make(chan Packet, 8), StreamSend: make(chan Packet, 4), KnownChunks: map[chunkKey]bool{}}
+	ready := &ClientConnection{Send: make(chan Packet, 8), StreamSend: make(chan Packet, 4), KnownChunks: map[chunkKey]bool{}}
+	for i := 0; i < cap(full.StreamSend); i++ {
+		full.StreamSend <- &PacketChunkData{}
 	}
 	s := &Server{World: w, Clients: map[string]*ClientConnection{"full": full, "ready": ready}, PendingChunks: map[chunkKey][]string{key: {"full", "ready"}}}
 	s.processPendingChunks()
 	if !ready.KnownChunks[key] || full.KnownChunks[key] || len(s.PendingChunks[key]) != 1 {
 		t.Fatal("backpressure lost a request or blocked ready peer")
 	}
-	for len(full.Send) > 0 {
-		<-full.Send
+	for len(full.StreamSend) > 0 {
+		<-full.StreamSend
 	}
 	s.processPendingChunks()
 	if !full.KnownChunks[key] || len(s.PendingChunks) != 0 {
@@ -74,9 +74,9 @@ func TestStreamingFullPeerDoesNotBlockReadyPeer(t *testing.T) {
 	// Streaming must not mutate or publish while a single-player game is paused.
 	s.Paused.Store(true)
 	s.PendingChunks[key] = []string{"ready"}
-	n := len(ready.Send)
+	n := len(ready.StreamSend)
 	s.processChunkStreaming()
-	if len(ready.Send) != n {
+	if len(ready.StreamSend) != n {
 		t.Fatal("paused streaming continued")
 	}
 }
