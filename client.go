@@ -56,7 +56,6 @@ func ConnectTCP(addr string, name string) (*Client, error) {
 					return
 				}
 			}
-		}
 	}()
 
 	// Reader Loop
@@ -111,9 +110,13 @@ func (c *Client) Send(p Packet) {
 	default:
 	}
 
-	// Player movement is a latest-state snapshot. If the writer is temporarily
-	// behind, dropping one movement sample is preferable to blocking a frame.
-	if p.ID() == IDPlayerMove {
+	// Player movement and chunk-unload notifications are replaceable hints. A
+	// respawn or teleport can discard hundreds of old chunks in one frame; those
+	// notifications must not crowd authoritative gameplay requests out of the
+	// bounded writer queue. If an unload hint is dropped, explicit client-pull
+	// PacketChunkRequest traffic can still recover the chunk later because the
+	// server serves explicit requests independently of KnownChunks.
+	if p.ID() == IDPlayerMove || p.ID() == IDUnloadChunk {
 		select {
 		case c.Outgoing <- p:
 		case <-c.done:
