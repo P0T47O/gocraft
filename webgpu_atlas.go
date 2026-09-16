@@ -23,6 +23,28 @@ func webGPUAtlasSourceCoordinate(pixel, extent int) int {
 
 func webGPUAtlasTile(path string, img image.Image) (*image.NRGBA, int, int) {
 	bounds := img.Bounds()
+
+	// Animated block textures are vertical frame strips. The legacy renderer
+	// crops each square frame before uploading it; feeding the whole strip into
+	// a single atlas cell would squash every frame together. Until the WebGPU
+	// path owns animation updates, preserve the reference appearance by packing
+	// frame zero only.
+	if isAnimatedTexture(path) {
+		frameSize := min(bounds.Dx(), bounds.Dy())
+		frameSize = max(frameSize, 1)
+		tileW := min(webGPUAtlasMaxTileExtent, frameSize)
+		tileH := tileW
+		tile := image.NewNRGBA(image.Rect(0, 0, tileW, tileH))
+		for y := 0; y < tileH; y++ {
+			sy := bounds.Min.Y + y*frameSize/tileH
+			for x := 0; x < tileW; x++ {
+				sx := bounds.Min.X + x*frameSize/tileW
+				tile.Set(x, y, img.At(sx, sy))
+			}
+		}
+		return tile, tileW, tileH
+	}
+
 	if path == "textures/block/torch.png" && bounds.Dx() < atlasTileSize {
 		tile := image.NewNRGBA(image.Rect(0, 0, atlasTileSize, atlasTileSize))
 		dx := (atlasTileSize - min(atlasTileSize, bounds.Dx())) / 2
@@ -68,7 +90,6 @@ func buildWebGPUBlockAtlas() (*webGPUBlockAtlas, error) {
 			if path != "" {
 				pathsSet[path] = struct{}{}
 			}
-		}
 	}
 
 	// Standalone tools/items do not have block faces but still need to appear in
