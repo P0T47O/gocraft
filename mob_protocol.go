@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	rl "github.com/gen2brain/raylib-go/raylib"
+	"math"
 )
 
 type PacketMobState struct {
@@ -50,12 +50,52 @@ func (s *Server) attackMob(p *PlayerEntity, target string) {
 	if p == nil || p.dead() || p.AttackCooldown > 0 || p.SelectedSlot < 0 || p.SelectedSlot >= 9 {
 		return
 	}
-	ray := rl.Ray{Position: rl.NewVector3(float32(p.X), float32(p.Y), float32(p.Z)), Direction: viewDirection(p.Yaw, p.Pitch)}
-	wall := s.World.HitTest(ray, 3.5)
+
+	originX, originY, originZ := float32(p.X), float32(p.Y), float32(p.Z)
+	cosPitch := float32(math.Cos(float64(p.Pitch)))
+	dirX := float32(math.Sin(float64(p.Yaw))) * cosPitch
+	dirY := float32(math.Sin(float64(p.Pitch)))
+	dirZ := float32(math.Cos(float64(p.Yaw))) * cosPitch
+
+	wall := s.World.rayCast(originX, originY, originZ, dirX, dirY, dirZ, 3.5)
 	distance := float32(3.5)
 	if wall.hit {
 		distance = wall.distance
 	}
+
+	// Server-side reach validation must not depend on the rendering library.
+	// This slab test mirrors the old Raylib AABB query for the mob collider.
+	rayBoxDistance := func(cx, cy, cz float32, c Collider, maxDistance float32) (float32, bool) {
+		tMin, tMax := float32(0), maxDistance
+		testAxis := func(origin, direction, minValue, maxValue float32) bool {
+			if math.Abs(float64(direction)) < 1e-7 {
+				return origin >= minValue && origin <= maxValue
+			}
+			inv := 1 / direction
+			t1 := (minValue - origin) * inv
+			t2 := (maxValue - origin) * inv
+			if t1 > t2 {
+				t1, t2 = t2, t1
+			}
+			if t1 > tMin {
+				tMin = t1
+			}
+			if t2 < tMax {
+				tMax = t2
+			}
+			return tMin <= tMax
+		}
+		if !testAxis(originX, dirX, cx-c.Width/2, cx+c.Width/2) ||
+			!testAxis(originY, dirY, cy, cy+c.Height) ||
+			!testAxis(originZ, dirZ, cz-c.Depth/2, cz+c.Depth/2) {
+			return 0, false
+		}
+		if tMin < 0 || tMin > maxDistance {
+			return 0, false
+		}
+		return tMin, true
+	}
+
 	var victim *MobEntity
 	for _, e := range s.World.entities {
 		m, ok := e.(*MobEntity)
@@ -63,9 +103,9 @@ func (s *Server) attackMob(p *PlayerEntity, target string) {
 			continue
 		}
 		d := mobContent.Definitions[m.Kind]
-		hit := rl.GetRayCollisionBox(ray, mobBox(rl.NewVector3(float32(m.X), float32(m.Y), float32(m.Z)), d.Collider))
-		if hit.Hit && hit.Distance < distance {
-			distance = hit.Distance
+		hitDistance, hit := rayBoxDistance(float32(m.X), float32(m.Y), float32(m.Z), d.Collider, distance)
+		if hit && hitDistance < distance {
+			distance = hitDistance
 			victim = m
 		}
 	}
@@ -81,8 +121,7 @@ func (s *Server) attackMob(p *PlayerEntity, target string) {
 			damage++
 		}
 	}
-	away := rl.Vector3Normalize(rl.NewVector3(float32(victim.X-p.X), 0, float32(victim.Z-p.Z)))
-	if victim.hit(damage, away) {
+	if victim.hit(damage, float32(victim.X-p.X), float32(victim.Z-p.Z)) {
 		p.AttackCooldown = 10
 		if p.GameMode == ModeSurvival {
 			slot.Wear(1)
