@@ -76,6 +76,7 @@ func drawExperimentalWebGPUFrame() error {
 
 func closeExperimentalWebGPURenderer() {
 	if activeWebGPUWorldRenderer == nil {
+		resetWebGPUAtlasAnimations()
 		return
 	}
 	closeWebGPUEntityRenderer()
@@ -83,4 +84,5 @@ func closeExperimentalWebGPURenderer() {
 	closeWebGPUHUDRenderer()
 	activeWebGPUWorldRenderer.Close()
 	activeWebGPUWorldRenderer = nil
+	resetWebGPUAtlasAnimations()
 }
