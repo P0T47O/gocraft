@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"fmt"
-	rl "github.com/gen2brain/raylib-go/raylib"
 	"math"
 	"time"
 )
@@ -115,8 +114,8 @@ func (s *Server) tickPlayerVitals(p *PlayerEntity) {
 	if v.grace > 0 {
 		v.grace--
 	}
-	pos := rl.NewVector3(float32(p.X), float32(p.Y), float32(p.Z))
-	water := touchesLiquid(s.World, pos, blockWater)
+	pos := gameVec3{X: float32(p.X), Y: float32(p.Y), Z: float32(p.Z)}
+	water := touchesLiquidCore(s.World, pos, blockWater)
 	if p.GameMode == ModeCreative {
 		v.Air = maxAir
 		v.FireTicks = 0
@@ -137,7 +136,7 @@ func (s *Server) tickPlayerVitals(p *PlayerEntity) {
 	if water {
 		v.FireTicks = 0
 		v.FallDistance = 0
-	} else if touchesLiquid(s.World, pos, blockLava) {
+	} else if touchesLiquidCore(s.World, pos, blockLava) {
 		v.FireTicks = 160
 		s.hurtPlayer(p, 4, "Burned in lava")
 	} else if v.FireTicks > 0 {
@@ -157,7 +156,7 @@ func (s *Server) tickPlayerVitals(p *PlayerEntity) {
 		if p.Y < v.lastY {
 			v.FallDistance += v.lastY - p.Y
 		}
-		if feetSupported(s.World, pos) {
+		if feetSupportedCore(s.World, pos) {
 			if v.FallDistance > 3 {
 				s.hurtPlayer(p, int(math.Ceil(v.FallDistance-3)), "Fell from a height")
 			}
