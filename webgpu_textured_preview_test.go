@@ -363,7 +363,7 @@ func TestWebGPUTexturedPreview(t *testing.T) {
 	}
 }
 
-func buildWebGPUPreviewAtlas() ([]byte, int, int, map[string]rl.Rectangle, error) {
+func buildWebGPUPreviewAtlas() ([]byte, int, int, map[string]AtlasRect, error) {
 	pathsSet := make(map[string]struct{})
 	for _, def := range Blocks {
 		if def == nil {
@@ -396,7 +396,7 @@ func buildWebGPUPreviewAtlas() ([]byte, int, int, map[string]rl.Rectangle, error
 	width := side * atlasCellSize
 	height := side * atlasCellSize
 	pixels := make([]byte, width*height*4)
-	uvs := make(map[string]rl.Rectangle, len(paths))
+	uvs := make(map[string]AtlasRect, len(paths))
 
 	for i, path := range paths {
 		file, err := os.Open(path)
@@ -437,12 +437,12 @@ func buildWebGPUPreviewAtlas() ([]byte, int, int, map[string]rl.Rectangle, error
 			}
 		}
 
-		uvs[path] = rl.NewRectangle(
-			float32(col*atlasCellSize+atlasPadding)/float32(width),
-			float32(row*atlasCellSize+atlasPadding)/float32(height),
-			float32(atlasTileSize)/float32(width),
-			float32(atlasTileSize)/float32(height),
-		)
+		uvs[path] = AtlasRect{
+			X:      float32(col*atlasCellSize+atlasPadding) / float32(width),
+			Y:      float32(row*atlasCellSize+atlasPadding) / float32(height),
+			Width:  float32(atlasTileSize) / float32(width),
+			Height: float32(atlasTileSize) / float32(height),
+		}
 	}
 	return pixels, width, height, uvs, nil
 }
