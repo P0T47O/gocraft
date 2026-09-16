@@ -57,8 +57,9 @@ func ensureExperimentalWebGPURenderer() error {
 	if assets == nil {
 		return fmt.Errorf("render assets are not initialized")
 	}
+	frame := webGPUFrameFromRaylib()
 	hwnd := uintptr(rl.GetWindowHandle())
-	renderer, err := newWebGPUWorldRenderer(hwnd, assets)
+	renderer, err := newWebGPUWorldRenderer(hwnd, assets, frame.Width, frame.Height)
 	if err != nil {
 		return err
 	}
