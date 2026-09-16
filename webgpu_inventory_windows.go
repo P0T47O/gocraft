@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"unsafe"
 
-	rl "github.com/gen2brain/raylib-go/raylib"
 	"github.com/gogpu/gputypes"
 	"github.com/gogpu/wgpu"
 )
@@ -210,7 +209,7 @@ func drawWebGPUCreativeInventory(pass *wgpu.RenderPassEncoder, hud *webGPUHUDRen
 	labels.shadowText(layout.OriginX+105*scale, layout.OriginY+4*scale, max(float32(7)*scale, 8), fmt.Sprintf("PAGE %d/%d", state.InventoryPage+1, totalPages), webGPUUIMuted)
 	labels.shadowText(layout.OriginX+7*scale, layout.OriginY+177*scale, max(float32(7)*scale, 8), "E / ESC CLOSE   WHEEL PAGE", webGPUUIMuted)
 	if state.CursorItem.ID > 0 && state.CursorItem.ID <= 255 {
-		mouse := rl.GetMousePosition()
+		mouse := webGPUMousePosition()
 		size := float32(18) * scale
 		shapes.addItemStack(state.CursorItem, mouse.X-size/2, mouse.Y-size/2, size)
 		webGPUAddStackText(labels, state.CursorItem, mouse.X-size/2, mouse.Y-size/2, size, scale)
@@ -359,7 +358,7 @@ func drawWebGPUSurvivalInventory(pass *wgpu.RenderPassEncoder, hud *webGPUHUDRen
 	labels.shadowText(layout.X+354*s, layout.Y+594*s, max(float32(10)*s, 8), "LMB MOVE  RMB SPLIT  SHIFT+CLICK QUICK MOVE", webGPUUIMuted)
 
 	if state.CursorItem.ID > 0 && state.CursorItem.ID <= 255 {
-		mouse := rl.GetMousePosition()
+		mouse := webGPUMousePosition()
 		size := 50 * s
 		shapes.addItemStack(state.CursorItem, mouse.X-size/2, mouse.Y-size/2, size)
 		webGPUAddStackText(labels, state.CursorItem, mouse.X-size/2, mouse.Y-size/2, size, s)
