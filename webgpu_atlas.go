@@ -11,12 +11,12 @@ import (
 )
 
 type webGPUAtlasAnimation struct {
-	frames        [][]byte
-	width, height uint32
-	bytesPerRow   uint32
+	frames         [][]byte
+	width, height  uint32
+	bytesPerRow    uint32
 	atlasX, atlasY uint32
-	frameSeconds  float32
-	index         int
+	frameSeconds   float32
+	index          int
 }
 
 type webGPUBlockAtlas struct {
@@ -25,6 +25,11 @@ type webGPUBlockAtlas struct {
 	uvs           map[string]AtlasRect
 	animations    []webGPUAtlasAnimation
 }
+
+// The experimental renderer is a single active instance. Keep its CPU-side
+// animation frames next to the atlas builder so the Windows presenter can issue
+// small partial texture uploads without involving Raylib texture state.
+var activeWebGPUAtlasAnimations []webGPUAtlasAnimation
 
 const webGPUAtlasMaxTileExtent = 64
 
@@ -232,5 +237,6 @@ func buildWebGPUBlockAtlas() (*webGPUBlockAtlas, error) {
 		}
 	}
 
+	activeWebGPUAtlasAnimations = animations
 	return &webGPUBlockAtlas{pixels: pixels, width: width, height: height, uvs: uvs, animations: animations}, nil
 }
