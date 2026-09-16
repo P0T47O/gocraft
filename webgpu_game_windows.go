@@ -37,6 +37,7 @@ func closeExperimentalWebGPURenderer() {
 	if activeWebGPUWorldRenderer == nil {
 		return
 	}
+	closeWebGPUEntityRenderer()
 	closeWebGPUTextRenderer()
 	closeWebGPUHUDRenderer()
 	activeWebGPUWorldRenderer.Close()
