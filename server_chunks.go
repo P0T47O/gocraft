@@ -205,8 +205,9 @@ func (s *Server) processPendingChunks() {
 				}
 				packet = fullPacket
 			}
+			streamQ := chunkStreamQueue(c)
 			select {
-			case c.Send <- packet:
+			case streamQ <- packet:
 				c.KnownChunks[key] = true
 				delete(s.pendingLights[key], name)
 			default:
