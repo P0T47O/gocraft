@@ -8,7 +8,16 @@ import (
 	rl "github.com/gen2brain/raylib-go/raylib"
 )
 
+type webGPUPoint struct {
+	X, Y float32
+}
+
 var activeWebGPUWorldRenderer *webGPUWorldRenderer
+
+func webGPUMousePosition() webGPUPoint {
+	p := rl.GetMousePosition()
+	return webGPUPoint{X: p.X, Y: p.Y}
+}
 
 func ensureExperimentalWebGPURenderer() error {
 	if activeWebGPUWorldRenderer != nil {
