@@ -25,6 +25,9 @@ func (r *webGPUWorldRenderer) DrawGameplay(world *World, frame webGPUFrameContex
 			return err
 		}
 	}
+	if err := updateWebGPUAtlasAnimations(r, frame.Time); err != nil {
+		return fmt.Errorf("update WebGPU atlas animations: %w", err)
+	}
 	if err := r.updateSceneCamera(frame.Camera); err != nil {
 		return fmt.Errorf("update WebGPU gameplay scene: %w", err)
 	}
