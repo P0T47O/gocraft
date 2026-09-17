@@ -1,9 +1,10 @@
 package main
 
 import (
-	rl "github.com/gen2brain/raylib-go/raylib"
 	"math"
 	"time"
+
+	rl "github.com/gen2brain/raylib-go/raylib"
 )
 
 func updateGame() {
@@ -109,6 +110,12 @@ Loop:
 		}
 	}
 
+	// Gameplay owns camera position/target in renderer-neutral state. Raylib's
+	// Camera3D remains a presentation/reference mirror until the native window
+	// and input owner is replaced.
+	camera.Position = raylibVec3FromGame(input.CameraPosition)
+	camera.Target = raylibVec3FromGame(input.CameraTarget)
+
 	if isPaused {
 		return
 	} // Keep receiving multiplayer packets without gameplay input.
@@ -125,8 +132,8 @@ Loop:
 		return
 	}
 	if input.AwaitingTerrain {
-		cx := divFloor(blockIndexFromCoord(camera.Position.X), chunkWidth)
-		cz := divFloor(blockIndexFromCoord(camera.Position.Z), chunkWidth)
+		cx := divFloor(blockIndexFromCoord(input.CameraPosition.X), chunkWidth)
+		cz := divFloor(blockIndexFromCoord(input.CameraPosition.Z), chunkWidth)
 		if world.getChunkIfGenerated(cx, cz) == nil {
 			requestMissingChunks()
 			return
@@ -139,14 +146,16 @@ Loop:
 	}
 	input.HurtFlash = max(float32(0), input.HurtFlash-dt)
 
-	HandleInput(world, &camera, input, client)
+	HandleInput(world, input, client)
+	camera.Position = raylibVec3FromGame(input.CameraPosition)
+	camera.Target = raylibVec3FromGame(input.CameraTarget)
 	world.ProcessImmediateMeshes(assets, 16)
 	clear(world.lightChanged) // Only the server publishes authoritative light updates.
 
 	// Client-Pull: Request any missing chunks
 	requestMissingChunks()
 
-	client.Update(camera.Position.X, camera.Position.Y, camera.Position.Z, input.Yaw, input.Pitch)
+	client.Update(input.CameraPosition.X, input.CameraPosition.Y, input.CameraPosition.Z, input.Yaw, input.Pitch)
 
 	updateEntities(dt)
 	updateInterpolation(dt)
@@ -157,7 +166,7 @@ Loop:
 	// Every frame is fine, UnloadChunks is efficient enough (iterates map).
 	// But let's do it every 60 frames to be safe on CPU.
 	if dt > 0 {
-		pPos := camera.Position
+		pPos := input.CameraPosition
 		cx := int(math.Floor(float64(pPos.X) / 16.0))
 		cz := int(math.Floor(float64(pPos.Z) / 16.0))
 		// Use a static counter to throttle
