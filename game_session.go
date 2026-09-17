@@ -14,10 +14,13 @@ func startGame(savePath string, ip string, isMultiplayer bool) {
 	// initBlockRegistry() // Already initialized in main()
 	assets = loadRenderAssets()
 
-	// Initialize Camera
+	// Gameplay owns the camera state. Raylib keeps only the legacy/reference
+	// presentation mirror until the window/input boundary is replaced.
+	initialPosition := gameVec3{X: 8, Y: 8, Z: 20}
+	initialTarget := gameVec3{X: 8, Y: 2, Z: 8}
 	camera = rl.Camera3D{
-		Position:   rl.NewVector3(8, 8, 20),
-		Target:     rl.NewVector3(8, 2, 8),
+		Position:   raylibVec3FromGame(initialPosition),
+		Target:     raylibVec3FromGame(initialTarget),
 		Up:         rl.NewVector3(0, 1, 0),
 		Fovy:       70,
 		Projection: rl.CameraPerspective,
@@ -58,10 +61,8 @@ func startGame(savePath string, ip string, isMultiplayer bool) {
 	world = NewClientWorld()
 	world.StartMeshWorkers(assets, 8)
 
-	// Input owns the gameplay camera state; the Raylib camera remains a
-	// presentation/reference mirror until the window/input boundary is replaced.
 	input = NewInputState()
-	input.InitFromCamera(gameVec3FromRaylib(camera.Position), gameVec3FromRaylib(camera.Target))
+	input.InitFromCamera(initialPosition, initialTarget)
 
 	rl.DisableCursor()
 	isPaused = false
