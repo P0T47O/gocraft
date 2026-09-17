@@ -110,12 +110,6 @@ Loop:
 		}
 	}
 
-	// Gameplay owns camera position/target in renderer-neutral state. Raylib's
-	// Camera3D remains a presentation/reference mirror until the native window
-	// and input owner is replaced.
-	camera.Position = raylibVec3FromGame(input.CameraPosition)
-	camera.Target = raylibVec3FromGame(input.CameraTarget)
-
 	if isPaused {
 		return
 	} // Keep receiving multiplayer packets without gameplay input.
@@ -128,32 +122,30 @@ Loop:
 			input.RespawnLast = 0
 		}
 		input.updateRespawnRequest(client)
-		requestMissingChunks()
+		requestMissingChunks(input.CameraPosition)
 		return
 	}
 	if input.AwaitingTerrain {
 		cx := divFloor(blockIndexFromCoord(input.CameraPosition.X), chunkWidth)
 		cz := divFloor(blockIndexFromCoord(input.CameraPosition.Z), chunkWidth)
 		if world.getChunkIfGenerated(cx, cz) == nil {
-			requestMissingChunks()
+			requestMissingChunks(input.CameraPosition)
 			return
 		}
 		input.AwaitingTerrain = false
 	}
 	if !input.VitalsReady {
-		requestMissingChunks()
+		requestMissingChunks(input.CameraPosition)
 		return
 	}
 	input.HurtFlash = max(float32(0), input.HurtFlash-dt)
 
 	HandleInput(world, input, client)
-	camera.Position = raylibVec3FromGame(input.CameraPosition)
-	camera.Target = raylibVec3FromGame(input.CameraTarget)
 	world.ProcessImmediateMeshes(assets, 16)
 	clear(world.lightChanged) // Only the server publishes authoritative light updates.
 
 	// Client-Pull: Request any missing chunks
-	requestMissingChunks()
+	requestMissingChunks(input.CameraPosition)
 
 	client.Update(input.CameraPosition.X, input.CameraPosition.Y, input.CameraPosition.Z, input.Yaw, input.Pitch)
 
