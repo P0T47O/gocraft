@@ -37,12 +37,14 @@ func webGPUMousePosition() webGPUPoint {
 }
 
 func webGPUFrameFromRaylib() webGPUFrameContext {
+	position := input.CameraPosition
+	target := input.CameraTarget
 	return webGPUFrameContext{
 		Camera: webGPUCamera{
-			Position: webGPUVec3{X: camera.Position.X, Y: camera.Position.Y, Z: camera.Position.Z},
-			Target:   webGPUVec3{X: camera.Target.X, Y: camera.Target.Y, Z: camera.Target.Z},
-			Up:       webGPUVec3{X: camera.Up.X, Y: camera.Up.Y, Z: camera.Up.Z},
-			Fovy:     camera.Fovy,
+			Position: webGPUVec3{X: position.X, Y: position.Y, Z: position.Z},
+			Target:   webGPUVec3{X: target.X, Y: target.Y, Z: target.Z},
+			Up:       webGPUVec3{X: 0, Y: 1, Z: 0},
+			Fovy:     70,
 		},
 		Width:  uint32(max(1, rl.GetScreenWidth())),
 		Height: uint32(max(1, rl.GetScreenHeight())),
