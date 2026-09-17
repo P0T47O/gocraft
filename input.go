@@ -34,6 +34,8 @@ type InputState struct {
 	SelectedSlot         int
 	Hotbar               [9]byte
 	SkipCamera           bool
+	CameraPosition       gameVec3
+	CameraTarget         gameVec3
 	Yaw                  float32
 	Pitch                float32
 	Sensitivity          float32
@@ -90,9 +92,14 @@ func NewInputState() *InputState {
 	return state
 }
 
-func (s *InputState) InitFromCamera(camera rl.Camera3D) {
-	dir := rl.Vector3Subtract(camera.Target, camera.Position)
-	dir = rl.Vector3Normalize(dir)
+func (s *InputState) InitFromCamera(position, target gameVec3) {
+	s.CameraPosition = position
+	s.CameraTarget = target
+	dir := gameVec3Normalize(gameVec3{
+		X: target.X - position.X,
+		Y: target.Y - position.Y,
+		Z: target.Z - position.Z,
+	})
 	s.Yaw = float32(math.Atan2(float64(dir.X), float64(dir.Z)))
 	s.Pitch = float32(math.Asin(float64(dir.Y)))
 }
@@ -123,7 +130,7 @@ func (s *InputState) ToggleInventory() {
 	}
 }
 
-func (s *InputState) UpdateCamera(world *World, camera *rl.Camera3D) {
+func (s *InputState) UpdateCamera(world *World) {
 	delta := rl.GetMouseDelta()
 	s.Yaw -= delta.X * s.Sensitivity
 	s.Pitch -= delta.Y * s.Sensitivity
@@ -133,13 +140,11 @@ func (s *InputState) UpdateCamera(world *World, camera *rl.Camera3D) {
 		s.Pitch = -1.55
 	}
 
-	forward := rl.NewVector3(
-		float32(math.Sin(float64(s.Yaw)))*float32(math.Cos(float64(s.Pitch))),
-		float32(math.Sin(float64(s.Pitch))),
-		float32(math.Cos(float64(s.Yaw)))*float32(math.Cos(float64(s.Pitch))),
-	)
-	forward = rl.Vector3Normalize(forward)
-	up := rl.NewVector3(0, 1, 0)
+	forward := gameVec3Normalize(gameVec3{
+		X: float32(math.Sin(float64(s.Yaw))) * float32(math.Cos(float64(s.Pitch))),
+		Y: float32(math.Sin(float64(s.Pitch))),
+		Z: float32(math.Cos(float64(s.Yaw))) * float32(math.Cos(float64(s.Pitch))),
+	})
 
 	controls := MovementControls{}
 	if rl.IsKeyPressed(rl.KeyW) {
@@ -167,10 +172,12 @@ func (s *InputState) UpdateCamera(world *World, camera *rl.Camera3D) {
 	controls.Jump = rl.IsKeyDown(rl.KeySpace)
 	controls.Sneak = rl.IsKeyDown(rl.KeyLeftShift) || rl.IsKeyDown(rl.KeyRightShift)
 	controls.Sprint = s.SprintLatched || rl.IsKeyDown(rl.KeyLeftControl) || rl.IsKeyDown(rl.KeyRightControl)
-	camera.Position = s.StepMovement(world, camera.Position, gameFrameTime(), controls, currentGameMode == ModeCreative)
-
-	camera.Target = rl.Vector3Add(camera.Position, forward)
-	camera.Up = up
+	s.CameraPosition = s.stepMovementCore(world, s.CameraPosition, gameFrameTime(), controls, currentGameMode == ModeCreative)
+	s.CameraTarget = gameVec3{
+		X: s.CameraPosition.X + forward.X,
+		Y: s.CameraPosition.Y + forward.Y,
+		Z: s.CameraPosition.Z + forward.Z,
+	}
 }
 
 func (s *InputState) UpdateSelection(allowWheel bool) {
@@ -205,14 +212,13 @@ func (s *InputState) UpdateSelection(allowWheel bool) {
 	s.CurrentBlock = s.Hotbar[s.SelectedSlot]
 }
 
-func (s *InputState) RayFromCenter(camera rl.Camera3D) (gameVec3, gameVec3) {
-	origin := gameVec3FromRaylib(camera.Position)
+func (s *InputState) RayFromCenter() (gameVec3, gameVec3) {
 	direction := gameVec3Normalize(gameVec3{
-		X: camera.Target.X - camera.Position.X,
-		Y: camera.Target.Y - camera.Position.Y,
-		Z: camera.Target.Z - camera.Position.Z,
+		X: s.CameraTarget.X - s.CameraPosition.X,
+		Y: s.CameraTarget.Y - s.CameraPosition.Y,
+		Z: s.CameraTarget.Z - s.CameraPosition.Z,
 	})
-	return origin, direction
+	return s.CameraPosition, direction
 }
 
 func resolveCollision(world *World, pos, delta rl.Vector3) rl.Vector3 {
@@ -239,7 +245,7 @@ func blockIndexFromCoord(v float32) int {
 	return int(math.Floor(float64(v) + 0.5))
 }
 
-func HandleInput(world *World, camera *rl.Camera3D, state *InputState, client *Client) hitInfo {
+func HandleInput(world *World, state *InputState, client *Client) hitInfo {
 	if rl.IsKeyPressed(rl.KeyF3) {
 		state.ShowDebug = !state.ShowDebug
 	}
@@ -259,16 +265,25 @@ func HandleInput(world *World, camera *rl.Camera3D, state *InputState, client *C
 		state.SkipCamera = false
 	}
 	if state.InventoryOpen {
-		old := camera.Position
-		camera.Position = state.StepMovement(world, old, gameFrameTime(), MovementControls{}, currentGameMode == ModeCreative)
-		camera.Target = rl.Vector3Add(camera.Target, rl.Vector3Subtract(camera.Position, old))
+		old := state.CameraPosition
+		state.CameraPosition = state.stepMovementCore(world, old, gameFrameTime(), MovementControls{}, currentGameMode == ModeCreative)
+		move := gameVec3{
+			X: state.CameraPosition.X - old.X,
+			Y: state.CameraPosition.Y - old.Y,
+			Z: state.CameraPosition.Z - old.Z,
+		}
+		state.CameraTarget = gameVec3{
+			X: state.CameraTarget.X + move.X,
+			Y: state.CameraTarget.Y + move.Y,
+			Z: state.CameraTarget.Z + move.Z,
+		}
 		state.UpdateSelection(false)
 		state.UpdateInventoryPage()
 		state.UpdateInventorySelection(client)
 		return hitInfo{}
 	}
 
-	state.UpdateCamera(world, camera)
+	state.UpdateCamera(world)
 	state.UpdateSelection(true)
 
 	if rl.IsKeyPressed(rl.KeyQ) {
@@ -284,7 +299,7 @@ func HandleInput(world *World, camera *rl.Camera3D, state *InputState, client *C
 		}
 	}
 
-	rayOrigin, rayDirection := state.RayFromCenter(*camera)
+	rayOrigin, rayDirection := state.RayFromCenter()
 
 	// Reach distance depends on Gamemode
 	reachDist := float32(8.0) // Creative default
@@ -442,7 +457,7 @@ func HandleInput(world *World, camera *rl.Camera3D, state *InputState, client *C
 
 		canPlace := true
 		if isSolidBlock(state.CurrentBlock) {
-			if collidesWithBlock(camera.Position, nx, ny, nz) {
+			if collidesWithBlock(state.CameraPosition, nx, ny, nz) {
 				canPlace = false
 			}
 		}
@@ -648,7 +663,7 @@ func (s *InputState) UpdateInventorySelection(client *Client) {
 	}
 }
 
-func collidesWithBlock(pos rl.Vector3, bx, by, bz int) bool {
+func collidesWithBlock(pos gameVec3, bx, by, bz int) bool {
 	feetY := pos.Y - playerEyeY
 	minX := pos.X - playerRadius
 	maxX := pos.X + playerRadius
