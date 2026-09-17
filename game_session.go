@@ -58,9 +58,10 @@ func startGame(savePath string, ip string, isMultiplayer bool) {
 	world = NewClientWorld()
 	world.StartMeshWorkers(assets, 8)
 
-	// Input
+	// Input owns the gameplay camera state; the Raylib camera remains a
+	// presentation/reference mirror until the window/input boundary is replaced.
 	input = NewInputState()
-	input.InitFromCamera(camera)
+	input.InitFromCamera(gameVec3FromRaylib(camera.Position), gameVec3FromRaylib(camera.Target))
 
 	rl.DisableCursor()
 	isPaused = false
