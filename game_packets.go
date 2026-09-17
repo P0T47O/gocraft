@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+
 	rl "github.com/gen2brain/raylib-go/raylib"
 )
 
@@ -81,9 +82,9 @@ func handlePacket(pkt Packet) {
 
 	case *PacketSpawnPoint:
 		input.AwaitingTerrain = true
-		camera.Position = rl.NewVector3(float32(p.X), float32(p.Y), float32(p.Z))
-		camera.Target = rl.NewVector3(camera.Position.X, camera.Position.Y-2, camera.Position.Z+5)
-		input.InitFromCamera(camera)
+		position := gameVec3{X: float32(p.X), Y: float32(p.Y), Z: float32(p.Z)}
+		target := gameVec3{X: position.X, Y: position.Y - 2, Z: position.Z + 5}
+		input.InitFromCamera(position, target)
 		input.VelocityY = 0
 		input.OnGround = false
 		input.IsRunning = false
@@ -129,19 +130,25 @@ func handlePacket(pkt Packet) {
 		}
 
 	case *PacketPlayerMove:
-		// Server forcing position (Teleport)
-		// Usually client is authoritative, but if server sends it, we should respect.
-		// Update camera immediately.
-		camera.Position = rl.NewVector3(float32(p.X), float32(p.Y), float32(p.Z))
-		// Reset interpolation or smoothing?
-		// Also update last sent to avoid loop
+		// Server forcing position (Teleport). Keep the current view direction by
+		// translating the gameplay target by the same offset as the eye position.
+		next := gameVec3{X: float32(p.X), Y: float32(p.Y), Z: float32(p.Z)}
+		move := gameVec3{
+			X: next.X - input.CameraPosition.X,
+			Y: next.Y - input.CameraPosition.Y,
+			Z: next.Z - input.CameraPosition.Z,
+		}
+		input.CameraPosition = next
+		input.CameraTarget = gameVec3{
+			X: input.CameraTarget.X + move.X,
+			Y: input.CameraTarget.Y + move.Y,
+			Z: input.CameraTarget.Z + move.Z,
+		}
+		// Also update last sent to avoid a client/server correction loop.
 		client.LastSentX = p.X
 		client.LastSentY = p.Y
 		client.LastSentZ = p.Z
-		// We don't change Yaw/Pitch if they are 0 (which server sends on TP), unless we want to reset view.
-		// server sent 0,0. Let's keep view for now unless flag is set. Simple TP usually keeps rotation or sets it.
-		// Server code sent 0,0. Let's ignore rotation if 0,0? Or set it?
-		// Let's just set position.
+		// Server teleports currently send zero rotation, so retain the local view.
 
 	case *PacketChat:
 		// Add to history
