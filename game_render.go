@@ -7,6 +7,12 @@ import (
 )
 
 func drawGame() {
+	// Gameplay owns camera state in renderer-neutral vectors. The legacy
+	// OpenGL renderer mirrors it only at the presentation boundary.
+	camera.Position = raylibVec3FromGame(input.CameraPosition)
+	camera.Target = raylibVec3FromGame(input.CameraTarget)
+	camera.Up = rl.NewVector3(0, 1, 0)
+
 	camBlockX := int(math.Floor(float64(camera.Position.X) + 0.5))
 	camBlockY := int(math.Floor(float64(camera.Position.Y) + 0.5))
 	camBlockZ := int(math.Floor(float64(camera.Position.Z) + 0.5))
