@@ -129,19 +129,13 @@ func handlePacket(pkt Packet) {
 		}
 
 	case *PacketPlayerMove:
-		// Server forcing position (Teleport)
-		// Usually client is authoritative, but if server sends it, we should respect.
-		// Update camera immediately.
-		camera.Position = newGameVec3(float32(p.X), float32(p.Y), float32(p.Z))
-		// Reset interpolation or smoothing?
-		// Also update last sent to avoid loop
+		// Preserve the current view direction when the server teleports the player.
+		next := newGameVec3(float32(p.X), float32(p.Y), float32(p.Z))
+		camera.Target = gameVec3Add(camera.Target, gameVec3Subtract(next, camera.Position))
+		camera.Position = next
 		client.LastSentX = p.X
 		client.LastSentY = p.Y
 		client.LastSentZ = p.Z
-		// We don't change Yaw/Pitch if they are 0 (which server sends on TP), unless we want to reset view.
-		// server sent 0,0. Let's keep view for now unless flag is set. Simple TP usually keeps rotation or sets it.
-		// Server code sent 0,0. Let's ignore rotation if 0,0? Or set it?
-		// Let's just set position.
 
 	case *PacketChat:
 		// Add to history

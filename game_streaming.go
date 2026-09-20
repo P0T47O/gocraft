@@ -5,15 +5,16 @@ import (
 	"time"
 )
 
-// Client-Pull: Request chunks we need but don't have
-func requestMissingChunks() {
+// Client-Pull: Request chunks we need but don't have.
+// The caller supplies the renderer-neutral player/camera position so streaming
+// no longer reaches through the global Raylib camera.
+func requestMissingChunks(pos gameVec3) {
 	if client == nil || world == nil {
 		return
 	}
 
-	pPos := camera.Position
-	cx := int(math.Floor(float64(pPos.X) / 16.0))
-	cz := int(math.Floor(float64(pPos.Z) / 16.0))
+	cx := int(math.Floor(float64(pos.X) / 16.0))
+	cz := int(math.Floor(float64(pos.Z) / 16.0))
 	renderRadius := renderDistance()
 	maxRequestsPerFrame := 32 // Increased for faster loading
 
