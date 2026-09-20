@@ -134,7 +134,7 @@ func TestSmoothQuadDiagonalPreservesWinding(t *testing.T) {
 			}
 			mb := new(meshBuilder)
 			n := rl.NewVector3(float32(f.normal[0]), float32(f.normal[1]), float32(f.normal[2]))
-			mb.addFaceSmooth(positions[:], n, make([]float32, 8), colors)
+			mb.addFaceSmooth(positions[:], gameVec3(n), make([]float32, 8), colors)
 			if (mb.indices[2] == 3) != flip {
 				t.Fatal("incorrect diagonal")
 			}

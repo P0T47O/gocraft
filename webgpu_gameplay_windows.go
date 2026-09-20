@@ -14,8 +14,17 @@ import (
 // one render pass so the Raylib/OpenGL presenter remains completely idle while
 // StatePlaying owns the HWND through WebGPU.
 func (r *webGPUWorldRenderer) DrawGameplay(world *World, frame webGPUFrameContext, state *InputState) error {
+	if activeWebGPUHUDRenderer != nil {
+		activeWebGPUHUDRenderer.uploads.begin()
+	}
+	if activeWebGPUTextRenderer != nil {
+		activeWebGPUTextRenderer.uploads.begin()
+	}
 	if world == nil {
 		return nil
+	}
+	if err := r.updateFiltering(); err != nil {
+		return err
 	}
 	width := max(uint32(1), frame.Width)
 	height := max(uint32(1), frame.Height)
@@ -74,7 +83,7 @@ func (r *webGPUWorldRenderer) DrawGameplay(world *World, frame webGPUFrameContex
 		return err
 	}
 
-	pass.SetPipeline(r.opaquePipeline)
+	pass.SetPipeline(r.solidPipeline)
 	pass.SetBindGroup(0, r.bindGroup, nil)
 	for _, section := range cache.visible {
 		if err := r.drawMeshMap(pass, section.chunk.opaqueMeshes[section.sec], cache); err != nil {
@@ -82,6 +91,10 @@ func (r *webGPUWorldRenderer) DrawGameplay(world *World, frame webGPUFrameContex
 			r.surface.DiscardTexture()
 			return err
 		}
+	}
+	// Vegetation and crossed item faces remain double-sided.
+	pass.SetPipeline(r.opaquePipeline)
+	for _, section := range cache.visible {
 		if err := r.drawMeshMap(pass, section.chunk.cutoutMeshes[section.sec], cache); err != nil {
 			_ = pass.End()
 			r.surface.DiscardTexture()

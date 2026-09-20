@@ -11,14 +11,14 @@ import (
 )
 
 var (
-	webGPUUIPanel      = [4]float32{0.055, 0.075, 0.075, 0.97}
-	webGPUUISlot       = [4]float32{0.105, 0.13, 0.115, 0.98}
-	webGPUUILine       = [4]float32{0.29, 0.35, 0.31, 1}
-	webGPUUIAccent     = [4]float32{0.58, 0.78, 0.38, 1}
-	webGPUUIText       = [4]float32{0.94, 0.96, 0.94, 1}
-	webGPUUIMuted      = [4]float32{0.62, 0.68, 0.64, 1}
-	webGPUUIWarning    = [4]float32{0.92, 0.42, 0.35, 1}
-	webGPUUIDim        = [4]float32{0.02, 0.035, 0.045, 0.73}
+	webGPUUIPanel   = [4]float32{0.055, 0.075, 0.075, 0.97}
+	webGPUUISlot    = [4]float32{0.105, 0.13, 0.115, 0.98}
+	webGPUUILine    = [4]float32{0.29, 0.35, 0.31, 1}
+	webGPUUIAccent  = [4]float32{0.58, 0.78, 0.38, 1}
+	webGPUUIText    = [4]float32{0.94, 0.96, 0.94, 1}
+	webGPUUIMuted   = [4]float32{0.62, 0.68, 0.64, 1}
+	webGPUUIWarning = [4]float32{0.92, 0.42, 0.35, 1}
+	webGPUUIDim     = [4]float32{0.02, 0.035, 0.045, 0.73}
 )
 
 func (h *webGPUHUDRenderer) drawPrepared(pass *wgpu.RenderPassEncoder, b *webGPUHUDBuilder) error {
@@ -30,12 +30,13 @@ func (h *webGPUHUDRenderer) drawPrepared(pass *wgpu.RenderPassEncoder, b *webGPU
 	}
 	byteLen := len(b.vertices) * int(unsafe.Sizeof(webGPUHUDVertex{}))
 	bytes := unsafe.Slice((*byte)(unsafe.Pointer(&b.vertices[0])), byteLen)
-	if err := h.queue.WriteBuffer(h.vertexBuffer, 0, bytes); err != nil {
+	buffer, err := h.uploads.write(h.device, h.queue, bytes, gputypes.BufferUsageVertex)
+	if err != nil {
 		return fmt.Errorf("upload WebGPU UI vertices: %w", err)
 	}
 	pass.SetPipeline(h.pipeline)
 	pass.SetBindGroup(0, h.bindGroup, nil)
-	pass.SetVertexBuffer(0, h.vertexBuffer, 0)
+	pass.SetVertexBuffer(0, buffer, 0)
 	pass.Draw(gputypes.DrawArgs{VertexCount: uint32(len(b.vertices)), InstanceCount: 1})
 	return nil
 }
@@ -49,12 +50,13 @@ func (r *webGPUTextRenderer) drawPrepared(pass *wgpu.RenderPassEncoder, b *webGP
 	}
 	byteLen := len(b.vertices) * int(unsafe.Sizeof(webGPUTextVertex{}))
 	bytes := unsafe.Slice((*byte)(unsafe.Pointer(&b.vertices[0])), byteLen)
-	if err := r.queue.WriteBuffer(r.vertexBuffer, 0, bytes); err != nil {
+	buffer, err := r.uploads.write(r.device, r.queue, bytes, gputypes.BufferUsageVertex)
+	if err != nil {
 		return fmt.Errorf("upload WebGPU inventory text: %w", err)
 	}
 	pass.SetPipeline(r.pipeline)
 	pass.SetBindGroup(0, r.bindGroup, nil)
-	pass.SetVertexBuffer(0, r.vertexBuffer, 0)
+	pass.SetVertexBuffer(0, buffer, 0)
 	pass.Draw(gputypes.DrawArgs{VertexCount: uint32(len(b.vertices)), InstanceCount: 1})
 	return nil
 }
@@ -317,7 +319,7 @@ func drawWebGPUSurvivalInventory(pass *wgpu.RenderPassEncoder, hud *webGPUHUDRen
 		n := craftCapacity(inv, chosen)
 		enabled := n > 0 && recipeAvailable(state, chosen)
 		for _, button := range []struct {
-			x, w float32
+			x, w  float32
 			label string
 		}{{354, 286, "CRAFT"}, {648, 310, fmt.Sprintf("CRAFT MAX (%d)", n)}} {
 			r := layout.Rect(button.x, 216, button.w, 34)

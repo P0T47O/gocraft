@@ -8,6 +8,8 @@ import (
 )
 
 type RenderAssets struct {
+	// CPU atlas metadata only in WebGPU sessions; legacy GPU resources stay lazy.
+	webGPU          bool
 	mu              sync.RWMutex
 	textures        map[string]rl.Texture2D
 	faceMeshes      map[string]faceMesh
@@ -39,6 +41,12 @@ type AtlasRect struct {
 type TextureAtlas struct {
 	Texture rl.Texture2D
 	UVs     map[string]AtlasRect
+}
+
+// WebGPU atlas construction installs CPU UV metadata before workers start.
+// No legacy textures, models, icon render targets or shaders are created.
+func newWebGPUCPUAssets() *RenderAssets {
+	return &RenderAssets{webGPU: true, atlas: &TextureAtlas{}}
 }
 
 func loadRenderAssets() *RenderAssets {

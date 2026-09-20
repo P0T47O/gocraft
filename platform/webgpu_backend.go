@@ -12,7 +12,9 @@ import (
 // It deliberately does not own the surface/pipeline: those belong to the
 // higher-level renderer because they are frame- and material-specific.
 type WebGPUMeshBackend struct {
-	device *wgpu.Device
+	device  *wgpu.Device
+	compact bool
+	packing []CompactVertex
 }
 
 func NewWebGPUMeshBackend(device *wgpu.Device) *WebGPUMeshBackend {
@@ -38,6 +40,9 @@ func (b *WebGPUMeshBackend) UploadChecked(vertices []Vertex, indices []uint32) (
 	}
 
 	vertexBytes := uint64(len(vertices)) * uint64(unsafe.Sizeof(Vertex{}))
+	if b.compact {
+		vertexBytes = uint64(len(vertices)) * uint64(unsafe.Sizeof(CompactVertex{}))
+	}
 	indexBytes := uint64(len(indices)) * uint64(unsafe.Sizeof(indices[0]))
 
 	vertexBuffer, err := b.device.CreateBuffer(&wgpu.BufferDescriptor{
@@ -74,6 +79,10 @@ func (b *WebGPUMeshBackend) UploadChecked(vertices []Vertex, indices []uint32) (
 	}
 
 	vertexSrc := unsafe.Slice((*byte)(unsafe.Pointer(&vertices[0])), int(vertexBytes))
+	if b.compact {
+		b.packing = PackCompactVertices(b.packing, vertices)
+		vertexSrc = unsafe.Slice((*byte)(unsafe.Pointer(&b.packing[0])), int(vertexBytes))
+	}
 	if err := queue.WriteBuffer(vertexBuffer, 0, vertexSrc); err != nil {
 		indexBuffer.Release()
 		vertexBuffer.Release()
@@ -169,6 +178,7 @@ func (m *webGPUMesh) Unload() {
 // before switching.
 func EnableExperimentalWebGPU(device *wgpu.Device) *WebGPUMeshBackend {
 	backend := NewWebGPUMeshBackend(device)
+	backend.compact = true
 	SetMeshBackend(backend)
 	return backend
 }

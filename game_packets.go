@@ -81,8 +81,8 @@ func handlePacket(pkt Packet) {
 
 	case *PacketSpawnPoint:
 		input.AwaitingTerrain = true
-		camera.Position = rl.NewVector3(float32(p.X), float32(p.Y), float32(p.Z))
-		camera.Target = rl.NewVector3(camera.Position.X, camera.Position.Y-2, camera.Position.Z+5)
+		camera.Position = newGameVec3(float32(p.X), float32(p.Y), float32(p.Z))
+		camera.Target = newGameVec3(camera.Position.X, camera.Position.Y-2, camera.Position.Z+5)
 		input.InitFromCamera(camera)
 		input.VelocityY = 0
 		input.OnGround = false
@@ -132,7 +132,7 @@ func handlePacket(pkt Packet) {
 		// Server forcing position (Teleport)
 		// Usually client is authoritative, but if server sends it, we should respect.
 		// Update camera immediately.
-		camera.Position = rl.NewVector3(float32(p.X), float32(p.Y), float32(p.Z))
+		camera.Position = newGameVec3(float32(p.X), float32(p.Y), float32(p.Z))
 		// Reset interpolation or smoothing?
 		// Also update last sent to avoid loop
 		client.LastSentX = p.X

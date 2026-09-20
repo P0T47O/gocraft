@@ -30,7 +30,6 @@ struct Scene {
 struct VertexInput {
     @location(0) position: vec3f,
     @location(1) uv: vec2f,
-    @location(2) normal: vec3f,
     @location(3) color: vec4f,
 }
 
@@ -57,9 +56,22 @@ fn fogged(rgb: vec3f, world_pos: vec3f) -> vec3f {
     return mix(rgb, scene.fog_color.rgb, amount);
 }
 
+fn sample_atlas(uv: vec2f) -> vec4f {
+    // Anisotropy requires a linear sampler, but magnified pixel art should
+    // remain nearest-neighbor. Evaluate derivatives before any varying branch.
+    let size = vec2f(textureDimensions(atlas_tex, 0));
+    let footprint = max(length(dpdx(uv) * size), length(dpdy(uv) * size));
+    let filtered = textureSample(atlas_tex, atlas_sampler, uv);
+    if footprint <= 1.0 {
+        let pixel = clamp(vec2i(floor(uv * size)), vec2i(0), vec2i(size) - vec2i(1));
+        return textureLoad(atlas_tex, pixel, 0);
+    }
+    return filtered;
+}
+
 @fragment
 fn fs_opaque(in: VertexOutput) -> @location(0) vec4f {
-    let texel = textureSample(atlas_tex, atlas_sampler, in.uv);
+    let texel = sample_atlas(in.uv);
     let alpha = texel.a * in.color.a;
     if alpha < 0.5 {
         discard;
@@ -70,7 +82,7 @@ fn fs_opaque(in: VertexOutput) -> @location(0) vec4f {
 
 @fragment
 fn fs_translucent(in: VertexOutput) -> @location(0) vec4f {
-    let texel = textureSample(atlas_tex, atlas_sampler, in.uv);
+    let texel = sample_atlas(in.uv);
     let alpha = texel.a * in.color.a;
     if alpha < 0.01 {
         discard;
@@ -90,6 +102,7 @@ type webGPUWorldRenderer struct {
 
 	format              gputypes.TextureFormat
 	opaquePipeline      *wgpu.RenderPipeline
+	solidPipeline       *wgpu.RenderPipeline
 	translucentPipeline *wgpu.RenderPipeline
 	bindGroup           *wgpu.BindGroup
 	sceneBuffer         *wgpu.Buffer
@@ -98,10 +111,14 @@ type webGPUWorldRenderer struct {
 	bindGroupLayout     *wgpu.BindGroupLayout
 	atlasTexture        *wgpu.Texture
 	atlasView           *wgpu.TextureView
+	atlasBaseView       *wgpu.TextureView
 	atlasSampler        *wgpu.Sampler
+	filterMipmaps       bool
+	filterAF            int
 	depthTexture        *wgpu.Texture
 	depthView           *wgpu.TextureView
 	width, height       uint32
+	camera              webGPUCamera
 }
 
 func newWebGPUWorldRenderer(hwnd uintptr, assets *RenderAssets, width, height uint32) (*webGPUWorldRenderer, error) {
@@ -188,9 +205,9 @@ func (r *webGPUWorldRenderer) createPipelineResources(atlas *webGPUBlockAtlas) e
 		return fmt.Errorf("create world scene buffer: %w", err)
 	}
 	r.atlasTexture, err = r.device.CreateTexture(&wgpu.TextureDescriptor{
-		Label: "GoCraft WebGPU block atlas",
-		Size:  wgpu.Extent3D{Width: uint32(atlas.width), Height: uint32(atlas.height), DepthOrArrayLayers: 1},
-		MipLevelCount: 1,
+		Label:         "GoCraft WebGPU block atlas",
+		Size:          wgpu.Extent3D{Width: uint32(atlas.width), Height: uint32(atlas.height), DepthOrArrayLayers: 1},
+		MipLevelCount: atlasMaxMipLevel + 1,
 		SampleCount:   1,
 		Dimension:     gputypes.TextureDimension2D,
 		Format:        gputypes.TextureFormatRGBA8Unorm,
@@ -199,26 +216,25 @@ func (r *webGPUWorldRenderer) createPipelineResources(atlas *webGPUBlockAtlas) e
 	if err != nil {
 		return fmt.Errorf("create block atlas texture: %w", err)
 	}
-	if err := r.queue.WriteTexture(
-		&wgpu.ImageCopyTexture{Texture: r.atlasTexture, MipLevel: 0},
-		atlas.pixels,
-		&wgpu.ImageDataLayout{Offset: 0, BytesPerRow: uint32(atlas.width * 4), RowsPerImage: uint32(atlas.height)},
-		&wgpu.Extent3D{Width: uint32(atlas.width), Height: uint32(atlas.height), DepthOrArrayLayers: 1},
-	); err != nil {
-		return fmt.Errorf("upload block atlas: %w", err)
+	for level, mip := range buildWebGPUMips(atlas.pixels, atlas.width, atlas.height, atlasMaxMipLevel+1) {
+		if err := r.queue.WriteTexture(
+			&wgpu.ImageCopyTexture{Texture: r.atlasTexture, MipLevel: uint32(level)}, mip.pixels,
+			&wgpu.ImageDataLayout{BytesPerRow: uint32(mip.width * 4), RowsPerImage: uint32(mip.height)},
+			&wgpu.Extent3D{Width: uint32(mip.width), Height: uint32(mip.height), DepthOrArrayLayers: 1},
+		); err != nil {
+			return fmt.Errorf("upload block atlas mip %d: %w", level, err)
+		}
 	}
 	r.atlasView, err = r.device.CreateTextureView(r.atlasTexture, nil)
 	if err != nil {
 		return fmt.Errorf("create block atlas view: %w", err)
 	}
-	r.atlasSampler, err = r.device.CreateSampler(&wgpu.SamplerDescriptor{
-		Label:          "GoCraft WebGPU block atlas sampler",
-		AddressModeU:   gputypes.AddressModeClampToEdge,
-		AddressModeV:   gputypes.AddressModeClampToEdge,
-		MagFilter:      gputypes.FilterModeNearest,
-		MinFilter:      gputypes.FilterModeNearest,
-		MipmapFilter:   gputypes.FilterModeNearest,
-	})
+	r.atlasBaseView, err = r.device.CreateTextureView(r.atlasTexture, &wgpu.TextureViewDescriptor{Label: "GoCraft atlas mip zero", MipLevelCount: 1, ArrayLayerCount: 1})
+	if err != nil {
+		return fmt.Errorf("create block atlas base view: %w", err)
+	}
+	r.filterMipmaps, r.filterAF = webGPUFilterSettings()
+	r.atlasSampler, err = r.device.CreateSampler(webGPUAtlasSamplerDescriptor(r.filterMipmaps, r.filterAF))
 	if err != nil {
 		return fmt.Errorf("create block atlas sampler: %w", err)
 	}
@@ -245,7 +261,7 @@ func (r *webGPUWorldRenderer) createPipelineResources(atlas *webGPUBlockAtlas) e
 		Layout: r.bindGroupLayout,
 		Entries: []wgpu.BindGroupEntry{
 			{Binding: 0, Buffer: r.sceneBuffer, Size: webGPUWorldSceneBytes},
-			{Binding: 1, TextureView: r.atlasView},
+			{Binding: 1, TextureView: r.filteredAtlasView(r.filterMipmaps)},
 			{Binding: 2, Sampler: r.atlasSampler},
 		},
 	})
@@ -263,12 +279,11 @@ func (r *webGPUWorldRenderer) createPipelineResources(atlas *webGPUBlockAtlas) e
 		Module:     r.shader,
 		EntryPoint: "vs_main",
 		Buffers: []gputypes.VertexBufferLayout{{
-			ArrayStride: uint64(unsafe.Sizeof(platform.Vertex{})),
+			ArrayStride: uint64(unsafe.Sizeof(platform.CompactVertex{})),
 			StepMode:    gputypes.VertexStepModeVertex,
 			Attributes: []gputypes.VertexAttribute{
 				{Format: gputypes.VertexFormatFloat32x3, Offset: 0, ShaderLocation: 0},
 				{Format: gputypes.VertexFormatFloat32x2, Offset: 12, ShaderLocation: 1},
-				{Format: gputypes.VertexFormatFloat32x3, Offset: 24, ShaderLocation: 2},
 				{Format: gputypes.VertexFormatUnorm8x4, Offset: 20, ShaderLocation: 3},
 			},
 		}},
@@ -276,7 +291,7 @@ func (r *webGPUWorldRenderer) createPipelineResources(atlas *webGPUBlockAtlas) e
 	primitive := gputypes.PrimitiveState{Topology: gputypes.PrimitiveTopologyTriangleList, FrontFace: gputypes.FrontFaceCCW, CullMode: gputypes.CullModeNone}
 	multisample := gputypes.MultisampleState{Count: 1, Mask: 0xFFFFFFFF}
 
-	r.opaquePipeline, err = r.device.CreateRenderPipeline(&wgpu.RenderPipelineDescriptor{
+	opaqueDescriptor := &wgpu.RenderPipelineDescriptor{
 		Label:     "GoCraft WebGPU opaque world pipeline",
 		Layout:    r.layout,
 		Vertex:    vertexState,
@@ -287,11 +302,18 @@ func (r *webGPUWorldRenderer) createPipelineResources(atlas *webGPUBlockAtlas) e
 		},
 		Multisample: multisample,
 		Fragment:    &wgpu.FragmentState{Module: r.shader, EntryPoint: "fs_opaque", Targets: []gputypes.ColorTargetState{{Format: r.format, WriteMask: gputypes.ColorWriteMaskAll}}},
-	})
+	}
+	r.opaquePipeline, err = r.device.CreateRenderPipeline(opaqueDescriptor)
 	if err != nil {
 		return fmt.Errorf("create opaque world pipeline: %w", err)
 	}
 
+	opaqueDescriptor.Primitive.CullMode = gputypes.CullModeBack
+	opaqueDescriptor.Label = "GoCraft solid backface-culling pipeline"
+	r.solidPipeline, err = r.device.CreateRenderPipeline(opaqueDescriptor)
+	if err != nil {
+		return fmt.Errorf("create solid pipeline: %w", err)
+	}
 	blend := &gputypes.BlendState{
 		Color: gputypes.BlendComponent{SrcFactor: gputypes.BlendFactorSrcAlpha, DstFactor: gputypes.BlendFactorOneMinusSrcAlpha, Operation: gputypes.BlendOperationAdd},
 		Alpha: gputypes.BlendComponent{SrcFactor: gputypes.BlendFactorOne, DstFactor: gputypes.BlendFactorOneMinusSrcAlpha, Operation: gputypes.BlendOperationAdd},
@@ -335,8 +357,8 @@ func (r *webGPUWorldRenderer) configureSurface() error {
 	}
 	var err error
 	r.depthTexture, err = r.device.CreateTexture(&wgpu.TextureDescriptor{
-		Label: "GoCraft WebGPU world depth",
-		Size:  wgpu.Extent3D{Width: r.width, Height: r.height, DepthOrArrayLayers: 1},
+		Label:         "GoCraft WebGPU world depth",
+		Size:          wgpu.Extent3D{Width: r.width, Height: r.height, DepthOrArrayLayers: 1},
 		MipLevelCount: 1,
 		SampleCount:   1,
 		Dimension:     gputypes.TextureDimension2D,
@@ -377,6 +399,10 @@ func (r *webGPUWorldRenderer) Close() {
 }
 
 func (r *webGPUWorldRenderer) closeResources(resetBackend bool) {
+	if r.solidPipeline != nil {
+		r.solidPipeline.Release()
+		r.solidPipeline = nil
+	}
 	if resetBackend {
 		platform.SetMeshBackend(platform.OpenGLMeshBackend{})
 	}
@@ -415,6 +441,10 @@ func (r *webGPUWorldRenderer) closeResources(resetBackend bool) {
 	if r.atlasView != nil {
 		r.atlasView.Release()
 		r.atlasView = nil
+	}
+	if r.atlasBaseView != nil {
+		r.atlasBaseView.Release()
+		r.atlasBaseView = nil
 	}
 	if r.atlasTexture != nil {
 		r.atlasTexture.Release()

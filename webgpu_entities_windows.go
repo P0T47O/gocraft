@@ -4,6 +4,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/go-gl/mathgl/mgl32"
 	"math"
 	"unsafe"
 
@@ -18,9 +19,11 @@ const (
 )
 
 type webGPUEntityRenderer struct {
-	queue        *wgpu.Queue
-	vertexBuffer *wgpu.Buffer
-	indexBuffer  *wgpu.Buffer
+	queue             *wgpu.Queue
+	vertices, indices webGPUFrameUploads
+	batch             *webGPUEntityBatch
+	packing           []platform.CompactVertex
+	radii             map[string]float32
 }
 
 var activeWebGPUEntityRenderer *webGPUEntityRenderer
@@ -33,24 +36,6 @@ func ensureWebGPUEntityRenderer(worldRenderer *webGPUWorldRenderer) (*webGPUEnti
 		return nil, fmt.Errorf("WebGPU world renderer is not ready for entity creation")
 	}
 	r := &webGPUEntityRenderer{queue: worldRenderer.queue}
-	var err error
-	r.vertexBuffer, err = worldRenderer.device.CreateBuffer(&wgpu.BufferDescriptor{
-		Label: "GoCraft WebGPU entity vertices",
-		Size:  uint64(webGPUEntityMaxVertices) * uint64(unsafe.Sizeof(platform.Vertex{})),
-		Usage: gputypes.BufferUsageVertex | gputypes.BufferUsageCopyDst,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("create WebGPU entity vertex buffer: %w", err)
-	}
-	r.indexBuffer, err = worldRenderer.device.CreateBuffer(&wgpu.BufferDescriptor{
-		Label: "GoCraft WebGPU entity indices",
-		Size:  uint64(webGPUEntityMaxIndices) * 4,
-		Usage: gputypes.BufferUsageIndex | gputypes.BufferUsageCopyDst,
-	})
-	if err != nil {
-		r.vertexBuffer.Release()
-		return nil, fmt.Errorf("create WebGPU entity index buffer: %w", err)
-	}
 	activeWebGPUEntityRenderer = r
 	return r, nil
 }
@@ -67,14 +52,9 @@ func (r *webGPUEntityRenderer) Close() {
 	if r == nil {
 		return
 	}
-	if r.indexBuffer != nil {
-		r.indexBuffer.Release()
-		r.indexBuffer = nil
-	}
-	if r.vertexBuffer != nil {
-		r.vertexBuffer.Release()
-		r.vertexBuffer = nil
-	}
+	r.vertices.close()
+	r.indices.close()
+	r.batch = nil
 }
 
 type webGPUEntityBatch struct {
@@ -230,12 +210,12 @@ func webGPUMobFaceUVs(model MobModel, bone MobBone) ([6][4]float32, bool) {
 	}
 	u, v := bone.UV[0], bone.UV[1]
 	regions := [6][4]float32{
-		{u + d, v + d, w, h},         // front
-		{u + 2*d + w, v + d, w, h},   // back
-		{u + d, v, w, d},             // top
-		{u + d + w, v, w, d},         // bottom
-		{u, v + d, d, h},             // right
-		{u + d + w, v + d, d, h},     // left
+		{u + d, v + d, w, h},       // front
+		{u + 2*d + w, v + d, w, h}, // back
+		{u + d, v, w, d},           // top
+		{u + d + w, v, w, d},       // bottom
+		{u, v + d, d, h},           // right
+		{u + d + w, v + d, d, h},   // left
 	}
 	var out [6][4]float32
 	for i, r := range regions {
@@ -341,10 +321,56 @@ func (r *webGPUEntityRenderer) Draw(pass *wgpu.RenderPassEncoder, worldRenderer 
 	if r == nil || pass == nil || worldRenderer == nil {
 		return nil
 	}
-	batch := newWebGPUEntityBatch()
+	r.vertices.begin()
+	r.indices.begin()
+	if r.batch == nil {
+		r.batch = newWebGPUEntityBatch()
+	}
+	batch := r.batch
+	batch.vertices, batch.indices = batch.vertices[:0], batch.indices[:0]
+	projection, view, eye := webGPUCameraMatrices(worldRenderer.camera, worldRenderer.width, worldRenderer.height)
+	frustum := ExtractFrustum(projection.Mul4(view))
+	flush := func() error {
+		if len(batch.vertices) == 0 {
+			return nil
+		}
+		r.packing = platform.PackCompactVertices(r.packing, batch.vertices)
+		vertexBytes := unsafe.Slice((*byte)(unsafe.Pointer(&r.packing[0])), len(r.packing)*int(unsafe.Sizeof(platform.CompactVertex{})))
+		vb, err := r.vertices.write(worldRenderer.device, r.queue, vertexBytes, gputypes.BufferUsageVertex)
+		if err != nil {
+			return err
+		}
+		indexBytes := unsafe.Slice((*byte)(unsafe.Pointer(&batch.indices[0])), len(batch.indices)*4)
+		ib, err := r.indices.write(worldRenderer.device, r.queue, indexBytes, gputypes.BufferUsageIndex)
+		if err != nil {
+			return err
+		}
+		pass.SetPipeline(worldRenderer.opaquePipeline)
+		pass.SetBindGroup(0, worldRenderer.bindGroup, nil)
+		pass.SetVertexBuffer(0, vb, 0)
+		pass.SetIndexBuffer(ib, gputypes.IndexFormatUint32, 0)
+		pass.DrawIndexed(gputypes.DrawIndexedArgs{IndexCount: uint32(len(batch.indices)), InstanceCount: 1})
+		batch.vertices, batch.indices = batch.vertices[:0], batch.indices[:0]
+		return nil
+	}
 	for id, e := range remoteEntities {
 		if e == nil || id == *username {
 			continue
+		}
+		if worldRenderer.camera.Fovy > 0 {
+			radius := r.entityRadius(e)
+			p := mgl32.Vec3{float32(e.X), float32(e.Y), float32(e.Z)}
+			delta := p.Sub(eye)
+			limit := float32(renderDistance()*chunkWidth) + radius
+			extent := mgl32.Vec3{radius, radius, radius}
+			if delta.LenSqr() > limit*limit || !frustum.IntersectsAABB(p.Sub(extent), p.Add(extent)) {
+				continue
+			}
+		}
+		if len(batch.vertices) >= webGPUEntityMaxVertices || len(batch.indices) >= webGPUEntityMaxIndices {
+			if err := flush(); err != nil {
+				return err
+			}
 		}
 		switch {
 		case e.Type == EntityPlayer:
@@ -358,24 +384,5 @@ func (r *webGPUEntityRenderer) Draw(pass *wgpu.RenderPassEncoder, worldRenderer 
 		}
 	}
 	batch.addMiningCrack(state)
-	if len(batch.vertices) == 0 || len(batch.indices) == 0 {
-		return nil
-	}
-	if len(batch.vertices) > webGPUEntityMaxVertices || len(batch.indices) > webGPUEntityMaxIndices {
-		return fmt.Errorf("WebGPU entity batch exceeded budget: %d vertices, %d indices", len(batch.vertices), len(batch.indices))
-	}
-	vertexBytes := unsafe.Slice((*byte)(unsafe.Pointer(&batch.vertices[0])), len(batch.vertices)*int(unsafe.Sizeof(platform.Vertex{})))
-	if err := r.queue.WriteBuffer(r.vertexBuffer, 0, vertexBytes); err != nil {
-		return fmt.Errorf("upload WebGPU entity vertices: %w", err)
-	}
-	indexBytes := unsafe.Slice((*byte)(unsafe.Pointer(&batch.indices[0])), len(batch.indices)*4)
-	if err := r.queue.WriteBuffer(r.indexBuffer, 0, indexBytes); err != nil {
-		return fmt.Errorf("upload WebGPU entity indices: %w", err)
-	}
-	pass.SetPipeline(worldRenderer.opaquePipeline)
-	pass.SetBindGroup(0, worldRenderer.bindGroup, nil)
-	pass.SetVertexBuffer(0, r.vertexBuffer, 0)
-	pass.SetIndexBuffer(r.indexBuffer, gputypes.IndexFormatUint32, 0)
-	pass.DrawIndexed(gputypes.DrawIndexedArgs{IndexCount: uint32(len(batch.indices)), InstanceCount: 1})
-	return nil
+	return flush()
 }

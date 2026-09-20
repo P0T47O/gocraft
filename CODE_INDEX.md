@@ -10,12 +10,14 @@
 | 程序入口、全局界面状态、主循环（`-webgpu` 实验路径在 Playing 状态接管 present） | [main.go](main.go)：`main`、`updateMenu` |
 | 游戏会话建立与退出 | [game_session.go](game_session.go)：`startGame`、`exitGame` |
 | 每帧更新、暂停、输入与地形就绪 | [game_update.go](game_update.go)：`updateGame` |
+| 后端中立玩家摄像机、朝向初始化与瞄准射线 | [game_camera.go](game_camera.go)、[game_camera_test.go](game_camera_test.go)；旧绘制入口临时转换：[render_camera_raylib.go](render_camera_raylib.go) |
 | 客户端缺失区块请求 | [game_streaming.go](game_streaming.go)：`requestMissingChunks` |
 | 客户端收到消息后的状态更新 | [game_packets.go](game_packets.go)：`handlePacket` |
 | 远程实体插值 | [game_entities.go](game_entities.go) |
 | 游戏场景绘制 | [game_render.go](game_render.go) |
 | WebGPU Playing 状态接入/退出 | [webgpu_game_windows.go](webgpu_game_windows.go)、[webgpu_game_stub.go](webgpu_game_stub.go) |
 | WebGPU Playing 单 pass 合成（world + entities/effects + HUD/text + inventory/container） | [webgpu_gameplay_windows.go](webgpu_gameplay_windows.go)：`DrawGameplay` |
+| 后端中立帧快照与窗口设置桥接 | [webgpu_frame.go](webgpu_frame.go)、[settings_window_raylib.go](settings_window_raylib.go)；配置读写本身在 Raylib-free 的 [settings.go](settings.go) |
 | 客户端连接与收发（网络层不依赖 Raylib；位置/朝向以标量传入） | [client.go](client.go) |
 | 配置、渲染距离 | [settings.go](settings.go)、[menu_screens.go](menu_screens.go) |
 
@@ -59,10 +61,16 @@
 | 客户端光照增量、精确网格失效范围与更新合并 | [world_packet_light.go](world_packet_light.go)、[world_mesh_dirty.go](world_mesh_dirty.go)、[world_mesh_dirty_test.go](world_mesh_dirty_test.go) |
 | 网格任务与快照 | [world_mesh.go](world_mesh.go) |
 | 方块表面网格构建 | [chunk_mesher.go](chunk_mesher.go) |
+| Raylib-free 网格数学与颜色、GPU 上传适配 | [mesh_math.go](mesh_math.go)、[mesh_color.go](mesh_color.go)、[render_mesh_upload.go](render_mesh_upload.go)；共享句柄 [render_mesh.go](render_mesh.go)，OpenGL 绘制 [render_mesh_opengl.go](render_mesh_opengl.go) |
+| WebGPU 24 字节顶点打包（旧后端/预览保持 36 字节） | [platform/compact_vertex.go](platform/compact_vertex.go)、[platform/compact_vertex_test.go](platform/compact_vertex_test.go) |
 | 后端中立网格上传接口、OpenGL/WebGPU GPU buffer | [render_mesh.go](render_mesh.go)、[platform/renderer.go](platform/renderer.go)、[platform/mesh.go](platform/mesh.go)、[platform/webgpu_backend.go](platform/webgpu_backend.go) |
 | OpenGL 可见区块、透明排序、雾距 | [world_render.go](world_render.go)、[render_cull.go](render_cull.go) |
 | WebGPU 世界渲染（camera matrices、scene uniform、surface/depth、atlas、atlas 内水/岩浆逐帧更新、opaque/cutout、water/glass、fog、可见 section 提交） | [webgpu_camera_windows.go](webgpu_camera_windows.go)、[webgpu_world_renderer_windows.go](webgpu_world_renderer_windows.go)、[webgpu_atlas.go](webgpu_atlas.go)、[webgpu_animation_windows.go](webgpu_animation_windows.go) |
 | WebGPU 实体/效果（远程玩家、掉落物、JSON bone 生物动画、挖掘裂纹） | [webgpu_entities_windows.go](webgpu_entities_windows.go) |
+| WebGPU 实体保守视锥/距离剔除、超容量分批与帧上传缓存 | [webgpu_entity_bounds_windows.go](webgpu_entity_bounds_windows.go)、[webgpu_entities_windows.go](webgpu_entities_windows.go)、[webgpu_upload_windows.go](webgpu_upload_windows.go)；同帧不同批次不能重写同一个目标缓冲区 |
+| WebGPU mipmap/AF 设置联动、动画完整留白和 mip 更新、独立 UI 最近邻采样 | [texture_policy.go](texture_policy.go)、[webgpu_mipmap.go](webgpu_mipmap.go)、[webgpu_filter_windows.go](webgpu_filter_windows.go)、[webgpu_animation_windows.go](webgpu_animation_windows.go) |
+| WebGPU 优化回归：CPU 数学等价、mip/动画留白、GPU 像素回读、1500 实体分批 | [webgpu_optimization_test.go](webgpu_optimization_test.go)、[webgpu_regression_windows_test.go](webgpu_regression_windows_test.go)；实机设置 `GOCRAFT_WEBGPU_REGRESSION=1` |
+| WebGPU 近景像素采样、mipmap 关闭时的单层视图、多帧移动/动画与 LOD 回读 | [webgpu_world_renderer_windows.go](webgpu_world_renderer_windows.go)：`sample_atlas`；[webgpu_filter_windows.go](webgpu_filter_windows.go)：`filteredAtlasView`；[webgpu_mip_regression_windows_test.go](webgpu_mip_regression_windows_test.go) |
 | WebGPU gameplay HUD / 文本（准星、热键栏、生命、像素字体、聊天、debug、暂停/死亡提示） | [webgpu_hud_windows.go](webgpu_hud_windows.go)、[webgpu_text_windows.go](webgpu_text_windows.go) |
 | WebGPU 背包/容器与物品工具图标 | [webgpu_inventory_windows.go](webgpu_inventory_windows.go)、[webgpu_container_windows.go](webgpu_container_windows.go) |
 | WebGPU 迁移验证/交互预览 | [webgpu_chunk_preview_test.go](webgpu_chunk_preview_test.go)、[webgpu_region_preview_test.go](webgpu_region_preview_test.go)、[webgpu_surface_preview_test.go](webgpu_surface_preview_test.go)、[webgpu_textured_preview_test.go](webgpu_textured_preview_test.go)、[webgpu_transparency_preview_test.go](webgpu_transparency_preview_test.go)、[WEBGPU_MIGRATION.md](WEBGPU_MIGRATION.md) |
@@ -74,7 +82,7 @@
 | 面模型、面网格模板 | [render_faces.go](render_faces.go) |
 | 物品图标、图集、着色器 | [render_icons.go](render_icons.go)、[render_atlas.go](render_atlas.go)、[render_shaders.go](render_shaders.go) |
 | 方块/掉落物绘制 | [render_block.go](render_block.go)、[render_item.go](render_item.go) |
-| 性能采样与日志 | [performance_monitor.go](performance_monitor.go) |
+| 性能采样与日志（不依赖窗口库；主循环通过 `UpdateFrame` 传入帧耗时） | [performance_monitor.go](performance_monitor.go) |
 | 加载阶段耗时/积压/废弃网格统计、32 半径服务端冷加载实测 | [performance_loading.go](performance_loading.go)、[streaming_load_test.go](streaming_load_test.go)、[LOADING.md](LOADING.md) |
 
 ## 玩法、界面与存档
@@ -90,9 +98,9 @@
 | 生物配置、Raylib-free AI/移动/刷新与 reference renderer 调试包围盒 | [mob_content.go](mob_content.go)、[mob_simulation.go](mob_simulation.go)、[mob_server.go](mob_server.go)、[mob_render.go](mob_render.go)、[mob_render_bounds.go](mob_render_bounds.go)、content/ |
 | 菜单与通用控件 | [menu_screens.go](menu_screens.go)、[ui_menu.go](ui_menu.go)、[ui_theme.go](ui_theme.go)、[ui.go](ui.go) |
 | 背包/容器/生命/HUD | [inventory_ui.go](inventory_ui.go)、[container_ui.go](container_ui.go)、[vitals_ui.go](vitals_ui.go)、[hud_ui.go](hud_ui.go)、[render_ui.go](render_ui.go) |
-| 世界保存编排、元数据与载入 | [save.go](save.go)、[save_manager.go](save_manager.go) |
+| 世界保存编排、元数据与载入（摄像机参数已中立化，无 Raylib import） | [save.go](save.go)、[save_manager.go](save_manager.go) |
 | 区块文件与批量存取 | [save_chunks.go](save_chunks.go) |
-| 实体、旧玩家文件、玩家背包状态 | [save_entities.go](save_entities.go)、[save_player.go](save_player.go)、[survival.go](survival.go) |
+| 实体、旧玩家文件、玩家背包状态 | [save_entities.go](save_entities.go)、[save_player.go](save_player.go)、[survival.go](survival.go)；中立摄像机存档往返及全部截断长度回归：[game_camera_test.go](game_camera_test.go) |
 | RLE、调色板、二进制基础编码 | [save_codec.go](save_codec.go) |
 | 临时文件写入与替换 | [save_file.go](save_file.go) |
 
@@ -114,6 +122,10 @@
 - GPU 创建/绘制/释放继续留在渲染线程；WebGPU backend 切换发生在 Playing 渲染线程，World 先释放 mesh handle 再释放 WebGPU device。
 
 ## 尚未完成的结构改进
+
+Raylib 删除第一阶段：主循环持有 `gameCamera`，输入、出生/传送及存档共享中立摄像机；旧 OpenGL 仅在 `drawGame` 入口通过 `raylibCamera` 适配。性能统计由主循环显式提供帧耗时。窗口事件、UI 布局/绘制和旧物理测试适配仍未迁移；依赖仍在，不能将本阶段视为彻底移除。下一阶段需要替换窗口/输入 owner，再把所有菜单状态接入 WebGPU，最后删除旧渲染器、迁移预览测试和清理模块依赖。
+
+当前 WebGPU 会话通过 `newWebGPUCPUAssets` 跳过旧 OpenGL 游戏纹理、模型、图标和材质初始化，在网格 worker 启动前建立图集与 WebGPU 后端。窗口/输入/菜单仍依赖 Raylib；不能删除整个模块依赖。区块 CPU mesher、光照、颜色缓存、共享网格句柄、纹理策略与设置持久化已无直接 Raylib import。实体模型实例化、大地形缓冲区子分配/间接绘制仍待性能采样后推进。
 
 `chunk_mesher.go` 的 `buildAllMeshData`、`server_packets.go` 的 `HandlePacket`、
 `input.go` 仍包含较大的单体流程。这轮保留其内部实现，避免整理目录时混入算法修改。

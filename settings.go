@@ -4,8 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-
-	rl "github.com/gen2brain/raylib-go/raylib"
 )
 
 // GameSettings holds persistent configuration
@@ -87,25 +85,4 @@ func SaveSettings() {
 	if err := os.WriteFile(settingsFile, data, 0644); err != nil {
 		fmt.Printf("Error saving settings: %v\n", err)
 	}
-}
-
-// ApplySettings applies resolution and updates input state if active
-func ApplySettings() {
-	if currentSettings == nil {
-		return
-	}
-
-	// Apply Resolution
-	// Only apply if changed to avoid flicker?
-	// Raylib SetWindowSize checks internally usually, but let's be safe
-	if rl.GetScreenWidth() != currentSettings.ResolutionWidth || rl.GetScreenHeight() != currentSettings.ResolutionHeight {
-		rl.SetWindowSize(currentSettings.ResolutionWidth, currentSettings.ResolutionHeight)
-		// Recenter window if possible?
-		// rl.SetWindowPosition(...) // Maybe later
-	}
-
-	// Sensitivity is read directly from currentSettings in input.go (if we link them)
-	// Or we update the global InputState if it exists?
-	// InputState is created per-session. So when NewInputState name is called,
-	// it should read from currentSettings.
 }

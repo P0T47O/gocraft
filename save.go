@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/binary"
 	"encoding/json"
-	rl "github.com/gen2brain/raylib-go/raylib"
 	"github.com/klauspost/compress/zstd"
 	"os"
 	"path/filepath"
@@ -72,7 +71,7 @@ func ensureSaveDir(savePath string) error {
 	return os.MkdirAll(savePath, 0o755)
 }
 
-func SaveGame(savePath string, world *World, state *InputState, camera rl.Camera3D) error {
+func SaveGame(savePath string, world *World, state *InputState, camera gameCamera) error {
 	if err := ensureSaveDir(savePath); err != nil {
 		return err
 	}
@@ -113,7 +112,7 @@ func SaveLevelData(savePath string, seed uint32) error {
 	return writeSaveFile(path, bytes)
 }
 
-func LoadGame(savePath string, world *World, state *InputState, camera *rl.Camera3D) error {
+func LoadGame(savePath string, world *World, state *InputState, camera *gameCamera) error {
 	if err := loadAllChunks(savePath, world); err != nil {
 		return err
 	}
@@ -165,7 +164,7 @@ func LoadWorld(savePath string, world *World) (bool, float64, float64, float64, 
 	return hasPos, posX, posY, posZ, nil
 }
 
-func LoadGameIfExists(savePath string, world *World, state *InputState, camera *rl.Camera3D) (bool, bool, error) {
+func LoadGameIfExists(savePath string, world *World, state *InputState, camera *gameCamera) (bool, bool, error) {
 	playerPath := filepath.Join(savePath, playerFile)
 	chunkExists := false
 	if _, err := os.Stat(filepath.Join(savePath, chunkDir)); err == nil {

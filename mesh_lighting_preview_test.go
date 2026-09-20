@@ -57,7 +57,7 @@ func TestSmoothLightingPreview(t *testing.T) {
 					positions[i*3] = -1 + float32(panel) + (float32(x)+.5+float32(c[0])*.5)/16
 					positions[i*3+1] = 1 - (float32(z)+.5+float32(c[1])*.5)/8
 				}
-				mb.addFaceSmooth(positions[:], rl.NewVector3(0, 0, 1), []float32{0, 0, 1, 0, 1, 1, 0, 1}, colors)
+				mb.addFaceSmooth(positions[:], meshVec3(0, 0, 1), []float32{0, 0, 1, 0, 1, 1, 0, 1}, colors)
 			}
 		}
 		vertices := make([]platform.Vertex, mb.vertCount)

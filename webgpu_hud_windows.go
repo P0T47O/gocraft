@@ -60,7 +60,8 @@ type webGPUHUDRenderer struct {
 	layout          *wgpu.PipelineLayout
 	bindGroupLayout *wgpu.BindGroupLayout
 	bindGroup       *wgpu.BindGroup
-	vertexBuffer    *wgpu.Buffer
+	sampler         *wgpu.Sampler
+	uploads         webGPUFrameUploads
 }
 
 var activeWebGPUHUDRenderer *webGPUHUDRenderer
@@ -99,12 +100,16 @@ func ensureWebGPUHUDRenderer(worldRenderer *webGPUWorldRenderer) (*webGPUHUDRend
 	if err != nil {
 		return fail(fmt.Errorf("create WebGPU HUD pipeline layout: %w", err))
 	}
+	h.sampler, err = h.device.CreateSampler(webGPUAtlasSamplerDescriptor(false, 1))
+	if err != nil {
+		return fail(err)
+	}
 	h.bindGroup, err = h.device.CreateBindGroup(&wgpu.BindGroupDescriptor{
 		Label:  "GoCraft WebGPU HUD bind group",
 		Layout: h.bindGroupLayout,
 		Entries: []wgpu.BindGroupEntry{
-			{Binding: 0, TextureView: worldRenderer.atlasView},
-			{Binding: 1, Sampler: worldRenderer.atlasSampler},
+			{Binding: 0, TextureView: worldRenderer.atlasBaseView},
+			{Binding: 1, Sampler: h.sampler},
 		},
 	})
 	if err != nil {
@@ -140,14 +145,6 @@ func ensureWebGPUHUDRenderer(worldRenderer *webGPUWorldRenderer) (*webGPUHUDRend
 	if err != nil {
 		return fail(fmt.Errorf("create WebGPU HUD pipeline: %w", err))
 	}
-	h.vertexBuffer, err = h.device.CreateBuffer(&wgpu.BufferDescriptor{
-		Label: "GoCraft WebGPU HUD vertices",
-		Size:  uint64(webGPUHUDMaxVertices) * stride,
-		Usage: gputypes.BufferUsageVertex | gputypes.BufferUsageCopyDst,
-	})
-	if err != nil {
-		return fail(fmt.Errorf("create WebGPU HUD vertex buffer: %w", err))
-	}
 	activeWebGPUHUDRenderer = h
 	return h, nil
 }
@@ -161,12 +158,11 @@ func closeWebGPUHUDRenderer() {
 }
 
 func (h *webGPUHUDRenderer) Close() {
+	if h != nil {
+		h.uploads.close()
+	}
 	if h == nil {
 		return
-	}
-	if h.vertexBuffer != nil {
-		h.vertexBuffer.Release()
-		h.vertexBuffer = nil
 	}
 	if h.pipeline != nil {
 		h.pipeline.Release()
@@ -175,6 +171,10 @@ func (h *webGPUHUDRenderer) Close() {
 	if h.bindGroup != nil {
 		h.bindGroup.Release()
 		h.bindGroup = nil
+	}
+	if h.sampler != nil {
+		h.sampler.Release()
+		h.sampler = nil
 	}
 	if h.layout != nil {
 		h.layout.Release()
@@ -367,12 +367,13 @@ func (h *webGPUHUDRenderer) Draw(pass *wgpu.RenderPassEncoder, width, height uin
 	}
 	byteLen := len(b.vertices) * int(unsafe.Sizeof(webGPUHUDVertex{}))
 	bytes := unsafe.Slice((*byte)(unsafe.Pointer(&b.vertices[0])), byteLen)
-	if err := h.queue.WriteBuffer(h.vertexBuffer, 0, bytes); err != nil {
+	buffer, err := h.uploads.write(h.device, h.queue, bytes, gputypes.BufferUsageVertex)
+	if err != nil {
 		return fmt.Errorf("upload WebGPU HUD vertices: %w", err)
 	}
 	pass.SetPipeline(h.pipeline)
 	pass.SetBindGroup(0, h.bindGroup, nil)
-	pass.SetVertexBuffer(0, h.vertexBuffer, 0)
+	pass.SetVertexBuffer(0, buffer, 0)
 	pass.Draw(gputypes.DrawArgs{VertexCount: uint32(len(b.vertices)), InstanceCount: 1})
 	return nil
 }

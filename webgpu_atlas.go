@@ -11,6 +11,7 @@ import (
 )
 
 type webGPUAtlasAnimation struct {
+	mips           []webGPUMip
 	frames         [][]byte
 	width, height  uint32
 	bytesPerRow    uint32
@@ -225,14 +226,14 @@ func buildWebGPUBlockAtlas() (*webGPUBlockAtlas, error) {
 		}
 		if len(animationFrames) > 1 && frameSeconds > 0 {
 			animations = append(animations, webGPUAtlasAnimation{
-				frames:        animationFrames,
-				width:         uint32(tileW),
-				height:        uint32(tileH),
-				bytesPerRow:   animationBytesPerRow,
-				atlasX:        uint32(col*atlasCellSize + atlasPadding),
-				atlasY:        uint32(row*atlasCellSize + atlasPadding),
-				frameSeconds:  frameSeconds,
-				index:         0,
+				frames:       animationFrames,
+				width:        uint32(tileW),
+				height:       uint32(tileH),
+				bytesPerRow:  animationBytesPerRow,
+				atlasX:       uint32(col*atlasCellSize + atlasPadding),
+				atlasY:       uint32(row*atlasCellSize + atlasPadding),
+				frameSeconds: frameSeconds,
+				index:        0,
 			})
 		}
 	}

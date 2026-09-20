@@ -49,7 +49,7 @@ var (
 	server *Server
 	input  *InputState
 	assets *RenderAssets
-	camera rl.Camera3D
+	camera gameCamera
 
 	// Menu Resources
 	ui           *UIComponents
@@ -111,11 +111,13 @@ func main() {
 	defer rl.CloseWindow()
 
 	var mobErr error
-	mobsRenderer, mobErr = newMobRenderer(mobContent)
+	if !*useWebGPU {
+		mobsRenderer, mobErr = newMobRenderer(mobContent)
+	}
 	if mobErr != nil {
 		fmt.Printf("Mob visuals unavailable; using placeholder: %v\n", mobErr)
 	}
-	defer mobsRenderer.Close()
+	defer func() { mobsRenderer.Close() }()
 	platform.InitGLOnce()
 	rl.SetTargetFPS(60)
 
@@ -175,7 +177,7 @@ func main() {
 					quitRequested = true
 				}
 			}
-			perfMon.Update()
+			perfMon.UpdateFrame(gameFrameTime())
 			if remaining := webGPUFrameInterval - time.Since(frameStarted); remaining > 0 {
 				time.Sleep(remaining)
 			}
@@ -199,7 +201,7 @@ func main() {
 		}
 
 		rl.EndDrawing()
-		perfMon.Update()
+		perfMon.UpdateFrame(rl.GetFrameTime())
 	}
 
 	// Cleanup on Exit

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
-	rl "github.com/gen2brain/raylib-go/raylib"
 	"os"
 	"path/filepath"
 )
@@ -28,7 +27,7 @@ func SavePlayerState(savePath string, x, y, z float32, selectedSlot int, hotbar 
 	return writeSaveFile(path, buf.Bytes())
 }
 
-func loadPlayerFile(root string, state *InputState, camera *rl.Camera3D, world *World) error {
+func loadPlayerFile(root string, state *InputState, camera *gameCamera, world *World) error {
 	path := filepath.Join(root, playerFile)
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -48,7 +47,7 @@ func loadPlayerFile(root string, state *InputState, camera *rl.Camera3D, world *
 	if hotbarLen != len(state.Hotbar) {
 		return errors.New("player hotbar size mismatch")
 	}
-	if len(data) < 7+hotbarLen {
+	if len(data) < 7+hotbarLen+12+4 {
 		return errors.New("player save truncated")
 	}
 	copy(state.Hotbar[:], data[7:7+hotbarLen])

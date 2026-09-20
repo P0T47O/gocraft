@@ -1,5 +1,30 @@
 # WebGPU renderer experiment
 
+## Optimization and dependency cleanup (2026-09-20)
+
+### Follow-up: texture sharpness and mip disable
+
+The Vulkan HAL in the pinned dependency interprets sampler `LodMaxClamp=0` as unlimited. Mipmap-off and HUD now bind a view exposing only mip zero; the world retains a full-chain view for mipmap-on. A scalar clamp alone is insufficient.
+
+AF requires linear sampler filters, but magnified pixel art now uses explicit base-level texel loads when its screen-space footprint is at most one texel. Minification retains the anisotropic/mipmap sampler. Derivatives and implicit-LOD sampling are evaluated before the varying branch.
+
+`GOCRAFT_WEBGPU_REGRESSION=1 go test . -run TestWebGPUMipStabilityGPU -v -count=1` verifies eight translated textured frames with updates to a neighboring animated atlas cell, then verifies actual mip-on/off/on selection using color-coded mip levels. On RTX 5060/Vulkan, the near checker range improved from 56–199 in the initial frame to 0–255 and remained 0–255 throughout the movement sequence. The mip toggle reads blue/red/blue as expected. This synthetic test does **not** fully reproduce the reported whole-scene sudden blur while walking.
+
+- Live world/entity vertices are 24 bytes (position, UV, RGBA); diagnostic backends keep the original normal-bearing 36-byte payload. This reduces vertex bytes by one third, not total VRAM by one third.
+- HUD/text/entity draws use persistent per-frame upload slots. Separate draws never overwrite the same destination before the frame submission; slots grow geometrically and are reused next frame.
+- World atlas has mip levels 0–4. Settings apply mipmap and AF 1/2/4/8/16 through sampler/bind-group replacement. AF uses linear min/mag/mip filtering as required by WebGPU, with magnification handled by base texel loads; 16x restricts max LOD to 3 for atlas padding. Disabling mipmaps binds a mip-zero-only view. HUD uses a separate nearest sampler and base-only view.
+- Animated atlas updates refresh the entire extruded cell and every mip, using reusable scratch storage. RGB downsampling is alpha-weighted to avoid transparent-black fringes.
+- Entities are culled using conservative rotation/animation-independent bounds and render distance, then CPU batches are reused and split instead of failing at the old fixed capacity. Models still animate on CPU; instancing/skinning is not implemented.
+- Solid world geometry uses backface culling; cutout vegetation, entities and translucent surfaces retain double-sided pipelines. Six-face winding and the compact pipeline are regression-tested.
+- WebGPU sessions no longer initialize legacy game textures, models, icons, shaders or materials. Initialization happens before workers start; failure falls back to OpenGL resource loading. Raylib remains the window/input/menu owner.
+- CPU chunk meshing, mesh lighting/tint/math, shared mesh handles, filtering policy, frame snapshots and settings persistence no longer directly import Raylib. Legacy upload/window adaptation remains in explicitly separated files.
+
+Validation: full Go tests, vet, build and code-index checks. Opt-in `GOCRAFT_WEBGPU_REGRESSION=1 go test . -run TestWebGPUUIUploadIsolationGPU -v -count=1` runs real **offscreen** GPU checks: two UI draws remain red/green across frame reuse, every filtering setting creates successfully, a compact blue triangle survives backface culling, and 1500 synthetic players span multiple entity batches. Observed adapter: RTX 5060 / Vulkan. This is not a full interactive gameplay or frame-rate benchmark.
+
+Remaining performance work: measure chunk buffer allocation/driver submission costs before introducing a bounded buffer pool, shared terrain arenas or indirect drawing. No shared terrain allocator or GPU-driven renderer is introduced in this change.
+
+The sections below record the earlier migration milestones.
+
 This branch is an isolated experiment for evaluating a WebGPU rendering backend without destabilizing `main`.
 
 ## Current status
@@ -64,3 +89,8 @@ The WebGPU path has been visually confirmed through textured terrain plus water/
 The live `-webgpu` Playing path must not call Raylib `BeginDrawing`/`EndDrawing`; Raylib only polls input while WebGPU owns presentation. The menu remains OpenGL until entering a game. On exit, the World is closed first so its WebGPU mesh buffers are released before the WebGPU device is destroyed and the mesh backend is reset to OpenGL.
 
 The GLFW/WGL warning observed when closing early probes occurred during Raylib's OpenGL-context teardown after WebGPU had presented into the same HWND. It was not a renderer failure in those probes, but the live integration should still be watched for teardown/context issues during local validation.
+# Raylib removal: camera and persistence boundary
+
+Gameplay now owns a renderer-neutral `gameCamera`; spawning, aiming, movement and legacy player saves use it directly. Only the legacy draw entry converts it to Raylib. Performance monitoring receives frame time from the main loop and no longer queries the window library. Player save regression tests cover round trips and every truncated byte length without mutating live state.
+
+This is a partial migration, not removal of the module: window/input ownership, menus, UI layout and legacy rendering/tests still require migration. No interactive window behavior was changed or visually verified in this step.

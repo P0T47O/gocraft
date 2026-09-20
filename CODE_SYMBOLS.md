@@ -8,7 +8,7 @@
 
 类型：`Collider`
 
-函数/方法：`moveCollider`、`colliderHits`
+函数/方法：`moveColliderCore`、`colliderHitsCore`
 
 ## [assets.go](assets.go)
 
@@ -24,7 +24,7 @@
 
 类型：`MeshBuildData`、`meshBuilder`
 
-函数/方法：`*meshBuilder.addFace`、`*meshBuilder.addFaceSmooth`、`*MeshBuildData.Reset`、`*RenderAssets.applyMeshData`、`*RenderAssets.isTransparent`、`*RenderAssets.getBiomeBaseColor`、`*RenderAssets.getClimateColor`、`*RenderAssets.shouldDrawFace`、`*RenderAssets.applyAO`、`*RenderAssets.buildAllMeshData`、`allocFloat32`、`allocUint8`、`allocUint16`
+函数/方法：`*meshBuilder.addFace`、`*meshBuilder.addFaceSmooth`、`*MeshBuildData.Reset`、`*RenderAssets.isTransparent`、`*RenderAssets.getBiomeBaseColor`、`*RenderAssets.getClimateColor`、`*RenderAssets.shouldDrawFace`、`*RenderAssets.applyAO`、`*RenderAssets.buildAllMeshData`、`allocFloat32`、`allocUint8`、`allocUint16`
 
 ## [client.go](client.go)
 
@@ -54,9 +54,25 @@
 
 函数/方法：`*BaseEntity.GetUUID`、`*BaseEntity.GetType`、`*BaseEntity.GetPosition`、`*BaseEntity.SetPosition`、`*BaseEntity.GetRotation`、`*BaseEntity.SetRotation`、`*BaseEntity.IsDirty`、`*BaseEntity.ClearDirty`、`*BaseEntity.Tick`、`*ItemEntity.Tick`、`*PlayerEntity.Tick`
 
+## [frame_time.go](frame_time.go)
+
+函数/方法：`setGameFrameTime`、`gameFrameTime`
+
+## [game_camera.go](game_camera.go)
+
+类型：`gameCamera`
+
+函数/方法：`newGameVec3`、`gameVec3Add`、`gameVec3Subtract`、`*InputState.InitFromCamera`、`*InputState.RayFromCenter`
+
 ## [game_entities.go](game_entities.go)
 
 函数/方法：`updateEntities`、`updateInterpolation`
+
+## [game_math.go](game_math.go)
+
+类型：`gameVec3`
+
+函数/方法：`gameVec3Scale`、`gameVec3Length`、`gameVec3Normalize`
 
 ## [game_packets.go](game_packets.go)
 
@@ -110,7 +126,11 @@
 
 类型：`InputState`
 
-函数/方法：`NewInputState`、`*InputState.InitFromCamera`、`*InputState.ToggleInventory`、`*InputState.UpdateCamera`、`*InputState.UpdateSelection`、`*InputState.RayFromCenter`、`resolveCollision`、`collides`、`isSolidBlock`、`blockIndexFromCoord`、`HandleInput`、`*InputState.UpdateInventoryPage`、`*InputState.UpdateInventorySelection`、`collidesWithBlock`
+函数/方法：`NewInputState`、`*InputState.ToggleInventory`、`*InputState.UpdateCamera`、`*InputState.UpdateSelection`、`resolveCollision`、`collides`、`isSolidBlock`、`blockIndexFromCoord`、`HandleInput`、`*InputState.UpdateInventoryPage`、`*InputState.UpdateInventorySelection`、`collidesWithBlock`
+
+## [input_physics_raylib.go](input_physics_raylib.go)
+
+函数/方法：`gameVec3FromRaylib`、`raylibVec3FromGame`、`moveCollider`、`colliderHits`、`feetSupported`、`touchesLiquid`、`*InputState.StepMovement`
 
 ## [inventory.go](inventory.go)
 
@@ -144,11 +164,19 @@
 
 函数/方法：`menuLayout`、`menuNavigate`、`drawMenuBackdrop`、`menuPanel`、`menuMessage`、`drawMenu`、`drawWorldMenu`、`drawCreateMenu`、`drawMultiplayerMenu`、`drawSettingsMenu`、`drawPauseMenu`
 
+## [mesh_color.go](mesh_color.go)
+
+函数/方法：`meshColor`
+
 ## [mesh_lighting.go](mesh_lighting.go)
 
 类型：`litFace`、`faceLightLayout`
 
 函数/方法：`sampleFaceLighting`、`*RenderAssets.applyAOSmooth`、`flipLightDiagonal`
+
+## [mesh_math.go](mesh_math.go)
+
+函数/方法：`meshVec3`、`meshCross`、`meshRotation`、`meshTransform`
 
 ## [mesh_tint.go](mesh_tint.go)
 
@@ -182,15 +210,19 @@
 
 函数/方法：`newMobRenderer`、`*MobRenderer.Close`、`mobPose`、`*MobRenderer.Draw`
 
+## [mob_render_bounds.go](mob_render_bounds.go)
+
+函数/方法：`mobBox`
+
 ## [mob_server.go](mob_server.go)
 
-函数/方法：`viewDirection`、`*Server.updateMobs`、`*Server.spawnNearbyMobs`
+函数/方法：`*Server.updateMobs`、`*Server.spawnNearbyMobs`
 
 ## [mob_simulation.go](mob_simulation.go)
 
 类型：`MobEntity`
 
-函数/方法：`newMob`、`*MobEntity.random`、`*MobEntity.hasBehavior`、`colliderLoaded`、`*MobEntity.Tick`、`mobBox`、`*MobEntity.hit`
+函数/方法：`newMob`、`*MobEntity.random`、`*MobEntity.hasBehavior`、`colliderLoaded`、`*MobEntity.Tick`、`*MobEntity.hit`
 
 ## [performance_loading.go](performance_loading.go)
 
@@ -202,7 +234,13 @@
 
 类型：`PerformanceMonitor`、`PerfMetrics`
 
-函数/方法：`NewPerformanceMonitor`、`*PerformanceMonitor.Close`、`*PerformanceMonitor.IncrementMeshBuild`、`*PerformanceMonitor.IncrementChunkLoad`、`*PerformanceMonitor.IncrementChunkUnload`、`*PerformanceMonitor.RecordTick`、`framePercentiles`、`*PerformanceMonitor.Update`、`*PerformanceMonitor.logMetrics`
+函数/方法：`NewPerformanceMonitor`、`*PerformanceMonitor.Close`、`*PerformanceMonitor.IncrementMeshBuild`、`*PerformanceMonitor.IncrementChunkLoad`、`*PerformanceMonitor.IncrementChunkUnload`、`*PerformanceMonitor.RecordTick`、`framePercentiles`、`*PerformanceMonitor.UpdateFrame`、`*PerformanceMonitor.logMetrics`
+
+## [platform/compact_vertex.go](platform/compact_vertex.go)
+
+类型：`CompactVertex`
+
+函数/方法：`PackCompactVertices`
 
 ## [platform/gl.go](platform/gl.go)
 
@@ -210,19 +248,31 @@
 
 ## [platform/mesh.go](platform/mesh.go)
 
-类型：`Mesh`、`Vertex`
+类型：`Vertex`、`Mesh`
 
-函数/方法：`UploadMesh`、`*Mesh.Draw`、`*Mesh.Unload`、`InitGLOnce`
+函数/方法：`UploadMesh`、`uploadOpenGLMesh`、`*Mesh.Draw`、`*Mesh.IndexCount`、`*Mesh.Unload`、`InitGLOnce`
+
+## [platform/renderer.go](platform/renderer.go)
+
+类型：`MeshHandle`、`MeshBackend`、`OpenGLMeshBackend`
+
+函数/方法：`OpenGLMeshBackend.Upload`、`OpenGLMeshBackend.Draw`、`SetMeshBackend`、`UploadRenderMesh`、`DrawRenderMesh`
 
 ## [platform/texture_filter.go](platform/texture_filter.go)
 
 函数/方法：`MaxTextureAnisotropy`
 
+## [platform/webgpu_backend.go](platform/webgpu_backend.go)
+
+类型：`WebGPUMeshBackend`、`webGPUMesh`
+
+函数/方法：`NewWebGPUMeshBackend`、`*WebGPUMeshBackend.Upload`、`*WebGPUMeshBackend.UploadChecked`、`*WebGPUMeshBackend.Draw`、`*WebGPUMeshBackend.DrawPass`、`*webGPUMesh.Draw`、`*webGPUMesh.IndexCount`、`*webGPUMesh.Unload`、`EnableExperimentalWebGPU`
+
 ## [player_movement.go](player_movement.go)
 
 类型：`MovementControls`
 
-函数/方法：`abs32`、`offsetAxis`、`blockAtPosition`、`feetSupported`、`touchesLiquid`、`*InputState.StepMovement`
+函数/方法：`abs32`、`offsetAxis`、`blockAtPosition`、`playerCollides`、`resolvePlayerCollision`、`feetSupportedCore`、`touchesLiquidCore`、`*InputState.stepMovementCore`
 
 ## [player_vitals.go](player_vitals.go)
 
@@ -278,13 +328,13 @@
 
 ## [render_animation.go](render_animation.go)
 
-函数/方法：`isAnimatedTexture`、`*RenderAssets.loadAnimatedTexture`、`*RenderAssets.Update`、`*RenderAssets.setTextureForPath`、`*RenderAssets.loadBlockTextures`、`*RenderAssets.getFaceModelAnimated`、`*RenderAssets.isAnimated`、`*RenderAssets.currentTexture`、`*RenderAssets.baseTexture`、`*RenderAssets.applyTextureToModel`
+函数/方法：`*RenderAssets.loadAnimatedTexture`、`*RenderAssets.Update`、`*RenderAssets.setTextureForPath`、`*RenderAssets.loadBlockTextures`、`*RenderAssets.getFaceModelAnimated`、`*RenderAssets.isAnimated`、`*RenderAssets.currentTexture`、`*RenderAssets.baseTexture`、`*RenderAssets.applyTextureToModel`
 
 ## [render_assets.go](render_assets.go)
 
-类型：`RenderAssets`、`AnimatedTexture`、`TextureAtlas`
+类型：`RenderAssets`、`AnimatedTexture`、`AtlasRect`、`TextureAtlas`
 
-函数/方法：`loadRenderAssets`、`*RenderAssets.unload`
+函数/方法：`newWebGPUCPUAssets`、`loadRenderAssets`、`*RenderAssets.unload`
 
 ## [render_atlas.go](render_atlas.go)
 
@@ -293,6 +343,10 @@
 ## [render_block.go](render_block.go)
 
 函数/方法：`*RenderAssets.drawBlock`
+
+## [render_camera_raylib.go](render_camera_raylib.go)
+
+函数/方法：`raylibCamera`
 
 ## [render_cull.go](render_cull.go)
 
@@ -306,7 +360,7 @@
 
 ## [render_filter.go](render_filter.go)
 
-函数/方法：`normalizeAnisotropy`、`supportedAnisotropy`、`safeAtlasMipLevel`、`configureWorldTexture`、`applyWorldTextureFiltering`、`atlasSourceCoordinate`
+函数/方法：`supportedAnisotropy`、`configureWorldTexture`、`applyWorldTextureFiltering`、`atlasSourceCoordinate`
 
 ## [render_icons.go](render_icons.go)
 
@@ -320,9 +374,19 @@
 
 ## [render_mesh.go](render_mesh.go)
 
-类型：`ChunkMesh`、`meshShaderState`、`meshRenderState`
+类型：`ChunkMesh`
 
-函数/方法：`*meshRenderState.reset`、`*meshRenderState.draw`、`*ChunkMesh.Draw`、`*ChunkMesh.unload`
+函数/方法：`*ChunkMesh.unload`
+
+## [render_mesh_opengl.go](render_mesh_opengl.go)
+
+类型：`meshShaderState`、`meshRenderState`
+
+函数/方法：`*meshRenderState.reset`、`*meshRenderState.draw`、`*ChunkMesh.Draw`
+
+## [render_mesh_upload.go](render_mesh_upload.go)
+
+函数/方法：`*RenderAssets.applyMeshData`
 
 ## [render_shaders.go](render_shaders.go)
 
@@ -410,7 +474,7 @@
 
 类型：`chunkPriority`
 
-函数/方法：`*Server.processChunkStreaming`、`streamingBatchSize`、`*Server.chunkOrderNeedsRefresh`、`chunkSendHasRoom`
+函数/方法：`*Server.processChunkStreaming`、`streamingBatchSize`、`*Server.chunkOrderNeedsRefresh`、`chunkStreamQueue`、`chunkSendHasRoom`
 
 ## [server_tick.go](server_tick.go)
 
@@ -420,13 +484,21 @@
 
 类型：`GameSettings`
 
-函数/方法：`renderDistance`、`clampRenderDistance`、`LoadSettings`、`SaveSettings`、`ApplySettings`
+函数/方法：`renderDistance`、`clampRenderDistance`、`LoadSettings`、`SaveSettings`
+
+## [settings_window_raylib.go](settings_window_raylib.go)
+
+函数/方法：`ApplySettings`
 
 ## [survival.go](survival.go)
 
 类型：`survivalPlayerSave`
 
 函数/方法：`saveSurvivalPlayers`、`loadSurvivalPlayers`、`*Server.hasCraftingStation`、`harvestTier`
+
+## [texture_policy.go](texture_policy.go)
+
+函数/方法：`normalizeAnisotropy`、`safeAtlasMipLevel`、`isAnimatedTexture`
 
 ## [tool_system.go](tool_system.go)
 
@@ -459,6 +531,88 @@
 ## [vitals_ui.go](vitals_ui.go)
 
 函数/方法：`*InputState.isDead`、`*InputState.updateRespawnRequest`、`drawVitalsHUD`、`drawDeathScreen`
+
+## [webgpu_animation_windows.go](webgpu_animation_windows.go)
+
+函数/方法：`updateWebGPUAtlasAnimations`、`resetWebGPUAtlasAnimations`
+
+## [webgpu_atlas.go](webgpu_atlas.go)
+
+类型：`webGPUAtlasAnimation`、`webGPUBlockAtlas`
+
+函数/方法：`webGPUAtlasSourceCoordinate`、`webGPUAtlasTile`、`buildWebGPUBlockAtlas`
+
+## [webgpu_camera_windows.go](webgpu_camera_windows.go)
+
+函数/方法：`webGPUCameraMatrices`、`*webGPUWorldRenderer.updateSceneCamera`、`*webGPUWorldRenderer.collectVisibleCamera`
+
+## [webgpu_container_windows.go](webgpu_container_windows.go)
+
+函数/方法：`drawWebGPUContainerOverlay`、`drawWebGPUFurnaceStatus`
+
+## [webgpu_entities_windows.go](webgpu_entities_windows.go)
+
+类型：`webGPUEntityRenderer`、`webGPUEntityBatch`、`webGPUMobPose`
+
+函数/方法：`ensureWebGPUEntityRenderer`、`closeWebGPUEntityRenderer`、`*webGPUEntityRenderer.Close`、`newWebGPUEntityBatch`、`webGPUEntityUV`、`webGPUEntitySubUV`、`webGPUEntityItemTexture`、`*webGPUEntityBatch.addQuad`、`rotateY`、`rotateXVec`、`rotateZVec`、`addVec3`、`*webGPUEntityBatch.addBox`、`*webGPUEntityBatch.addPlayer`、`*webGPUEntityBatch.addItem`、`webGPUMobFaceUVs`、`*webGPUEntityBatch.addMobBone`、`*webGPUEntityBatch.addMob`、`*webGPUEntityBatch.addMobPlaceholder`、`*webGPUEntityBatch.addMiningCrack`、`*webGPUEntityRenderer.Draw`
+
+## [webgpu_entity_bounds_windows.go](webgpu_entity_bounds_windows.go)
+
+函数/方法：`*webGPUEntityRenderer.entityRadius`
+
+## [webgpu_filter_windows.go](webgpu_filter_windows.go)
+
+函数/方法：`webGPUFilterSettings`、`webGPUAtlasSamplerDescriptor`、`*webGPUWorldRenderer.updateFiltering`、`*webGPUWorldRenderer.filteredAtlasView`
+
+## [webgpu_frame.go](webgpu_frame.go)
+
+类型：`webGPUPoint`、`webGPUVec3`、`webGPUCamera`、`webGPUFrameContext`
+
+## [webgpu_game_stub.go](webgpu_game_stub.go)
+
+函数/方法：`ensureExperimentalWebGPURenderer`、`drawExperimentalWebGPUFrame`、`closeExperimentalWebGPURenderer`
+
+## [webgpu_game_windows.go](webgpu_game_windows.go)
+
+函数/方法：`webGPUMousePosition`、`webGPUFrameFromRaylib`、`ensureExperimentalWebGPURenderer`、`drawExperimentalWebGPUFrame`、`closeExperimentalWebGPURenderer`
+
+## [webgpu_gameplay_windows.go](webgpu_gameplay_windows.go)
+
+函数/方法：`*webGPUWorldRenderer.DrawGameplay`
+
+## [webgpu_hud_windows.go](webgpu_hud_windows.go)
+
+类型：`webGPUHUDVertex`、`webGPUHUDRenderer`、`webGPUHUDBuilder`
+
+函数/方法：`ensureWebGPUHUDRenderer`、`closeWebGPUHUDRenderer`、`*webGPUHUDRenderer.Close`、`newWebGPUHUDBuilder`、`*webGPUHUDBuilder.point`、`*webGPUHUDBuilder.rect`、`*webGPUHUDBuilder.texturedRect`、`*webGPUHUDBuilder.border`、`webGPUHUDScale`、`*webGPUHUDBuilder.addCrosshair`、`webGPUHUDHotbarBlock`、`*webGPUHUDBuilder.addBlockIcon`、`*webGPUHUDBuilder.addHotbar`、`*webGPUHUDBuilder.addVitals`、`*webGPUHUDRenderer.Draw`
+
+## [webgpu_inventory_windows.go](webgpu_inventory_windows.go)
+
+函数/方法：`*webGPUHUDRenderer.drawPrepared`、`*webGPUTextRenderer.drawPrepared`、`webGPUItemUV`、`*webGPUHUDBuilder.addItemIcon`、`*webGPUHUDBuilder.addItemStack`、`webGPUAddStackText`、`drawWebGPUInventoryOverlay`、`drawWebGPUCreativeInventory`、`drawWebGPUSurvivalInventory`
+
+## [webgpu_mipmap.go](webgpu_mipmap.go)
+
+类型：`webGPUMip`
+
+函数/方法：`buildWebGPUMips`、`refreshWebGPUMips`、`*webGPUAtlasAnimation.mipFrame`
+
+## [webgpu_text_windows.go](webgpu_text_windows.go)
+
+类型：`webGPUTextVertex`、`webGPUTextRenderer`、`webGPUTextBatch`
+
+函数/方法：`ensureWebGPUTextRenderer`、`closeWebGPUTextRenderer`、`*webGPUTextRenderer.Close`、`newWebGPUTextBatch`、`*webGPUTextBatch.point`、`*webGPUTextBatch.glyph`、`webGPUTextRuneCode`、`*webGPUTextBatch.text`、`*webGPUTextBatch.shadowText`、`webGPUTextWidth`、`*webGPUTextBatch.centered`、`webGPUHotbarItem`、`*webGPUTextBatch.addHotbarText`、`*webGPUTextBatch.addVitalsText`、`*webGPUTextBatch.addChat`、`*webGPUTextBatch.addDebug`、`*webGPUTextBatch.addPauseAndDeath`、`*webGPUTextRenderer.Draw`、`buildWebGPUPixelFontAtlas`
+
+## [webgpu_upload_windows.go](webgpu_upload_windows.go)
+
+类型：`webGPUFrameUploads`
+
+函数/方法：`*webGPUFrameUploads.begin`、`*webGPUFrameUploads.write`、`*webGPUFrameUploads.close`
+
+## [webgpu_world_renderer_windows.go](webgpu_world_renderer_windows.go)
+
+类型：`webGPUWorldRenderer`
+
+函数/方法：`newWebGPUWorldRenderer`、`*webGPUWorldRenderer.createPipelineResources`、`*webGPUWorldRenderer.configureSurface`、`*webGPUWorldRenderer.drawMeshMap`、`*webGPUWorldRenderer.Close`、`*webGPUWorldRenderer.closeResources`
 
 ## [world_core.go](world_core.go)
 
@@ -512,7 +666,11 @@
 
 ## [world_ray.go](world_ray.go)
 
-函数/方法：`*World.HitTest`、`*World.rayCast`、`sign`、`axisDelta`、`axisMax`
+函数/方法：`*World.rayCast`、`sign`、`axisDelta`、`axisMax`
+
+## [world_ray_raylib.go](world_ray_raylib.go)
+
+函数/方法：`*World.HitTest`
 
 ## [world_render.go](world_render.go)
 

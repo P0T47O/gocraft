@@ -12,15 +12,31 @@ func startGame(savePath string, ip string, isMultiplayer bool) {
 	// Load Common Assets
 	// chunkPool = NewChunkPool(1024) // Share the global pool? Or new? Global is fine.
 	// initBlockRegistry() // Already initialized in main()
-	assets = loadRenderAssets()
+	if *useWebGPU {
+		assets = newWebGPUCPUAssets()
+		if err := ensureExperimentalWebGPURenderer(); err != nil {
+			fmt.Printf("WebGPU initialization failed, using OpenGL: %v\n", err)
+			closeExperimentalWebGPURenderer()
+			*useWebGPU = false
+			assets = loadRenderAssets()
+		}
+	} else {
+		assets = loadRenderAssets()
+	}
+	if !*useWebGPU && mobsRenderer == nil {
+		var err error
+		mobsRenderer, err = newMobRenderer(mobContent)
+		if err != nil {
+			fmt.Printf("Mob visuals unavailable: %v\n", err)
+		}
+	}
 
 	// Initialize Camera
-	camera = rl.Camera3D{
-		Position:   rl.NewVector3(8, 8, 20),
-		Target:     rl.NewVector3(8, 2, 8),
-		Up:         rl.NewVector3(0, 1, 0),
-		Fovy:       70,
-		Projection: rl.CameraPerspective,
+	camera = gameCamera{
+		Position: newGameVec3(8, 8, 20),
+		Target:   newGameVec3(8, 2, 8),
+		Up:       newGameVec3(0, 1, 0),
+		Fovy:     70,
 	}
 
 	var err error
@@ -32,6 +48,7 @@ func startGame(savePath string, ip string, isMultiplayer bool) {
 			fmt.Printf("Cannot start local server: %v\n", err)
 			server.World.Close()
 			server = nil
+			closeExperimentalWebGPURenderer()
 			assets.unload()
 			assets = nil
 			return

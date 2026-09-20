@@ -1,16 +1,16 @@
 package main
 
-import rl "github.com/gen2brain/raylib-go/raylib"
+import "image/color"
 
 // Immutable, shared by all sections and rebuilds of one chunk instance.
 type meshTintCache struct {
-	foliage, water [chunkWidth][chunkWidth]rl.Color
-	climate        [chunkWidth + 2][chunkWidth + 2]rl.Color
+	foliage, water [chunkWidth][chunkWidth]color.RGBA
+	climate        [chunkWidth + 2][chunkWidth + 2]color.RGBA
 }
 
 func (a *RenderAssets) buildMeshTintCache(seed uint32, baseX, baseZ int) *meshTintCache {
 	c := &meshTintCache{}
-	var colors [chunkWidth + 2][chunkWidth + 2][2]rl.Color
+	var colors [chunkWidth + 2][chunkWidth + 2][2]color.RGBA
 	for x := -1; x <= chunkWidth; x++ {
 		for z := -1; z <= chunkWidth; z++ {
 			e := sampleEnvironment(seed, baseX+x, baseZ+z)
@@ -32,7 +32,7 @@ func (a *RenderAssets) buildMeshTintCache(seed uint32, baseX, baseZ int) *meshTi
 						b += float32(col.B)
 					}
 				}
-				color := rl.NewColor(uint8(r/9), uint8(g/9), uint8(b/9), 255)
+				color := meshColor(uint8(r/9), uint8(g/9), uint8(b/9), 255)
 				if pass == 0 {
 					c.foliage[x][z] = color
 				} else {
@@ -44,7 +44,7 @@ func (a *RenderAssets) buildMeshTintCache(seed uint32, baseX, baseZ int) *meshTi
 	return c
 }
 
-func (a *RenderAssets) environmentColor(e environmentSample, water bool) rl.Color {
+func (a *RenderAssets) environmentColor(e environmentSample, water bool) color.RGBA {
 	var r, g, b float32
 	for i, w := range e.weights {
 		cr, cg, cb := a.getBiomeBaseColor(regionBiomes[i], water)
@@ -52,5 +52,5 @@ func (a *RenderAssets) environmentColor(e environmentSample, water bool) rl.Colo
 		g += cg * w
 		b += cb * w
 	}
-	return rl.NewColor(uint8(r), uint8(g), uint8(b), 255)
+	return meshColor(uint8(r), uint8(g), uint8(b), 255)
 }

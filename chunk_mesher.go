@@ -1,11 +1,10 @@
 package main
 
 import (
-	"gocraft/platform"
 	"sync"
 	"unsafe"
 
-	rl "github.com/gen2brain/raylib-go/raylib"
+	"image/color"
 )
 
 type MeshBuildData struct {
@@ -19,7 +18,7 @@ type MeshBuildData struct {
 
 type meshBuilder = MeshBuildData
 
-func (mb *meshBuilder) addFace(v []float32, n rl.Vector3, t []float32, c rl.Color) {
+func (mb *meshBuilder) addFace(v []float32, n gameVec3, t []float32, c color.RGBA) {
 	mb.vertices = append(mb.vertices, v...)
 	for i := 0; i < 4; i++ {
 		mb.normals = append(mb.normals, n.X, n.Y, n.Z)
@@ -31,7 +30,7 @@ func (mb *meshBuilder) addFace(v []float32, n rl.Vector3, t []float32, c rl.Colo
 	mb.vertCount += 4
 }
 
-func (mb *meshBuilder) addFaceSmooth(v []float32, n rl.Vector3, t []float32, colors []rl.Color) {
+func (mb *meshBuilder) addFaceSmooth(v []float32, n gameVec3, t []float32, colors []color.RGBA) {
 	mb.vertices = append(mb.vertices, v...)
 	for i := 0; i < 4; i++ {
 		mb.normals = append(mb.normals, n.X, n.Y, n.Z)
@@ -59,12 +58,6 @@ var meshBuilderPool = sync.Pool{
 	},
 }
 
-var interleaveBufferPool = sync.Pool{
-	New: func() interface{} {
-		return make([]platform.Vertex, 0, 4096)
-	},
-}
-
 func (mb *MeshBuildData) Reset() {
 	mb.vertices = mb.vertices[:0]
 	mb.normals = mb.normals[:0]
@@ -72,68 +65,6 @@ func (mb *MeshBuildData) Reset() {
 	mb.colors = mb.colors[:0]
 	mb.indices = mb.indices[:0]
 	mb.vertCount = 0
-}
-
-func (a *RenderAssets) applyMeshData(data map[string][]*MeshBuildData) map[string][]*ChunkMesh {
-	meshes := map[string][]*ChunkMesh{}
-	for path, list := range data {
-		var tex rl.Texture2D
-		if path == "atlas" && a.atlas != nil {
-			tex = a.atlas.Texture
-		} else {
-			tex = a.loadTexture(path)
-		}
-
-		for _, d := range list {
-			if d.vertCount == 0 {
-				d.Reset()
-				meshBuilderPool.Put(d)
-				continue
-			}
-
-			// Indices are already uint32
-			indices := d.indices
-
-			buffer := interleaveBufferPool.Get().([]platform.Vertex)
-			if cap(buffer) < d.vertCount {
-				buffer = make([]platform.Vertex, d.vertCount)
-			} else {
-				buffer = buffer[:d.vertCount]
-			}
-			for i := 0; i < d.vertCount; i++ {
-				buffer[i] = platform.Vertex{
-					Position: [3]float32{d.vertices[i*3], d.vertices[i*3+1], d.vertices[i*3+2]},
-					Texcoord: [2]float32{d.texcoords[i*2], d.texcoords[i*2+1]},
-					Color:    [4]uint8{d.colors[i*4], d.colors[i*4+1], d.colors[i*4+2], d.colors[i*4+3]},
-					Normal:   [3]float32{d.normals[i*3], d.normals[i*3+1], d.normals[i*3+2]},
-				}
-			}
-
-			// Upload to PureGL (Manual Memory Management)
-			// Note: UploadMesh likely copies the data, so we can reuse `buffer` immediately
-			glMesh := platform.UploadMesh(buffer, indices)
-
-			// Return buffer to pool
-			interleaveBufferPool.Put(buffer)
-
-			var material rl.Material
-			if path == "atlas" && a.atlas != nil {
-				material = a.getMaterial("atlas", tex)
-			} else {
-				material = a.getMaterial(path, tex)
-			}
-
-			meshes[path] = append(meshes[path], &ChunkMesh{
-				glMesh:   glMesh,
-				material: material,
-			})
-
-			// Return builder to pool
-			d.Reset()
-			meshBuilderPool.Put(d)
-		}
-	}
-	return meshes
 }
 
 func (a *RenderAssets) isTransparent(b byte) bool {
@@ -179,7 +110,7 @@ func (a *RenderAssets) getBiomeBaseColor(biomeID int, isWater bool) (float32, fl
 	}
 }
 
-func (a *RenderAssets) getClimateColor(seed uint32, x, z int) rl.Color {
+func (a *RenderAssets) getClimateColor(seed uint32, x, z int) color.RGBA {
 	temp, hum := getClimate(seed, x, z)
 
 	// Normalize roughly -1..1 to 0..1
@@ -198,17 +129,17 @@ func (a *RenderAssets) getClimateColor(seed uint32, x, z int) rl.Color {
 
 	// Simple Bilinear Interpolation of 4 corners of the "Color Map"
 	// Cold/Dry (T=0,H=0): Taiga/Tundra (Aqua Grey)
-	c00 := rl.NewColor(130, 180, 150, 255)
+	c00 := meshColor(130, 180, 150, 255)
 	// Hot/Dry (T=1,H=0): Desert (Olive Yellow)
-	c10 := rl.NewColor(190, 180, 80, 255)
+	c10 := meshColor(190, 180, 80, 255)
 	// Cold/Wet (T=0,H=1): Swamp/ColdForest (Dark Green)
-	c01 := rl.NewColor(80, 120, 80, 255) // Dull
+	c01 := meshColor(80, 120, 80, 255) // Dull
 	// Hot/Wet (T=1,H=1): Jungle (Vibrant Neon Green)
-	c11 := rl.NewColor(60, 230, 40, 255)
+	c11 := meshColor(60, 230, 40, 255)
 
 	// Lerp H first
-	lerpColor := func(a, b rl.Color, fw float32) rl.Color {
-		return rl.NewColor(
+	lerpColor := func(a, b color.RGBA, fw float32) color.RGBA {
+		return meshColor(
 			uint8(float32(a.R)+float32(int(b.R)-int(a.R))*fw),
 			uint8(float32(a.G)+float32(int(b.G)-int(a.G))*fw),
 			uint8(float32(a.B)+float32(int(b.B)-int(a.B))*fw),
@@ -247,10 +178,10 @@ func (a *RenderAssets) shouldDrawFace(block byte, neighbor byte) bool {
 	return false
 }
 
-func (a *RenderAssets) applyAO(block byte, col rl.Color, ao float32, useGrass bool, light byte, tintColor rl.Color) rl.Color {
+func (a *RenderAssets) applyAO(block byte, col color.RGBA, ao float32, useGrass bool, light byte, tintColor color.RGBA) color.RGBA {
 	// Apply Tint if valid (alpha > 0)
 	if tintColor.A > 0 {
-		col = rl.NewColor(
+		col = meshColor(
 			uint8(float32(col.R)*float32(tintColor.R)/255.0),
 			uint8(float32(col.G)*float32(tintColor.G)/255.0),
 			uint8(float32(col.B)*float32(tintColor.B)/255.0),
@@ -271,7 +202,7 @@ func (a *RenderAssets) applyAO(block byte, col rl.Color, ao float32, useGrass bo
 	}
 	lightF := 0.1 + (float32(light)/15.0)*0.9
 	f *= lightF
-	return rl.NewColor(
+	return meshColor(
 		uint8(float32(col.R)*f),
 		uint8(float32(col.G)*f),
 		uint8(float32(col.B)*f),
@@ -280,12 +211,12 @@ func (a *RenderAssets) applyAO(block byte, col rl.Color, ao float32, useGrass bo
 }
 
 func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16, baseX, baseZ int, yMin, yMax int, getBlock BlockGetter, getLight LightGetter, getMeta MetaGetter, seed uint32, cachedTints ...*meshTintCache) map[string]map[string][]*MeshBuildData {
-	white := rl.NewColor(255, 255, 255, 255)
-	northTint := rl.NewColor(210, 210, 210, 255)
-	southTint := rl.NewColor(225, 225, 225, 255)
-	westTint := rl.NewColor(200, 200, 200, 255)
-	eastTint := rl.NewColor(190, 190, 190, 255)
-	bottomTint := rl.NewColor(140, 140, 140, 255)
+	white := meshColor(255, 255, 255, 255)
+	northTint := meshColor(210, 210, 210, 255)
+	southTint := meshColor(225, 225, 225, 255)
+	westTint := meshColor(200, 200, 200, 255)
+	eastTint := meshColor(190, 190, 190, 255)
+	bottomTint := meshColor(140, 140, 140, 255)
 
 	results := map[string]map[string][]*MeshBuildData{
 		"opaque": {},
@@ -349,8 +280,8 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 			smoothWater := tintCache.water[x][z]
 
 			// Fixed Tints
-			birchColor := rl.NewColor(128, 167, 85, 255)
-			spruceColor := rl.NewColor(97, 153, 97, 255)
+			birchColor := meshColor(128, 167, 85, 255)
+			spruceColor := meshColor(97, 153, 97, 255)
 
 			for y := yMin; y < yMax; y++ {
 				wx, wz := baseX+x, baseZ+z
@@ -362,7 +293,7 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 				}
 
 				// Determine Tint for this block
-				tintColor := rl.NewColor(0, 0, 0, 0) // No tint
+				tintColor := meshColor(0, 0, 0, 0) // No tint
 
 				if block == blockWater {
 					tintColor = smoothWater
@@ -389,56 +320,56 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 					meta := getMeta(wx, y, wz)
 
 					// Stem Dimensions (1x1 unit base = 1 pixel scale? No, base mesh is 1 unit)
-					// stemScale := rl.NewVector3(0.125, 0.625, 0.125)
+					// stemScale := meshVec3(0.125, 0.625, 0.125)
 					// This means 2x10x2 pixels
 
 					// Rotation Logic
 					// Default (Up)
-					var rotationAxis rl.Vector3 = rl.NewVector3(0, 1, 0)
+					var rotationAxis gameVec3 = meshVec3(0, 1, 0)
 					var rotationAngle float32 = 0
 
-					var offset rl.Vector3 = rl.NewVector3(0, -0.04, 0) // Base Y offset
+					var offset gameVec3 = meshVec3(0, -0.04, 0) // Base Y offset
 
 					wallOffset := float32(0.4375)                // 7/16
 					tiltAngle := float32(22.5 * 3.14159 / 180.0) // Radians
 
 					switch meta {
 					case 1: // North (Z-)
-						dir := rl.NewVector3(0, 0, -1)
+						dir := meshVec3(0, 0, -1)
 						offset.Z += wallOffset
-						rotationAxis = rl.Vector3CrossProduct(rl.NewVector3(0, 1, 0), dir)
+						rotationAxis = meshCross(meshVec3(0, 1, 0), dir)
 						rotationAngle = tiltAngle
 					case 2: // South (Z+)
-						dir := rl.NewVector3(0, 0, 1)
+						dir := meshVec3(0, 0, 1)
 						offset.Z -= wallOffset
-						rotationAxis = rl.Vector3CrossProduct(rl.NewVector3(0, 1, 0), dir)
+						rotationAxis = meshCross(meshVec3(0, 1, 0), dir)
 						rotationAngle = tiltAngle
 					case 3: // West (X-)
-						dir := rl.NewVector3(-1, 0, 0)
+						dir := meshVec3(-1, 0, 0)
 						offset.X += wallOffset
-						rotationAxis = rl.Vector3CrossProduct(rl.NewVector3(0, 1, 0), dir)
+						rotationAxis = meshCross(meshVec3(0, 1, 0), dir)
 						rotationAngle = tiltAngle
 					case 4: // East (X+)
-						dir := rl.NewVector3(1, 0, 0)
+						dir := meshVec3(1, 0, 0)
 						offset.X -= wallOffset
-						rotationAxis = rl.Vector3CrossProduct(rl.NewVector3(0, 1, 0), dir)
+						rotationAxis = meshCross(meshVec3(0, 1, 0), dir)
 						rotationAngle = tiltAngle
 					}
 
 					// We need a custom AddFace that transforms vertices
-					addTransformedFace := func(builder *meshBuilder, v []float32, vScale rl.Vector3, uvs []float32) {
+					addTransformedFace := func(builder *meshBuilder, v []float32, vScale gameVec3, uvs []float32) {
 						// v usually 12 floats (4 vertices * 3 coords)
 						transformedV := make([]float32, 12)
 						// Create rotation matrix
-						mat := rl.MatrixRotate(rotationAxis, rotationAngle)
+						mat := meshRotation(rotationAxis, rotationAngle)
 
 						for i := 0; i < 4; i++ {
 							vx := v[i*3] * vScale.X
 							vy := v[i*3+1] * vScale.Y
 							vz := v[i*3+2] * vScale.Z
 
-							vec := rl.NewVector3(vx, vy, vz)
-							vec = rl.Vector3Transform(vec, mat)
+							vec := meshVec3(vx, vy, vz)
+							vec = meshTransform(vec, mat)
 
 							transformedV[i*3] = px + offset.X + vec.X
 							transformedV[i*3+1] = py + offset.Y + vec.Y
@@ -447,8 +378,8 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 
 						// Calculate Normal (approximate or rotated)
 						// For now simple Up/Side but rotated
-						n := rl.NewVector3(0, 1, 0) // Placeholder
-						n = rl.Vector3Transform(n, mat)
+						n := meshVec3(0, 1, 0) // Placeholder
+						n = meshTransform(n, mat)
 
 						builder.addFace(transformedV, n, uvs, col)
 					}
@@ -458,7 +389,7 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 					// I'll copy the UV logic from render_assets.go initFaceMeshes.
 
 					// STEM
-					stemS := rl.NewVector3(0.125, 0.625, 0.125)
+					stemS := meshVec3(0.125, 0.625, 0.125)
 
 					builder := getBuilder("cutout", textures.North) // Use same texture for all
 
@@ -485,12 +416,12 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 					// We need to shift the flame relative to that.
 					// flameCenterLocal = (0, 0.4375, 0)
 
-					flameOffset := rl.NewVector3(0, 0.4375, 0)
+					flameOffset := meshVec3(0, 0.4375, 0)
 
 					// Modify addTransformedFace to accept local shift
-					addTransformedFaceShifted := func(builder *meshBuilder, v []float32, vScale rl.Vector3, uvs []float32, shift rl.Vector3) {
+					addTransformedFaceShifted := func(builder *meshBuilder, v []float32, vScale gameVec3, uvs []float32, shift gameVec3) {
 						transformedV := make([]float32, 12)
-						mat := rl.MatrixRotate(rotationAxis, rotationAngle)
+						mat := meshRotation(rotationAxis, rotationAngle)
 
 						for i := 0; i < 4; i++ {
 							// Apply Scale
@@ -504,8 +435,8 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 							vz += shift.Z
 
 							// Apply Rotation
-							vec := rl.NewVector3(vx, vy, vz)
-							vec = rl.Vector3Transform(vec, mat)
+							vec := meshVec3(vx, vy, vz)
+							vec = meshTransform(vec, mat)
 
 							// Translate to World
 							transformedV[i*3] = px + offset.X + vec.X
@@ -513,12 +444,12 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 							transformedV[i*3+2] = pz + offset.Z + vec.Z
 						}
 						// Normal
-						n := rl.NewVector3(0, 1, 0)
-						n = rl.Vector3Transform(n, mat)
+						n := meshVec3(0, 1, 0)
+						n = meshTransform(n, mat)
 						builder.addFace(transformedV, n, uvs, col)
 					}
 
-					flameS := rl.NewVector3(0.5, 0.5, 0.5)
+					flameS := meshVec3(0.5, 0.5, 0.5)
 
 					// Flame Faces
 					addTransformedFaceShifted(builder, []float32{-0.5, 0.5, -0.5, 0.5, 0.5, -0.5, 0.5, -0.5, -0.5, -0.5, -0.5, -0.5}, flameS, []float32{0.4375, 0.0, 0.5625, 0.0, 0.5625, 0.375, 0.4375, 0.375}, flameOffset)
@@ -580,7 +511,7 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 							px + 0.4, py - 0.5, pz + 0.4,
 							px - 0.4, py - 0.5, pz - 0.4,
 						},
-						rl.NewVector3(1, 0, -1),
+						meshVec3(1, 0, -1),
 						uvsF,
 						col,
 					)
@@ -592,7 +523,7 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 							px - 0.4, py - 0.5, pz - 0.4,
 							px + 0.4, py - 0.5, pz + 0.4,
 						},
-						rl.NewVector3(-1, 0, 1),
+						meshVec3(-1, 0, 1),
 						uvsB,
 						col,
 					)
@@ -606,7 +537,7 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 							px + 0.4, py - 0.5, pz - 0.4,
 							px - 0.4, py - 0.5, pz + 0.4,
 						},
-						rl.NewVector3(1, 0, 1),
+						meshVec3(1, 0, 1),
 						uvsF,
 						col,
 					)
@@ -618,7 +549,7 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 							px - 0.4, py - 0.5, pz + 0.4,
 							px + 0.4, py - 0.5, pz - 0.4,
 						},
-						rl.NewVector3(-1, 0, -1),
+						meshVec3(-1, 0, -1),
 						uvsB,
 						col,
 					)
@@ -654,7 +585,7 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 
 						getBuilder(pass, usePath).addFace(
 							[]float32{px - cactusExt, py + 0.5, pz + cactusExt, px + cactusExt, py + 0.5, pz + cactusExt, px + cactusExt, py + 0.5, pz - cactusExt, px - cactusExt, py + 0.5, pz - cactusExt},
-							rl.NewVector3(0, 1, 0),
+							meshVec3(0, 1, 0),
 							uvs, col,
 						)
 					}
@@ -683,7 +614,7 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 
 						getBuilder(pass, usePath).addFace(
 							[]float32{px - cactusExt, py - 0.5, pz - cactusExt, px + cactusExt, py - 0.5, pz - cactusExt, px + cactusExt, py - 0.5, pz + cactusExt, px - cactusExt, py - 0.5, pz + cactusExt},
-							rl.NewVector3(0, -1, 0),
+							meshVec3(0, -1, 0),
 							uvs, col,
 						)
 					}
@@ -710,7 +641,7 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 
 						getBuilder(pass, usePath).addFace(
 							[]float32{px - cactusExt, py + 0.5, pz - cactusExt, px + cactusExt, py + 0.5, pz - cactusExt, px + cactusExt, py - 0.5, pz - cactusExt, px - cactusExt, py - 0.5, pz - cactusExt},
-							rl.NewVector3(0, 0, -1),
+							meshVec3(0, 0, -1),
 							uvs, col,
 						)
 					}
@@ -739,7 +670,7 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 
 						getBuilder(pass, usePath).addFace(
 							[]float32{px + cactusExt, py + 0.5, pz + cactusExt, px - cactusExt, py + 0.5, pz + cactusExt, px - cactusExt, py - 0.5, pz + cactusExt, px + cactusExt, py - 0.5, pz + cactusExt},
-							rl.NewVector3(0, 0, 1),
+							meshVec3(0, 0, 1),
 							uvs, col,
 						)
 					}
@@ -768,7 +699,7 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 
 						getBuilder(pass, usePath).addFace(
 							[]float32{px + cactusExt, py + 0.5, pz - cactusExt, px + cactusExt, py + 0.5, pz + cactusExt, px + cactusExt, py - 0.5, pz + cactusExt, px + cactusExt, py - 0.5, pz - cactusExt},
-							rl.NewVector3(1, 0, 0),
+							meshVec3(1, 0, 0),
 							uvs, col,
 						)
 					}
@@ -797,7 +728,7 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 
 						getBuilder(pass, usePath).addFace(
 							[]float32{px - cactusExt, py + 0.5, pz + cactusExt, px - cactusExt, py + 0.5, pz - cactusExt, px - cactusExt, py - 0.5, pz - cactusExt, px - cactusExt, py - 0.5, pz + cactusExt},
-							rl.NewVector3(-1, 0, 0),
+							meshVec3(-1, 0, 0),
 							uvs, col,
 						)
 					}
@@ -810,13 +741,13 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 
 					// Top of Grass Block
 					// Only use Tint if it's Grass Block Top
-					var colors []rl.Color
+					var colors []color.RGBA
 					if block == blockGrass {
 						// Smooth Biome Blending
 						// Calculate 4 vertex colors
 
 						// Helper to get average color of 4 blocks touching a corner
-						getCornerColor := func(cx, cz int) rl.Color {
+						getCornerColor := func(cx, cz int) color.RGBA {
 							// cx, cz are directions relative to wx, wz. e.g. -1, -1 for TL
 							rs, gs, bs := float32(0), float32(0), float32(0)
 							// Helper to add
@@ -830,7 +761,7 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 							add(cx, 0)
 							add(0, cz)
 							add(cx, cz)
-							return rl.NewColor(uint8(rs/4), uint8(gs/4), uint8(bs/4), 255)
+							return meshColor(uint8(rs/4), uint8(gs/4), uint8(bs/4), 255)
 						}
 
 						// Vertices match indices:
@@ -843,12 +774,12 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 						// 3: px-0.5, pz-0.5 (Left-Top) -> X-1, Z-1
 						t3 := getCornerColor(-1, -1)
 
-						tints := []rl.Color{t0, t1, t2, t3}
+						tints := []color.RGBA{t0, t1, t2, t3}
 						colors = a.applyAOSmooth(block, white, aos, lights, tints)
 					} else {
 						// Standard Block (Flat Tint)
 						// Make 4 copies of tint
-						tints := []rl.Color{tintColor, tintColor, tintColor, tintColor}
+						tints := []color.RGBA{tintColor, tintColor, tintColor, tintColor}
 						colors = a.applyAOSmooth(block, white, aos, lights, tints)
 					}
 
@@ -866,7 +797,7 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 
 					getBuilder(pass, usePath).addFaceSmooth(
 						[]float32{px - 0.5, py + 0.5, pz + 0.5, px + 0.5, py + 0.5, pz + 0.5, px + 0.5, py + 0.5, pz - 0.5, px - 0.5, py + 0.5, pz - 0.5},
-						rl.NewVector3(0, 1, 0),
+						meshVec3(0, 1, 0),
 						uvs,
 						colors,
 					)
@@ -877,10 +808,10 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 
 					bottomTintCol := tintColor
 					if block == blockGrass {
-						bottomTintCol = rl.NewColor(0, 0, 0, 0)
+						bottomTintCol = meshColor(0, 0, 0, 0)
 					}
 					// Replicate tint 4 times
-					tints := []rl.Color{bottomTintCol, bottomTintCol, bottomTintCol, bottomTintCol}
+					tints := []color.RGBA{bottomTintCol, bottomTintCol, bottomTintCol, bottomTintCol}
 
 					colors := a.applyAOSmooth(block, bottomTint, aos, lights, tints)
 
@@ -898,7 +829,7 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 
 					getBuilder(pass, usePath).addFaceSmooth(
 						[]float32{px - 0.5, py - 0.5, pz + 0.5, px - 0.5, py - 0.5, pz - 0.5, px + 0.5, py - 0.5, pz - 0.5, px + 0.5, py - 0.5, pz + 0.5},
-						rl.NewVector3(0, -1, 0),
+						meshVec3(0, -1, 0),
 						uvs,
 						colors,
 					)
@@ -909,9 +840,9 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 
 					sideTintCol := tintColor
 					if block == blockGrass {
-						sideTintCol = rl.NewColor(0, 0, 0, 0)
+						sideTintCol = meshColor(0, 0, 0, 0)
 					}
-					tints := []rl.Color{sideTintCol, sideTintCol, sideTintCol, sideTintCol}
+					tints := []color.RGBA{sideTintCol, sideTintCol, sideTintCol, sideTintCol}
 					colors := a.applyAOSmooth(block, northTint, aos, lights, tints)
 
 					usePath := textures.North
@@ -928,7 +859,7 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 
 					getBuilder(pass, usePath).addFaceSmooth(
 						[]float32{px - 0.5, py + 0.5, pz - 0.5, px + 0.5, py + 0.5, pz - 0.5, px + 0.5, py - 0.5, pz - 0.5, px - 0.5, py - 0.5, pz - 0.5},
-						rl.NewVector3(0, 0, -1),
+						meshVec3(0, 0, -1),
 						uvs,
 						colors,
 					)
@@ -968,12 +899,12 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 						// Let's just use smoothFoliage (calculated at column start) for all 4 overlay verts.
 						// It's close enough.
 
-						ovTints := []rl.Color{smoothFoliage, smoothFoliage, smoothFoliage, smoothFoliage}
+						ovTints := []color.RGBA{smoothFoliage, smoothFoliage, smoothFoliage, smoothFoliage}
 						ovColors := a.applyAOSmooth(block, white, aos, lights, ovTints)
 
 						getBuilder(oPass, oPath).addFaceSmooth(
 							[]float32{px - 0.5, py + 0.5, pz - oDisp, px + 0.5, py + 0.5, pz - oDisp, px + 0.5, py - 0.5, pz - oDisp, px - 0.5, py - 0.5, pz - oDisp},
-							rl.NewVector3(0, 0, -1),
+							meshVec3(0, 0, -1),
 							oUVs,
 							ovColors,
 						)
@@ -985,9 +916,9 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 
 					sideTintCol := tintColor
 					if block == blockGrass {
-						sideTintCol = rl.NewColor(0, 0, 0, 0)
+						sideTintCol = meshColor(0, 0, 0, 0)
 					}
-					tints := []rl.Color{sideTintCol, sideTintCol, sideTintCol, sideTintCol}
+					tints := []color.RGBA{sideTintCol, sideTintCol, sideTintCol, sideTintCol}
 					colors := a.applyAOSmooth(block, southTint, aos, lights, tints)
 
 					usePath := textures.South
@@ -1004,7 +935,7 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 
 					getBuilder(pass, usePath).addFaceSmooth(
 						[]float32{px + 0.5, py + 0.5, pz + 0.5, px - 0.5, py + 0.5, pz + 0.5, px - 0.5, py - 0.5, pz + 0.5, px + 0.5, py - 0.5, pz + 0.5},
-						rl.NewVector3(0, 0, 1),
+						meshVec3(0, 0, 1),
 						uvs,
 						colors,
 					)
@@ -1024,12 +955,12 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 							}
 						}
 
-						ovTints := []rl.Color{smoothFoliage, smoothFoliage, smoothFoliage, smoothFoliage}
+						ovTints := []color.RGBA{smoothFoliage, smoothFoliage, smoothFoliage, smoothFoliage}
 						ovColors := a.applyAOSmooth(block, white, aos, lights, ovTints)
 
 						getBuilder(oPass, oPath).addFaceSmooth(
 							[]float32{px + 0.5, py + 0.5, pz + oDisp, px - 0.5, py + 0.5, pz + oDisp, px - 0.5, py - 0.5, pz + oDisp, px + 0.5, py - 0.5, pz + oDisp},
-							rl.NewVector3(0, 0, 1),
+							meshVec3(0, 0, 1),
 							oUVs,
 							ovColors,
 						)
@@ -1041,9 +972,9 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 
 					sideTintCol := tintColor
 					if block == blockGrass {
-						sideTintCol = rl.NewColor(0, 0, 0, 0)
+						sideTintCol = meshColor(0, 0, 0, 0)
 					}
-					tints := []rl.Color{sideTintCol, sideTintCol, sideTintCol, sideTintCol}
+					tints := []color.RGBA{sideTintCol, sideTintCol, sideTintCol, sideTintCol}
 					colors := a.applyAOSmooth(block, eastTint, aos, lights, tints)
 
 					usePath := textures.East
@@ -1060,7 +991,7 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 
 					getBuilder(pass, usePath).addFaceSmooth(
 						[]float32{px + 0.5, py + 0.5, pz - 0.5, px + 0.5, py + 0.5, pz + 0.5, px + 0.5, py - 0.5, pz + 0.5, px + 0.5, py - 0.5, pz - 0.5},
-						rl.NewVector3(1, 0, 0),
+						meshVec3(1, 0, 0),
 						uvs,
 						colors,
 					)
@@ -1080,12 +1011,12 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 							}
 						}
 
-						ovTints := []rl.Color{smoothFoliage, smoothFoliage, smoothFoliage, smoothFoliage}
+						ovTints := []color.RGBA{smoothFoliage, smoothFoliage, smoothFoliage, smoothFoliage}
 						ovColors := a.applyAOSmooth(block, white, aos, lights, ovTints)
 
 						getBuilder(oPass, oPath).addFaceSmooth(
 							[]float32{px + 0.5, py + 0.5, pz - oDisp, px + 0.5, py + 0.5, pz + oDisp, px + 0.5, py - 0.5, pz + oDisp, px + 0.5, py - 0.5, pz - oDisp},
-							rl.NewVector3(1, 0, 0),
+							meshVec3(1, 0, 0),
 							oUVs,
 							ovColors,
 						)
@@ -1097,9 +1028,9 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 
 					sideTintCol := tintColor
 					if block == blockGrass {
-						sideTintCol = rl.NewColor(0, 0, 0, 0)
+						sideTintCol = meshColor(0, 0, 0, 0)
 					}
-					tints := []rl.Color{sideTintCol, sideTintCol, sideTintCol, sideTintCol}
+					tints := []color.RGBA{sideTintCol, sideTintCol, sideTintCol, sideTintCol}
 					colors := a.applyAOSmooth(block, westTint, aos, lights, tints)
 
 					usePath := textures.West
@@ -1116,7 +1047,7 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 
 					getBuilder(pass, usePath).addFaceSmooth(
 						[]float32{px - 0.5, py + 0.5, pz + 0.5, px - 0.5, py + 0.5, pz - 0.5, px - 0.5, py - 0.5, pz - 0.5, px - 0.5, py - 0.5, pz + 0.5},
-						rl.NewVector3(-1, 0, 0),
+						meshVec3(-1, 0, 0),
 						uvs,
 						colors,
 					)
@@ -1136,12 +1067,12 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 							}
 						}
 
-						ovTints := []rl.Color{smoothFoliage, smoothFoliage, smoothFoliage, smoothFoliage}
+						ovTints := []color.RGBA{smoothFoliage, smoothFoliage, smoothFoliage, smoothFoliage}
 						ovColors := a.applyAOSmooth(block, white, aos, lights, ovTints)
 
 						getBuilder(oPass, oPath).addFaceSmooth(
 							[]float32{px - 0.5, py + 0.5, pz + oDisp, px - 0.5, py + 0.5, pz - oDisp, px - 0.5, py - 0.5, pz - oDisp, px - 0.5, py - 0.5, pz + oDisp},
-							rl.NewVector3(-1, 0, 0),
+							meshVec3(-1, 0, 0),
 							oUVs,
 							ovColors,
 						)

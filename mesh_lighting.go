@@ -1,6 +1,6 @@
 package main
 
-import rl "github.com/gen2brain/raylib-go/raylib"
+import "image/color"
 
 type litFace int
 
@@ -78,8 +78,8 @@ func sampleFaceLighting(x, y, z int, face litFace, getBlock BlockGetter, getLigh
 	return
 }
 
-func (a *RenderAssets) applyAOSmooth(block byte, col rl.Color, aos [4]float32, lights [4]float32, tints []rl.Color) []rl.Color {
-	res := make([]rl.Color, 4)
+func (a *RenderAssets) applyAOSmooth(block byte, col color.RGBA, aos [4]float32, lights [4]float32, tints []color.RGBA) []color.RGBA {
+	res := make([]color.RGBA, 4)
 	emission := float32(GetBlock(block).LightLevel)
 	for i := range res {
 		c := col
@@ -99,13 +99,13 @@ func (a *RenderAssets) applyAOSmooth(block byte, col rl.Color, aos [4]float32, l
 			ao = 0
 		}
 		f := (1 - 0.6*ao) * (0.1 + 0.9*max(emission, lights[i])/15)
-		res[i] = rl.NewColor(uint8(float32(c.R)*f), uint8(float32(c.G)*f), uint8(float32(c.B)*f), c.A)
+		res[i] = meshColor(uint8(float32(c.R)*f), uint8(float32(c.G)*f), uint8(float32(c.B)*f), c.A)
 	}
 	return res
 }
 
-func flipLightDiagonal(colors []rl.Color) bool {
+func flipLightDiagonal(colors []color.RGBA) bool {
 	// Compare luminance, leaving alpha (e.g. water transparency) out of lighting.
-	luma := func(c rl.Color) int { return 54*int(c.R) + 183*int(c.G) + 19*int(c.B) }
+	luma := func(c color.RGBA) int { return 54*int(c.R) + 183*int(c.G) + 19*int(c.B) }
 	return luma(colors[0])+luma(colors[2]) > luma(colors[1])+luma(colors[3])
 }

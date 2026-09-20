@@ -70,7 +70,7 @@ type webGPUTextRenderer struct {
 	fontTexture     *wgpu.Texture
 	fontView        *wgpu.TextureView
 	fontSampler     *wgpu.Sampler
-	vertexBuffer    *wgpu.Buffer
+	uploads         webGPUFrameUploads
 }
 
 var activeWebGPUTextRenderer *webGPUTextRenderer
@@ -95,8 +95,8 @@ func ensureWebGPUTextRenderer(worldRenderer *webGPUWorldRenderer) (*webGPUTextRe
 	}
 
 	r.fontTexture, err = r.device.CreateTexture(&wgpu.TextureDescriptor{
-		Label: "GoCraft built-in pixel font",
-		Size: wgpu.Extent3D{Width: webGPUFontAtlasWidth, Height: webGPUFontAtlasHeight, DepthOrArrayLayers: 1},
+		Label:         "GoCraft built-in pixel font",
+		Size:          wgpu.Extent3D{Width: webGPUFontAtlasWidth, Height: webGPUFontAtlasHeight, DepthOrArrayLayers: 1},
 		MipLevelCount: 1,
 		SampleCount:   1,
 		Dimension:     gputypes.TextureDimension2D,
@@ -188,14 +188,6 @@ func ensureWebGPUTextRenderer(worldRenderer *webGPUWorldRenderer) (*webGPUTextRe
 	if err != nil {
 		return fail(fmt.Errorf("create WebGPU text pipeline: %w", err))
 	}
-	r.vertexBuffer, err = r.device.CreateBuffer(&wgpu.BufferDescriptor{
-		Label: "GoCraft WebGPU text vertices",
-		Size:  uint64(webGPUTextMaxVertices) * stride,
-		Usage: gputypes.BufferUsageVertex | gputypes.BufferUsageCopyDst,
-	})
-	if err != nil {
-		return fail(fmt.Errorf("create WebGPU text vertex buffer: %w", err))
-	}
 
 	activeWebGPUTextRenderer = r
 	return r, nil
@@ -210,12 +202,11 @@ func closeWebGPUTextRenderer() {
 }
 
 func (r *webGPUTextRenderer) Close() {
+	if r != nil {
+		r.uploads.close()
+	}
 	if r == nil {
 		return
-	}
-	if r.vertexBuffer != nil {
-		r.vertexBuffer.Release()
-		r.vertexBuffer = nil
 	}
 	if r.pipeline != nil {
 		r.pipeline.Release()
@@ -502,12 +493,13 @@ func (r *webGPUTextRenderer) Draw(pass *wgpu.RenderPassEncoder, width, height ui
 	}
 	byteLen := len(batch.vertices) * int(unsafe.Sizeof(webGPUTextVertex{}))
 	bytes := unsafe.Slice((*byte)(unsafe.Pointer(&batch.vertices[0])), byteLen)
-	if err := r.queue.WriteBuffer(r.vertexBuffer, 0, bytes); err != nil {
+	buffer, err := r.uploads.write(r.device, r.queue, bytes, gputypes.BufferUsageVertex)
+	if err != nil {
 		return fmt.Errorf("upload WebGPU text vertices: %w", err)
 	}
 	pass.SetPipeline(r.pipeline)
 	pass.SetBindGroup(0, r.bindGroup, nil)
-	pass.SetVertexBuffer(0, r.vertexBuffer, 0)
+	pass.SetVertexBuffer(0, buffer, 0)
 	pass.Draw(gputypes.DrawArgs{VertexCount: uint32(len(batch.vertices)), InstanceCount: 1})
 	return nil
 }

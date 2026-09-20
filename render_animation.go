@@ -7,15 +7,6 @@ import (
 	"strings"
 )
 
-func isAnimatedTexture(path string) bool {
-	switch path {
-	case "textures/block/water_still.png", "textures/block/water_flow.png", "textures/block/lava_still.png", "textures/block/lava_flow.png":
-		return true
-	default:
-		return false
-	}
-}
-
 func (a *RenderAssets) loadAnimatedTexture(path string) rl.Texture2D {
 	if anim, ok := a.animated[path]; ok && len(anim.Frames) > 0 {
 		return anim.Frames[anim.Index]

@@ -10,8 +10,6 @@ import (
 
 	"gocraft/platform"
 	"sync/atomic"
-
-	rl "github.com/gen2brain/raylib-go/raylib"
 )
 
 type PerformanceMonitor struct {
@@ -107,19 +105,14 @@ func framePercentiles(samples []float64) (float64, float64) {
 	return samples[(len(samples)*95+99)/100-1], samples[(len(samples)*99+99)/100-1]
 }
 
-func performanceFrameTime() float32 {
-	if currentState == StatePlaying {
-		return gameFrameTime()
-	}
-	return rl.GetFrameTime()
-}
-
-func (pm *PerformanceMonitor) Update() {
+// UpdateFrame receives timing from the window owner; servers need no window API.
+func (pm *PerformanceMonitor) UpdateFrame(frameSeconds float32) {
 	if pm == nil || pm.file == nil {
 		return
 	}
-	if rl.IsWindowReady() {
-		pm.frames = append(pm.frames, float64(performanceFrameTime())*1000)
+	if frameSeconds > 0 {
+		pm.frames = append(pm.frames, float64(frameSeconds)*1000)
+		pm.Metrics.FrameTime = frameSeconds * 1000
 	}
 
 	select {
@@ -134,9 +127,6 @@ func (pm *PerformanceMonitor) logMetrics() {
 	var m runtime.MemStats
 	runtime.ReadMemStats(&m)
 
-	if rl.IsWindowReady() {
-		pm.Metrics.FrameTime = performanceFrameTime() * 1000.0 // ms
-	}
 	var totalMS float64
 	for _, frame := range pm.frames {
 		totalMS += frame

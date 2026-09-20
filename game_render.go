@@ -12,7 +12,7 @@ func drawGame() {
 	camBlockZ := int(math.Floor(float64(camera.Position.Z) + 0.5))
 	inWater := world.BlockAt(camBlockX, camBlockY, camBlockZ) == blockWater
 
-	rl.BeginMode3D(camera)
+	rl.BeginMode3D(raylibCamera(camera))
 
 	// Draw World
 	background := rl.NewColor(180, 210, 255, 255)
@@ -21,7 +21,7 @@ func drawGame() {
 	}
 	rl.ClearBackground(background)
 
-	world.Draw(assets, camera)
+	world.Draw(assets, raylibCamera(camera))
 
 	// Draw Entities
 	for id, e := range remoteEntities {
@@ -43,7 +43,7 @@ func drawGame() {
 	rl.EndMode3D()
 
 	// Draw Mining Crack Overlay
-	world.DrawBlockCrack(assets, camera, input)
+	world.DrawBlockCrack(assets, raylibCamera(camera), input)
 
 	// 2D Overlay
 	if inWater {

@@ -24,6 +24,7 @@ func webGPUCameraMatrices(camera webGPUCamera, width, height uint32) (mgl32.Mat4
 }
 
 func (r *webGPUWorldRenderer) updateSceneCamera(camera webGPUCamera) error {
+	r.camera = camera
 	projection, view, eye := webGPUCameraMatrices(camera, r.width, r.height)
 	clipCorrection := mgl32.Mat4{
 		1, 0, 0, 0,
