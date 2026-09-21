@@ -1,7 +1,7 @@
 package platform
 
 // CompactVertex omits the normal unused by the live baked-light world shader.
-// Keep Vertex unchanged for OpenGL and diagnostic pipelines which use normals.
+// Keep Vertex unchanged for CPU meshing and diagnostic pipelines using normals.
 type CompactVertex struct {
 	Position [3]float32
 	Texcoord [2]float32

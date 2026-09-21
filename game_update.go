@@ -87,7 +87,6 @@ func updateGame() {
 	}
 
 	dt := gameFrameTime()
-	assets.Update(dt)
 
 	// Packet Loop
 	packetDeadline := time.Now().Add(2 * time.Millisecond)

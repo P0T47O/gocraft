@@ -35,7 +35,7 @@ var (
 	isServer   = flag.Bool("server", false, "Start as dedicated server")
 	serverAddr = flag.String("addr", "127.0.0.1:25565", "Server address to listen/connect")
 	username   = flag.String("name", "Player"+fmt.Sprint(time.Now().Unix()%1000), "Username")
-	useWebGPU  = flag.Bool("webgpu", true, "Use native WebGPU (Windows); false selects the legacy reference renderer")
+	useWebGPU  = flag.Bool("webgpu", true, "Use native WebGPU (Windows); legacy renderer has been removed")
 
 	// Game State
 	currentState ProgramState = StateMenu
@@ -67,8 +67,6 @@ var (
 	chatHistory []string
 )
 
-var mobsRenderer *MobRenderer
-
 type RemoteEntity struct {
 	MobKind, MobState                                   string
 	TargetYaw, AnimPhase, AnimBlend, MobHurt, DeathTime float32
@@ -83,10 +81,6 @@ type RemoteEntity struct {
 
 func main() {
 	flag.Parse()
-	if *mobPreview {
-		runMobPreview()
-		return
-	}
 	initBlockRegistry()
 	if err := loadRuntimeMobs(); err != nil {
 		panic(err)
@@ -101,6 +95,13 @@ func main() {
 		return
 	}
 
+	if *mobPreview {
+		if err := runMobPreview(); err != nil {
+			fmt.Printf("Mob preview failed: %v\n", err)
+		}
+		return
+	}
+
 	// Load Settings
 	settings := LoadSettings()
 	if *useWebGPU {
@@ -109,5 +110,5 @@ func main() {
 		}
 		return
 	}
-	runLegacyRaylib(settings)
+	fmt.Println("The Raylib renderer has been removed; launch without -webgpu=false.")
 }

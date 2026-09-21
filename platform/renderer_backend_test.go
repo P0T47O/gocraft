@@ -15,15 +15,12 @@ func (b *recordingMeshBackend) Upload(vertices []Vertex, indices []uint32) MeshH
 	return &recordingMeshHandle{indexCount: int32(len(indices))}
 }
 
-func (b *recordingMeshBackend) Draw(mesh MeshHandle) {}
-
 type recordingMeshHandle struct {
 	indexCount int32
 }
 
-func (m *recordingMeshHandle) Draw()               {}
-func (m *recordingMeshHandle) Unload()             {}
-func (m *recordingMeshHandle) IndexCount() int32   { return m.indexCount }
+func (m *recordingMeshHandle) Unload()           {}
+func (m *recordingMeshHandle) IndexCount() int32 { return m.indexCount }
 
 func TestUploadMeshRoutesThroughSelectedBackend(t *testing.T) {
 	previous := meshBackend

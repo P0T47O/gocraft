@@ -198,6 +198,8 @@ func nativeKey(code, flags uintptr) int32 {
 		return keyE
 	case 'Q':
 		return keyQ
+	case 'B':
+		return keyB
 	case 'R':
 		return keyR
 	case 'S':

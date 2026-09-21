@@ -5,7 +5,7 @@
 [English](README.md) | [中文](README_zh.md)
 
 > [!IMPORTANT]
-> **Project Status: Alpha**. GoCraft is an experimental high-performance voxel engine and survival sandbox written in Go and Raylib. It features an authoritative multiplayer architecture, deterministic procedural terrain, survival progression, container processing, and data-driven entities.
+> **Project Status: Alpha**. GoCraft is an experimental high-performance voxel engine and survival sandbox written in Go and native WebGPU. It features an authoritative multiplayer architecture, deterministic procedural terrain, survival progression, container processing, and data-driven entities.
 
 **GoCraft** is a voxel engine experiment exploring clean architecture, procedural terrain generation, custom networking, and low-level graphics optimization in Go.
 
@@ -36,7 +36,7 @@
   - Dedicated TCP server/client architecture with entity interpolation, transaction-verified container interactions, and chat commands.
   - Resilient atomic file persistence (`.tmp` + rename) protecting level metadata, player state, containers, and compressed chunk storage against unexpected crashes.
 - **Advanced Lighting & Shaders**:
-  - Propagated sky and block lighting with ambient occlusion, day/night cycles, and custom GLSL cutout/fog shaders.
+  - Propagated sky and block lighting with ambient occlusion, day/night cycles, and custom WGSL cutout/fog shaders.
 
 ---
 
@@ -53,8 +53,8 @@
 
 ### Prerequisites
 
-- [Go](https://go.dev/dl/) 1.21 or higher.
-- A C compiler (GCC/MinGW) is required for cgo (used by raylib-go).
+- [Go](https://go.dev/dl/) 1.25 or higher.
+- The native client currently requires Windows and a Vulkan-capable graphics driver. Raylib and its C compiler requirement have been removed.
 
 ### Running the Game
 
@@ -220,7 +220,7 @@ This project is licensed under the GNU General Public License v3.0 - see the [LI
 
 ### Third-Party Licenses
 
-- **Raylib**: Licensed under the zlib License. See [LICENSE_raylib.txt](LICENSE_raylib.txt).
+- **Historical Raylib notice**: no longer a dependency; [LICENSE_raylib.txt](LICENSE_raylib.txt) is retained for provenance.
 - **mathgl**: Licensed under the BSD-2-Clause License.
 - **klauspost/compress**: Licensed under the BSD-3-Clause / Apache 2.0 License.
 # Render distance

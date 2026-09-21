@@ -241,7 +241,7 @@ func drawWebGPUSurvivalInventory(pass *wgpu.RenderPassEncoder, hud *webGPUHUDRen
 	labels.shadowText(layout.X+354*s, layout.Y+30*s, max(float32(14)*s, 10), station, webGPUUIAccent)
 	labels.shadowText(layout.X+24*s, layout.Y+77*s, max(float32(12)*s, 9), "RECIPE BOOK", webGPUUIMuted)
 
-	// Recipe filter buttons line up exactly with the existing Raylib hit testing.
+	// Recipe filter buttons share their layout with inventory hit testing.
 	for _, button := range []struct {
 		x, w float32
 		name string

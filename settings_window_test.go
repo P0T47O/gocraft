@@ -29,16 +29,3 @@ func TestSettingsDelegateToWindowOwner(t *testing.T) {
 	windowCursor = nil
 	ApplySettings() // Settings are also valid before window creation.
 }
-
-func TestNativeMeshBindingsDoNotLoadLegacyResources(t *testing.T) {
-	a := newWebGPUCPUAssets()
-	for _, path := range []string{"atlas", "missing-texture.png"} {
-		texture, shader := a.legacyMeshBindings(path)
-		if texture != 0 || shader != 0 {
-			t.Fatal("native upload acquired legacy resources")
-		}
-	}
-	if len(a.textures) != 0 || len(a.materials) != 0 {
-		t.Fatal("native upload populated legacy resource caches")
-	}
-}

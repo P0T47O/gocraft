@@ -28,6 +28,7 @@ const (
 	keyRightShift
 	keyLeftControl
 	keyRightControl
+	keyB
 	keyCount
 )
 

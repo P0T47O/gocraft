@@ -382,14 +382,14 @@ func (r *webGPUWorldRenderer) drawMeshMap(pass *wgpu.RenderPassEncoder, meshes m
 			continue // Special/animated material support is a later parity milestone.
 		}
 		for _, mesh := range list {
-			if mesh == nil || mesh.glMesh == nil {
+			if mesh == nil || mesh.gpuMesh == nil {
 				continue
 			}
-			if err := r.backend.DrawPass(pass, mesh.glMesh); err != nil {
+			if err := r.backend.DrawPass(pass, mesh.gpuMesh); err != nil {
 				return err
 			}
 			cache.drawCalls++
-			cache.triangles += int(mesh.glMesh.IndexCount()) / 3
+			cache.triangles += int(mesh.gpuMesh.IndexCount()) / 3
 		}
 	}
 	return nil
@@ -405,7 +405,7 @@ func (r *webGPUWorldRenderer) closeResources(resetBackend bool) {
 		r.solidPipeline = nil
 	}
 	if resetBackend {
-		platform.SetMeshBackend(platform.OpenGLMeshBackend{})
+		platform.SetMeshBackend(nil)
 	}
 	if r.depthView != nil {
 		r.depthView.Release()

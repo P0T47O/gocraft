@@ -2,16 +2,14 @@ package main
 
 import "gocraft/platform"
 
-// ChunkMesh retains only an opaque GPU handle and legacy binding IDs.
-// No Raylib material pointers enter shared world/mesh ownership.
+// ChunkMesh retains only a backend-owned GPU handle.
 type ChunkMesh struct {
-	glMesh              platform.MeshHandle
-	textureID, shaderID uint32
+	gpuMesh platform.MeshHandle
 }
 
 func (m *ChunkMesh) unload() {
-	if m.glMesh != nil {
-		m.glMesh.Unload()
-		m.glMesh = nil
+	if m.gpuMesh != nil {
+		m.gpuMesh.Unload()
+		m.gpuMesh = nil
 	}
 }

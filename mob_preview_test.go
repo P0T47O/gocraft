@@ -1,56 +1,50 @@
+//go:build windows
+
 package main
 
 import (
-	rl "github.com/gen2brain/raylib-go/raylib"
+	"github.com/gogpu/wgpu"
 	"os"
-	"runtime"
 	"testing"
 )
 
 func TestMobRenderPreview(t *testing.T) {
 	if os.Getenv("GOCRAFT_MOB_PREVIEW") != "1" {
-		t.Skip("opt-in graphical check")
+		t.Skip("opt-in native preview")
 	}
-	runtime.LockOSThread()
-	defer runtime.UnlockOSThread()
-	rl.SetConfigFlags(rl.FlagWindowHidden)
-	rl.InitWindow(1000, 700, "Mob preview test")
-	defer rl.CloseWindow()
-	r, err := newMobRenderer(mobContent)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer r.Close()
-	os.MkdirAll("work", 0755)
-	cam := rl.Camera3D{Position: rl.NewVector3(2.3, 1.7, 3), Target: rl.NewVector3(0, .5, 0), Up: rl.NewVector3(0, 1, 0), Fovy: 45}
+	r, closePreview := nativePreviewFixture(t)
+	defer closePreview()
 	for _, state := range []string{"idle", "walk", "hurt", "death"} {
-		e := &RemoteEntity{MobKind: "pig", MobHealth: 10}
-		if state == "walk" {
+		e := &RemoteEntity{Type: EntityPig, MobKind: "pig", MobHealth: 10}
+		switch state {
+		case "walk":
 			e.AnimBlend = 1
 			e.AnimPhase = 1
-		}
-		if state == "hurt" {
+		case "hurt":
 			e.MobHurt = 1
-		}
-		if state == "death" {
+		case "death":
 			e.DeathTime = .6
 		}
-		target := rl.LoadRenderTexture(1000, 700)
-		rl.BeginTextureMode(target)
-		rl.ClearBackground(rl.NewColor(22, 32, 35, 255))
-		rl.BeginMode3D(cam)
-		rl.DrawGrid(8, 1)
-		r.Draw(e, true)
-		rl.EndMode3D()
-		rl.DrawText("PIG / "+state, 25, 25, 25, rl.White)
-		rl.EndTextureMode()
-		img := rl.LoadImageFromTexture(target.Texture)
-		rl.ImageFlipVertical(img)
-		ok := rl.ExportImage(*img, "work/pig-"+state+".png")
-		rl.UnloadImage(img)
-		rl.UnloadRenderTexture(target)
-		if !ok {
-			t.Fatal("image export")
+		remoteEntities = map[string]*RemoteEntity{"preview-pig": e}
+		image := captureNativePreview(t, r, 1000, 700, func(pass *wgpu.RenderPassEncoder) error {
+			if err := r.updateSceneCamera(webGPUCamera{Position: webGPUVec3{X: 2.3, Y: 1.7, Z: 3}, Target: webGPUVec3{Y: .5}, Up: webGPUVec3{Y: 1}, Fovy: 45}); err != nil {
+				return err
+			}
+			renderer, err := ensureWebGPUEntityRenderer(r)
+			if err != nil {
+				return err
+			}
+			return renderer.Draw(pass, r, nil, 0)
+		})
+		visible := 0
+		for i := 0; i < len(image.Pix); i += 4 {
+			if image.Pix[i] != 0 || image.Pix[i+1] != 0 || image.Pix[i+2] != 0 {
+				visible++
+			}
 		}
+		if visible < 100 {
+			t.Fatalf("%s mob was not rendered: %d colored pixels", state, visible)
+		}
+		saveNativePreview(t, image, "work/pig-"+state+".png")
 	}
 }

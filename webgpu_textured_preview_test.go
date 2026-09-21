@@ -69,7 +69,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4f {
 // block textures in WebGPU. A 5x5 generated halo supplies neighbor data while
 // only the inner 3x3 chunks are meshed and rendered. All static block textures
 // are packed into a CPU-side atlas whose UV map is handed to the existing chunk
-// mesher, so this exercises the same UV decisions used by the OpenGL renderer.
+// mesher, so this exercises the same UV decisions used by the gameplay renderer.
 func TestWebGPUTexturedPreview(t *testing.T) {
 	if os.Getenv("GOCRAFT_WEBGPU_TEXTURE_PREVIEW") != "1" {
 		t.Skip("set GOCRAFT_WEBGPU_TEXTURE_PREVIEW=1 to run the textured WebGPU terrain preview")

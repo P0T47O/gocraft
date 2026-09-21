@@ -14,8 +14,6 @@ var interleaveBufferPool = sync.Pool{
 func (a *RenderAssets) applyMeshData(data map[string][]*MeshBuildData) map[string][]*ChunkMesh {
 	meshes := map[string][]*ChunkMesh{}
 	for path, list := range data {
-		textureID, shaderID := a.legacyMeshBindings(path)
-
 		for _, d := range list {
 			if d.vertCount == 0 {
 				d.Reset()
@@ -42,15 +40,13 @@ func (a *RenderAssets) applyMeshData(data map[string][]*MeshBuildData) map[strin
 			}
 
 			// The active backend copies the vertex data before returning.
-			glMesh := platform.UploadMesh(buffer, indices)
+			gpuMesh := platform.UploadMesh(buffer, indices)
 
 			// Return buffer to pool
 			interleaveBufferPool.Put(buffer)
 
 			meshes[path] = append(meshes[path], &ChunkMesh{
-				glMesh:    glMesh,
-				textureID: textureID,
-				shaderID:  shaderID,
+				gpuMesh: gpuMesh,
 			})
 
 			// Return builder to pool

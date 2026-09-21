@@ -5,7 +5,7 @@
 [English](README.md) | [中文](README_zh.md)
 
 > [!IMPORTANT]
-> **项目状态：Alpha**。GoCraft 是一个使用 Go 语言与 Raylib 编写的高性能体素引擎与生存沙盒实验项目。它具备权威多人联机架构、确定性程序化地形生成、生存进度推进、容器处理以及数据驱动实体系统。
+> **项目状态：Alpha**。GoCraft 是一个使用 Go 语言与原生 WebGPU 编写的高性能体素引擎与生存沙盒实验项目。它具备权威多人联机架构、确定性程序化地形生成、生存进度推进、容器处理以及数据驱动实体系统。
 
 **GoCraft** 致力于在 Go 语言环境下探索清晰的工程架构、程序化无限地形生成、轻量级网络协议以及底层图形渲染优化。
 
@@ -36,7 +36,7 @@
   - 专用 TCP 服务端/客户端架构，具备实体插值、事务校验容器交互以及管理命令。
   - 崩溃免疫的原子文件保存机制（`.tmp` 写入 + 重命名替换），确保区块数据、容器状态与玩家存档在异常断电时不损坏。
 - **高级光照与着色器**：
-  - 天空光与方块光传播算法、环境光遮蔽（AO）、日夜循环以及自定义 GLSL Cutout 与雾效着色器。
+  - 天空光与方块光传播算法、环境光遮蔽（AO）、日夜循环以及自定义 WGSL Cutout 与雾效着色器。
 
 ---
 
@@ -53,8 +53,8 @@
 
 ### 前置要求
 
-- [Go](https://go.dev/dl/) 1.21 或更高版本。
-- 需要 C 编译器（GCC/MinGW）以支持 cgo（raylib 依赖）。
+- [Go](https://go.dev/dl/) 1.25 或更高版本。
+- 原生客户端目前需要 Windows 和支持 Vulkan 的显卡驱动。Raylib 及其 C 编译器要求已移除。
 
 ### 运行游戏
 
@@ -220,6 +220,6 @@ $env:GOCRAFT_MOB_PREVIEW='1'; go test -run '^TestMobRenderPreview$' -count=1 .
 
 ### 第三方许可证
 
-- **Raylib**: 采用 zlib 许可证授权。详情请参阅 [LICENSE_raylib.txt](LICENSE_raylib.txt)。
+- **历史 Raylib 说明**：已不再依赖；保留 [LICENSE_raylib.txt](LICENSE_raylib.txt) 作为迁移历史许可记录。
 - **mathgl**: 采用 BSD-2-Clause 许可证授权。
 - **klauspost/compress**: 采用 BSD-3-Clause / Apache 2.0 许可证授权。

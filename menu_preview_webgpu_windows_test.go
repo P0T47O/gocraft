@@ -15,7 +15,7 @@ import (
 )
 
 // Optional diagnostic: render the exact native menu command stream offscreen.
-func exportNativeMenuPreview(t *testing.T, r *webGPUWorldRenderer, p *gpuMenuPainter, path string) {
+func captureNativePreview(t *testing.T, r *webGPUWorldRenderer, width, height uint32, draw func(*wgpu.RenderPassEncoder) error) *image.RGBA {
 	t.Helper()
 	check := func(err error) {
 		t.Helper()
@@ -23,14 +23,21 @@ func exportNativeMenuPreview(t *testing.T, r *webGPUWorldRenderer, p *gpuMenuPai
 			t.Fatal(err)
 		}
 	}
-	texture, err := r.device.CreateTexture(&wgpu.TextureDescriptor{Size: wgpu.Extent3D{Width: p.width, Height: p.height, DepthOrArrayLayers: 1}, MipLevelCount: 1, SampleCount: 1, Dimension: gputypes.TextureDimension2D, Format: r.format, Usage: gputypes.TextureUsageRenderAttachment | gputypes.TextureUsageCopySrc})
+	check(r.prepareSurface(width, height))
+	if activeWebGPUHUDRenderer != nil {
+		activeWebGPUHUDRenderer.uploads.begin()
+	}
+	if activeWebGPUTextRenderer != nil {
+		activeWebGPUTextRenderer.uploads.begin()
+	}
+	texture, err := r.device.CreateTexture(&wgpu.TextureDescriptor{Size: wgpu.Extent3D{Width: width, Height: height, DepthOrArrayLayers: 1}, MipLevelCount: 1, SampleCount: 1, Dimension: gputypes.TextureDimension2D, Format: r.format, Usage: gputypes.TextureUsageRenderAttachment | gputypes.TextureUsageCopySrc})
 	check(err)
 	defer texture.Release()
 	view, err := r.device.CreateTextureView(texture, nil)
 	check(err)
 	defer view.Release()
-	stride := (p.width*4 + 255) &^ uint32(255)
-	size := uint64(stride) * uint64(p.height)
+	stride := (width*4 + 255) &^ uint32(255)
+	size := uint64(stride) * uint64(height)
 	buffer, err := r.device.CreateBuffer(&wgpu.BufferDescriptor{Size: size, Usage: gputypes.BufferUsageMapRead | gputypes.BufferUsageCopyDst})
 	check(err)
 	defer buffer.Release()
@@ -38,7 +45,7 @@ func exportNativeMenuPreview(t *testing.T, r *webGPUWorldRenderer, p *gpuMenuPai
 	check(err)
 	pass, err := encoder.BeginRenderPass(&wgpu.RenderPassDescriptor{ColorAttachments: []wgpu.RenderPassColorAttachment{{View: view, LoadOp: gputypes.LoadOpClear, StoreOp: gputypes.StoreOpStore}}, DepthStencilAttachment: &wgpu.RenderPassDepthStencilAttachment{View: r.depthView, DepthLoadOp: gputypes.LoadOpClear, DepthStoreOp: gputypes.StoreOpStore, DepthClearValue: 1}})
 	check(err)
-	check(p.draw(pass, r))
+	check(draw(pass))
 	check(pass.End())
 	commands, err := encoder.Finish()
 	check(err)
@@ -47,7 +54,7 @@ func exportNativeMenuPreview(t *testing.T, r *webGPUWorldRenderer, p *gpuMenuPai
 	check(err)
 	encoder, err = r.device.CreateCommandEncoder(nil)
 	check(err)
-	encoder.CopyTextureToBuffer(texture, buffer, []wgpu.BufferTextureCopy{{BufferLayout: wgpu.ImageDataLayout{BytesPerRow: stride, RowsPerImage: p.height}, TextureBase: wgpu.ImageCopyTexture{Texture: texture}, Size: wgpu.Extent3D{Width: p.width, Height: p.height, DepthOrArrayLayers: 1}}})
+	encoder.CopyTextureToBuffer(texture, buffer, []wgpu.BufferTextureCopy{{BufferLayout: wgpu.ImageDataLayout{BytesPerRow: stride, RowsPerImage: height}, TextureBase: wgpu.ImageCopyTexture{Texture: texture}, Size: wgpu.Extent3D{Width: width, Height: height, DepthOrArrayLayers: 1}}})
 	commands, err = encoder.Finish()
 	check(err)
 	_, err = r.queue.Submit(commands)
@@ -59,10 +66,10 @@ func exportNativeMenuPreview(t *testing.T, r *webGPUWorldRenderer, p *gpuMenuPai
 	mapped, err := buffer.MappedRange(0, size)
 	check(err)
 	pixels := mapped.Bytes()
-	img := image.NewRGBA(image.Rect(0, 0, int(p.width), int(p.height)))
-	for y := uint32(0); y < p.height; y++ {
-		for x := uint32(0); x < p.width; x++ {
-			i, j := y*stride+x*4, (y*p.width+x)*4
+	img := image.NewRGBA(image.Rect(0, 0, int(width), int(height)))
+	for y := uint32(0); y < height; y++ {
+		for x := uint32(0); x < width; x++ {
+			i, j := y*stride+x*4, (y*width+x)*4
 			copy(img.Pix[j:j+4], pixels[i:i+4])
 			if r.format == gputypes.TextureFormatBGRA8Unorm || r.format == gputypes.TextureFormatBGRA8UnormSrgb {
 				img.Pix[j], img.Pix[j+2] = img.Pix[j+2], img.Pix[j]
@@ -70,8 +77,22 @@ func exportNativeMenuPreview(t *testing.T, r *webGPUWorldRenderer, p *gpuMenuPai
 		}
 	}
 	check(buffer.Unmap())
+	return img
+}
+
+func saveNativePreview(t *testing.T, img *image.RGBA, path string) {
+	t.Helper()
 	f, err := os.Create(path)
-	check(err)
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer f.Close()
-	check(png.Encode(f, img))
+	if err := png.Encode(f, img); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func exportNativeMenuPreview(t *testing.T, r *webGPUWorldRenderer, p *gpuMenuPainter, path string) {
+	t.Helper()
+	saveNativePreview(t, captureNativePreview(t, r, p.width, p.height, func(pass *wgpu.RenderPassEncoder) error { return p.draw(pass, r) }), path)
 }

@@ -165,7 +165,7 @@ func TestWebGPUUIUploadIsolationGPU(t *testing.T) {
 	// Validate the actual 24-byte world pipeline and outward-facing triangle
 	// with backface culling, not just the CPU layout declaration.
 	backend := platform.EnableExperimentalWebGPU(device)
-	defer platform.SetMeshBackend(platform.OpenGLMeshBackend{})
+	defer platform.SetMeshBackend(nil)
 	mesh, err := backend.UploadChecked([]platform.Vertex{
 		{Position: [3]float32{-.8, -.8, .5}, Color: [4]byte{0, 0, 255, 255}},
 		{Position: [3]float32{.8, -.8, .5}, Color: [4]byte{0, 0, 255, 255}},

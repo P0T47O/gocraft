@@ -7,9 +7,8 @@ const (
 
 var gameFrameDelta = defaultGameFrameTime
 
-// setGameFrameTime records the frame delta used by gameplay simulation. The
-// OpenGL path feeds Raylib's measured frame time; the WebGPU path feeds its own
-// wall-clock delta because Raylib EndDrawing is intentionally skipped there.
+// setGameFrameTime records the native main loop's wall-clock delta and bounds
+// simulation steps so an interrupted frame cannot advance physics too far.
 func setGameFrameTime(dt float32) {
 	if dt <= 0 {
 		return

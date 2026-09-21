@@ -17,6 +17,7 @@ type webGPUCamera struct {
 }
 
 type webGPUFrameContext struct {
+	HideHUD       bool // Native model workshop: draw scene and its menu without gameplay UI.
 	Camera        webGPUCamera
 	Width, Height uint32
 	Time          float32

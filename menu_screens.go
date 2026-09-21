@@ -240,7 +240,6 @@ func drawSettingsMenu(l SurvivalLayout, fromPause bool) {
 	if ui.DrawButton(l.Rect(28, 274, 142, 34), mipmapLabel, true) {
 		settings.Mipmaps = !settings.Mipmaps
 		SaveSettings()
-		applyWorldTextureFiltering()
 	}
 	limit := supportedAnisotropy()
 	af := min(normalizeAnisotropy(settings.Anisotropy), limit)
@@ -257,7 +256,6 @@ func drawSettingsMenu(l SurvivalLayout, fromPause bool) {
 			settings.Anisotropy = 1
 		}
 		SaveSettings()
-		applyWorldTextureFiltering()
 	}
 	l.Text("PLAYER NAME", 354, 164, 12, invMuted)
 	ui.DrawTextField(l.Rect(354, 186, 600, 40), &settings.PlayerName, "player_name", 16, false)

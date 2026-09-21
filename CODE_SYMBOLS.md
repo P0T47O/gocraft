@@ -42,10 +42,6 @@
 
 函数/方法：`*PacketContainerState.ID`、`*PacketContainerState.Encode`、`*PacketContainerState.Decode`、`*PacketContainerClick.ID`、`*PacketContainerClick.Encode`、`*PacketContainerClick.Decode`
 
-## [container_ui.go](container_ui.go)
-
-函数/方法：`*RenderAssets.drawContainer`
-
 ## [containers.go](containers.go)
 
 类型：`BlockPos`、`BlockContainer`、`ContainerSession`
@@ -81,10 +77,6 @@
 ## [game_packets.go](game_packets.go)
 
 函数/方法：`handlePacket`
-
-## [game_render.go](game_render.go)
-
-函数/方法：`drawGame`、`drawCharacterModel`
 
 ## [game_session.go](game_session.go)
 
@@ -122,10 +114,6 @@
 
 函数/方法：`sampleTreeAnchor`、`treeAnchorFromColumn`、`treeAnchor.emit`、`generationIsLog`、`generationIsLeaf`、`placeGeneratedTrees`、`placeGeneratedTreesSampled`
 
-## [hud_ui.go](hud_ui.go)
-
-函数/方法：`drawChatOverlay`
-
 ## [input.go](input.go)
 
 类型：`InputState`
@@ -152,16 +140,6 @@
 
 函数/方法：`survivalLayout`、`SurvivalLayout.Rect`、`SurvivalLayout.Slot`、`SurvivalLayout.Row`、`containerUISlot`
 
-## [inventory_layout_raylib.go](inventory_layout_raylib.go)
-
-类型：`legacySurvivalLayout`
-
-函数/方法：`legacySurvivalLayoutFor`、`raylibRect`、`legacySurvivalLayout.Rect`、`legacySurvivalLayout.Slot`、`legacySurvivalLayout.Row`
-
-## [inventory_ui.go](inventory_ui.go)
-
-函数/方法：`*RenderAssets.drawInventoryItem`、`*RenderAssets.drawSurvivalInventory`
-
 ## [item_registry.go](item_registry.go)
 
 类型：`ItemDef`
@@ -174,10 +152,6 @@
 
 函数/方法：`main`
 
-## [main_raylib.go](main_raylib.go)
-
-函数/方法：`runLegacyRaylib`、`updateMenu`
-
 ## [menu_death.go](menu_death.go)
 
 函数/方法：`drawDeathScreen`
@@ -187,12 +161,6 @@
 类型：`menuPainter`
 
 函数/方法：`menuWidth`、`menuHeight`、`menuRect`、`menuRectangle`、`menuLines`、`menuFade`、`menuMeasure`、`menuClip`、`menuUnclip`、`menuGradient`、`SurvivalLayout.Text`、`menuBox`、`menuButton`
-
-## [menu_painter_raylib.go](menu_painter_raylib.go)
-
-类型：`raylibMenuPainter`
-
-函数/方法：`init`、`raylibMenuPainter.Size`、`raylibMenuPainter.Rect`、`raylibMenuPainter.Text`、`raylibMenuPainter.Measure`、`raylibMenuPainter.Clip`、`raylibMenuPainter.Unclip`
 
 ## [menu_screens.go](menu_screens.go)
 
@@ -242,6 +210,14 @@
 
 ## [mob_preview.go](mob_preview.go)
 
+函数/方法：`advanceMobPreview`
+
+## [mob_preview_stub.go](mob_preview_stub.go)
+
+函数/方法：`runMobPreview`
+
+## [mob_preview_windows.go](mob_preview_windows.go)
+
 函数/方法：`runMobPreview`
 
 ## [mob_protocol.go](mob_protocol.go)
@@ -249,16 +225,6 @@
 类型：`PacketMobState`、`PacketAttackMob`
 
 函数/方法：`*PacketMobState.ID`、`*PacketMobState.Encode`、`*PacketMobState.Decode`、`*MobEntity.snapshot`、`*PacketAttackMob.ID`、`*PacketAttackMob.Encode`、`*PacketAttackMob.Decode`、`*Server.attackMob`
-
-## [mob_render.go](mob_render.go)
-
-类型：`MobRenderer`
-
-函数/方法：`newMobRenderer`、`*MobRenderer.Close`、`mobPose`、`*MobRenderer.Draw`
-
-## [mob_render_bounds.go](mob_render_bounds.go)
-
-函数/方法：`mobBox`
 
 ## [mob_server.go](mob_server.go)
 
@@ -300,31 +266,23 @@
 
 函数/方法：`PackCompactVertices`
 
-## [platform/gl.go](platform/gl.go)
-
-函数/方法：`InitGL`、`getProc`、`SetTextureMaxLevel`、`GenBuffer`、`BindBuffer`、`BufferData`、`GenVertexArray`、`BindVertexArray`、`EnableVertexAttribArray`、`VertexAttribPointer`、`DrawElements`、`DeleteBuffer`、`DeleteVertexArray`、`UseProgram`、`UniformMatrix4fv`、`GetUniformLocation`、`ActiveTexture`、`Uniform4f`、`Uniform3f`、`Uniform1f`、`Uniform1i`、`BindTexture`、`PolygonOffset`、`Enable`、`Disable`
-
 ## [platform/mesh.go](platform/mesh.go)
 
-类型：`Vertex`、`Mesh`
+类型：`Vertex`
 
-函数/方法：`UploadMesh`、`uploadOpenGLMesh`、`*Mesh.Draw`、`*Mesh.IndexCount`、`*Mesh.Unload`、`InitGLOnce`
+函数/方法：`UploadMesh`
 
 ## [platform/renderer.go](platform/renderer.go)
 
-类型：`MeshHandle`、`MeshBackend`、`OpenGLMeshBackend`
+类型：`MeshHandle`、`MeshBackend`
 
-函数/方法：`OpenGLMeshBackend.Upload`、`OpenGLMeshBackend.Draw`、`SetMeshBackend`、`UploadRenderMesh`、`DrawRenderMesh`
-
-## [platform/texture_filter.go](platform/texture_filter.go)
-
-函数/方法：`MaxTextureAnisotropy`
+函数/方法：`SetMeshBackend`、`UploadRenderMesh`
 
 ## [platform/webgpu_backend.go](platform/webgpu_backend.go)
 
 类型：`WebGPUMeshBackend`、`webGPUMesh`
 
-函数/方法：`NewWebGPUMeshBackend`、`*WebGPUMeshBackend.Upload`、`*WebGPUMeshBackend.UploadChecked`、`*WebGPUMeshBackend.Draw`、`*WebGPUMeshBackend.DrawPass`、`*webGPUMesh.Draw`、`*webGPUMesh.IndexCount`、`*webGPUMesh.Unload`、`EnableExperimentalWebGPU`
+函数/方法：`NewWebGPUMeshBackend`、`*WebGPUMeshBackend.Upload`、`*WebGPUMeshBackend.UploadChecked`、`*WebGPUMeshBackend.DrawPass`、`*webGPUMesh.IndexCount`、`*webGPUMesh.Unload`、`EnableExperimentalWebGPU`
 
 ## [player_collision.go](player_collision.go)
 
@@ -335,6 +293,10 @@
 类型：`MovementControls`
 
 函数/方法：`abs32`、`offsetAxis`、`blockAtPosition`、`playerCollides`、`resolvePlayerCollision`、`feetSupportedCore`、`touchesLiquidCore`、`*InputState.stepMovementCore`
+
+## [player_respawn.go](player_respawn.go)
+
+函数/方法：`*InputState.isDead`、`*InputState.updateRespawnRequest`
 
 ## [player_vitals.go](player_vitals.go)
 
@@ -388,27 +350,11 @@
 
 函数/方法：`RegisterRecipe`、`InitRecipes`、`GetCraftableRecipes`、`CanCraft`
 
-## [render_animation.go](render_animation.go)
-
-函数/方法：`*RenderAssets.loadAnimatedTexture`、`*RenderAssets.Update`、`*RenderAssets.setTextureForPath`、`*RenderAssets.loadBlockTextures`、`*RenderAssets.getFaceModelAnimated`、`*RenderAssets.isAnimated`、`*RenderAssets.currentTexture`、`*RenderAssets.baseTexture`、`*RenderAssets.applyTextureToModel`
-
 ## [render_assets.go](render_assets.go)
 
-类型：`RenderAssets`、`AnimatedTexture`、`AtlasRect`、`TextureAtlas`
+类型：`RenderAssets`、`AtlasRect`、`TextureAtlas`
 
-函数/方法：`newWebGPUCPUAssets`、`loadRenderAssets`、`*RenderAssets.unload`
-
-## [render_atlas.go](render_atlas.go)
-
-函数/方法：`*RenderAssets.generateAtlas`、`*RenderAssets.getAtlasUV`
-
-## [render_block.go](render_block.go)
-
-函数/方法：`*RenderAssets.drawBlock`
-
-## [render_camera_raylib.go](render_camera_raylib.go)
-
-函数/方法：`raylibCamera`、`raylibVec3FromGame`
+函数/方法：`newWebGPUCPUAssets`、`*RenderAssets.unload`、`*RenderAssets.getAtlasUV`
 
 ## [render_cull.go](render_cull.go)
 
@@ -416,25 +362,9 @@
 
 函数/方法：`ExtractFrustum`、`*Frustum.IntersectsAABB`
 
-## [render_faces.go](render_faces.go)
-
-类型：`faceMesh`
-
-函数/方法：`*RenderAssets.makeFace`、`*RenderAssets.initFaceMeshes`、`*RenderAssets.getFaceModel`、`*RenderAssets.initFaceModels`
-
 ## [render_filter.go](render_filter.go)
 
-函数/方法：`supportedAnisotropy`、`configureWorldTexture`、`applyWorldTextureFiltering`、`atlasSourceCoordinate`
-
-## [render_icons.go](render_icons.go)
-
-函数/方法：`*RenderAssets.initIcons`、`*RenderAssets.makeIcon`、`measureIconOffset`
-
-## [render_item.go](render_item.go)
-
-类型：`meshDataHolder`
-
-函数/方法：`*RenderAssets.DrawItem`、`*RenderAssets.drawBlockItem`、`*RenderAssets.initCrossItemModels`、`*RenderAssets.generateCrossItemMesh`、`addCubeVertices`
+函数/方法：`supportedAnisotropy`、`atlasSourceCoordinate`
 
 ## [render_mesh.go](render_mesh.go)
 
@@ -442,35 +372,13 @@
 
 函数/方法：`*ChunkMesh.unload`
 
-## [render_mesh_bindings_raylib.go](render_mesh_bindings_raylib.go)
-
-函数/方法：`*RenderAssets.legacyMeshBindings`
-
-## [render_mesh_opengl.go](render_mesh_opengl.go)
-
-类型：`meshShaderState`、`meshRenderState`
-
-函数/方法：`*meshRenderState.reset`、`*meshRenderState.draw`、`*ChunkMesh.Draw`
-
 ## [render_mesh_upload.go](render_mesh_upload.go)
 
 函数/方法：`*RenderAssets.applyMeshData`
 
-## [render_shaders.go](render_shaders.go)
-
-函数/方法：`loadCutoutShader`、`*RenderAssets.loadFogShader`
-
-## [render_textures.go](render_textures.go)
-
-函数/方法：`*RenderAssets.loadTexture`、`*RenderAssets.getMaterial`、`pickEdgeColorKey`
-
 ## [render_types.go](render_types.go)
 
 类型：`BlockGetter`、`LightGetter`、`MetaGetter`
-
-## [render_ui.go](render_ui.go)
-
-函数/方法：`*RenderAssets.drawCrosshair`、`*RenderAssets.drawHotbar`、`*RenderAssets.drawInventory`、`*RenderAssets.drawSlotGrid`、`*RenderAssets.drawHotbarSlots`、`*RenderAssets.drawSlot`、`*RenderAssets.drawSlotOverlay`、`*RenderAssets.drawIcon`、`*RenderAssets.drawDraggedIcon`
 
 ## [save.go](save.go)
 
@@ -586,10 +494,6 @@
 
 函数/方法：`uiScaleFor`、`inventoryScaleFor`、`inventoryLayoutFor`
 
-## [ui_layout_raylib.go](ui_layout_raylib.go)
-
-函数/方法：`uiScale`、`inventoryScale`、`inventoryLayout`
-
 ## [ui_menu.go](ui_menu.go)
 
 类型：`UIComponents`
@@ -599,14 +503,6 @@
 ## [ui_palette.go](ui_palette.go)
 
 常量或包级数据定义。
-
-## [ui_theme.go](ui_theme.go)
-
-函数/方法：`inventoryText`、`legacySurvivalLayout.Text`、`inventoryBox`、`inventoryButton`
-
-## [vitals_ui.go](vitals_ui.go)
-
-函数/方法：`*InputState.isDead`、`*InputState.updateRespawnRequest`、`drawVitalsHUD`
 
 ## [webgpu_animation_windows.go](webgpu_animation_windows.go)
 
@@ -688,6 +584,10 @@
 
 函数/方法：`*webGPUFrameUploads.begin`、`*webGPUFrameUploads.write`、`*webGPUFrameUploads.close`
 
+## [webgpu_workshop_windows.go](webgpu_workshop_windows.go)
+
+函数/方法：`*webGPUEntityBatch.addWorkshopGuides`
+
 ## [webgpu_world_renderer_windows.go](webgpu_world_renderer_windows.go)
 
 类型：`webGPUWorldRenderer`
@@ -699,12 +599,6 @@
 类型：`uiPoint`、`uiRect`、`windowInputFrame`、`cursorController`
 
 函数/方法：`newUIRect`、`uiContainsPoint`、`inputKeyDown`、`inputKeyPressed`、`inputMouseDown`、`inputMousePressed`、`inputMousePosition`、`inputMouseDelta`、`inputMouseWheel`、`inputTime`、`windowWidth`、`windowHeight`、`inputChar`、`captureCursor`、`releaseCursor`、`positionCursor`、`inputMouseReleased`
-
-## [window_input_raylib.go](window_input_raylib.go)
-
-类型：`raylibCursorController`
-
-函数/方法：`raylibCursorController.SetCaptured`、`raylibCursorController.SetPosition`、`captureRaylibInput`、`raylibCursorController.Resize`
 
 ## [window_win32_windows.go](window_win32_windows.go)
 
@@ -766,7 +660,7 @@
 
 函数/方法：`*World.rayCast`、`sign`、`axisDelta`、`axisMax`
 
-## [world_ray_raylib.go](world_ray_raylib.go)
+## [world_ray_game.go](world_ray_game.go)
 
 函数/方法：`*World.HitTest`
 
@@ -774,5 +668,5 @@
 
 类型：`worldRenderCache`、`visibleSection`、`translucentDraw`
 
-函数/方法：`worldFogRange`、`*worldRenderCache.radiusOffsets`、`compareVisibleSections`、`compareSectionCoordinates`、`compareTranslucentDraws`、`*worldRenderCache.appendVisibleSections`、`*worldRenderCache.collectTranslucent`、`*worldRenderCache.drawMeshes`、`*World.Draw`、`*World.DrawBlockCrack`
+函数/方法：`worldFogRange`、`*worldRenderCache.radiusOffsets`、`compareVisibleSections`、`compareSectionCoordinates`、`compareTranslucentDraws`、`*worldRenderCache.appendVisibleSections`、`*worldRenderCache.collectTranslucent`
 

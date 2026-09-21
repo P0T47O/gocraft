@@ -1,47 +1,22 @@
 package platform
 
-// MeshHandle is backend-owned GPU geometry. GPU operations must remain on the
-// render thread, matching the engine's existing ownership rules.
+// MeshHandle is GPU geometry owned by its backend and render thread.
+// Drawing requires an explicit WebGPU render pass, not a global Draw call.
 type MeshHandle interface {
-	Draw()
 	Unload()
 	IndexCount() int32
 }
-
-// MeshBackend is the first narrow renderer seam used by the WebGPU experiment.
-// Draw receives renderer state that the current OpenGL path needs; a WebGPU
-// backend can instead interpret it as pipeline/bind-group state.
 type MeshBackend interface {
 	Upload(vertices []Vertex, indices []uint32) MeshHandle
-	Draw(mesh MeshHandle)
 }
 
-type OpenGLMeshBackend struct{}
+// No implicit graphics backend: uploads before device initialization are bugs.
+var meshBackend MeshBackend
 
-func (OpenGLMeshBackend) Upload(vertices []Vertex, indices []uint32) MeshHandle {
-	return uploadOpenGLMesh(vertices, indices)
-}
-
-func (OpenGLMeshBackend) Draw(mesh MeshHandle) {
-	if mesh != nil {
-		mesh.Draw()
-	}
-}
-
-var meshBackend MeshBackend = OpenGLMeshBackend{}
-
-func SetMeshBackend(backend MeshBackend) {
-	if backend == nil {
-		meshBackend = OpenGLMeshBackend{}
-		return
-	}
-	meshBackend = backend
-}
-
+func SetMeshBackend(backend MeshBackend) { meshBackend = backend }
 func UploadRenderMesh(vertices []Vertex, indices []uint32) MeshHandle {
+	if meshBackend == nil {
+		panic("mesh upload without an active renderer")
+	}
 	return meshBackend.Upload(vertices, indices)
-}
-
-func DrawRenderMesh(mesh MeshHandle) {
-	meshBackend.Draw(mesh)
 }

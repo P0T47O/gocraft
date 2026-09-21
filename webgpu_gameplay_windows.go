@@ -11,8 +11,7 @@ import (
 
 // DrawGameplay is the live WebGPU gameplay presentation path. World geometry,
 // entities/effects, HUD, text, inventory and container screens are encoded into
-// one render pass so the Raylib/OpenGL presenter remains completely idle while
-// StatePlaying owns the HWND through WebGPU.
+// one render pass. WebGPU exclusively owns presentation to the native HWND.
 func (r *webGPUWorldRenderer) DrawGameplay(world *World, frame webGPUFrameContext, state *InputState) (err error) {
 	defer func() { err = r.recoverOutdatedSurface(err) }()
 	if activeWebGPUHUDRenderer != nil {
@@ -130,47 +129,55 @@ func (r *webGPUWorldRenderer) DrawGameplay(world *World, frame webGPUFrameContex
 		}
 	}
 
-	hud, err := ensureWebGPUHUDRenderer(r)
-	if err != nil {
-		_ = pass.End()
-		r.surface.DiscardTexture()
-		return err
-	}
-	if err := hud.Draw(pass, r.width, r.height, state); err != nil {
-		_ = pass.End()
-		r.surface.DiscardTexture()
-		return err
-	}
-	text, err := ensureWebGPUTextRenderer(r)
-	if err != nil {
-		_ = pass.End()
-		r.surface.DiscardTexture()
-		return err
-	}
-	if err := text.Draw(pass, r.width, r.height, state); err != nil {
-		_ = pass.End()
-		r.surface.DiscardTexture()
-		return err
-	}
-	if err := drawWebGPUInventoryOverlay(pass, r, state); err != nil {
-		_ = pass.End()
-		r.surface.DiscardTexture()
-		return err
-	}
-	if err := drawWebGPUContainerOverlay(pass, r, state); err != nil {
-		_ = pass.End()
-		r.surface.DiscardTexture()
-		return err
-	}
-
-	if nativeWindowActive && (isPaused || state.isDead()) {
+	if frame.HideHUD {
 		if err := nativeMenuCanvas.draw(pass, r); err != nil {
 			_ = pass.End()
 			r.surface.DiscardTexture()
 			return err
 		}
-	}
+	} else {
+		hud, err := ensureWebGPUHUDRenderer(r)
+		if err != nil {
+			_ = pass.End()
+			r.surface.DiscardTexture()
+			return err
+		}
+		if err := hud.Draw(pass, r.width, r.height, state); err != nil {
+			_ = pass.End()
+			r.surface.DiscardTexture()
+			return err
+		}
+		text, err := ensureWebGPUTextRenderer(r)
+		if err != nil {
+			_ = pass.End()
+			r.surface.DiscardTexture()
+			return err
+		}
+		if err := text.Draw(pass, r.width, r.height, state); err != nil {
+			_ = pass.End()
+			r.surface.DiscardTexture()
+			return err
+		}
+		if err := drawWebGPUInventoryOverlay(pass, r, state); err != nil {
+			_ = pass.End()
+			r.surface.DiscardTexture()
+			return err
+		}
+		if err := drawWebGPUContainerOverlay(pass, r, state); err != nil {
+			_ = pass.End()
+			r.surface.DiscardTexture()
+			return err
+		}
 
+		if nativeWindowActive && (isPaused || state.isDead()) {
+			if err := nativeMenuCanvas.draw(pass, r); err != nil {
+				_ = pass.End()
+				r.surface.DiscardTexture()
+				return err
+			}
+		}
+
+	}
 	if err := pass.End(); err != nil {
 		r.surface.DiscardTexture()
 		return err

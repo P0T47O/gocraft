@@ -8,7 +8,7 @@ import (
 	"github.com/gogpu/wgpu"
 )
 
-// WebGPUMeshBackend owns WebGPU mesh buffers for the renderer experiment.
+// WebGPUMeshBackend owns WebGPU mesh buffers for the world renderer.
 // It deliberately does not own the surface/pipeline: those belong to the
 // higher-level renderer because they are frame- and material-specific.
 type WebGPUMeshBackend struct {
@@ -104,14 +104,8 @@ func (b *WebGPUMeshBackend) UploadChecked(vertices []Vertex, indices []uint32) (
 	}, nil
 }
 
-func (b *WebGPUMeshBackend) Draw(mesh MeshHandle) {
-	// The generic renderer seam does not yet carry a WebGPU render pass. World
-	// integration will route this through DrawPass once the frame renderer owns
-	// the WebGPU surface/pipeline. Keeping this a no-op prevents accidental GL use.
-}
-
 // DrawPass binds a WebGPU mesh to an existing render pass and emits one indexed
-// draw. This is the bridge used by the smoke probe and, later, the world pass.
+// draw. Used by the production world renderer and native previews.
 func (b *WebGPUMeshBackend) DrawPass(pass *wgpu.RenderPassEncoder, mesh MeshHandle) error {
 	if pass == nil || mesh == nil {
 		return nil
@@ -146,8 +140,6 @@ type webGPUMesh struct {
 	indexCount   int32
 	uploadErr    error
 }
-
-func (m *webGPUMesh) Draw() {}
 
 func (m *webGPUMesh) IndexCount() int32 {
 	if m == nil {

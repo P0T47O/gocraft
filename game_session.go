@@ -8,32 +8,12 @@ import (
 func startGame(savePath string, ip string, isMultiplayer bool) {
 	fmt.Println("Starting Game...")
 
-	// Load Common Assets
-	// chunkPool = NewChunkPool(1024) // Share the global pool? Or new? Global is fine.
-	// initBlockRegistry() // Already initialized in main()
-	if *useWebGPU {
-		if !nativeWindowActive {
-			assets = newWebGPUCPUAssets()
-		}
-		if err := ensureExperimentalWebGPURenderer(); err != nil {
-			if nativeWindowActive {
-				menuError = err.Error()
-				return
-			}
-			fmt.Printf("WebGPU initialization failed, using OpenGL: %v\n", err)
-			closeExperimentalWebGPURenderer()
-			*useWebGPU = false
-			assets = loadRenderAssets()
-		}
-	} else {
-		assets = loadRenderAssets()
+	if assets == nil {
+		assets = newWebGPUCPUAssets()
 	}
-	if !*useWebGPU && mobsRenderer == nil {
-		var err error
-		mobsRenderer, err = newMobRenderer(mobContent)
-		if err != nil {
-			fmt.Printf("Mob visuals unavailable: %v\n", err)
-		}
+	if err := ensureExperimentalWebGPURenderer(); err != nil {
+		menuError = err.Error()
+		return
 	}
 
 	// Initialize Camera

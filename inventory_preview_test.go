@@ -1,10 +1,9 @@
+//go:build windows
+
 package main
 
 import (
-	rl "github.com/gen2brain/raylib-go/raylib"
 	"os"
-	"path/filepath"
-	"runtime"
 	"testing"
 )
 
@@ -13,15 +12,8 @@ func TestInventoryPreview(t *testing.T) {
 	if os.Getenv("GOCRAFT_INVENTORY_PREVIEW") != "1" {
 		t.Skip("opt-in graphical preview")
 	}
-	runtime.LockOSThread()
-	defer runtime.UnlockOSThread()
-	rl.SetConfigFlags(rl.FlagWindowHidden)
-	rl.InitWindow(1280, 720, "Inventory preview")
-	defer rl.CloseWindow()
-	initBlockRegistry()
-	InitRecipes()
-	a := loadRenderAssets()
-	defer a.unload()
+	r, closePreview := nativePreviewFixture(t)
+	defer closePreview()
 	saved := localInventory
 	defer func() { localInventory = saved }()
 	localInventory = Inventory{}
@@ -40,52 +32,22 @@ func TestInventoryPreview(t *testing.T) {
 		width, height int
 		station       byte
 	}{{"inventory-field", 1280, 720, 0}, {"inventory-workbench", 1871, 994, blockCraftingTable}, {"inventory-small", 800, 600, 0}} {
-		rl.SetWindowSize(sample.width, sample.height)
 		state.CraftingStation = sample.station
-		// Render to a texture for a deterministic capture without desktop interaction.
-		target := rl.LoadRenderTexture(int32(sample.width), int32(sample.height))
-		rl.BeginTextureMode(target)
-		rl.ClearBackground(rl.NewColor(33, 53, 66, 255))
-		a.drawSurvivalInventory(state)
-		rl.EndTextureMode()
-		img := rl.LoadImageFromTexture(target.Texture)
-		rl.ImageFlipVertical(img)
-		path, _ := filepath.Abs(filepath.Join("work", sample.name+".png"))
-		ok := rl.ExportImage(*img, path)
-		rl.UnloadImage(img)
-		rl.UnloadRenderTexture(target)
-		if !ok {
-			t.Fatal("preview export failed")
-		}
+		captureNativeUI(t, r, sample.name, sample.width, sample.height, state, nil)
 	}
 	oldMode := currentGameMode
 	defer func() { currentGameMode = oldMode }()
-	rl.SetWindowSize(1280, 720)
 	state.CurrentBlock = blockLog
 	for i := 0; i < 9; i++ {
 		state.Hotbar[i] = byte(localInventory.Slots[i].ID)
 	}
 	for _, sample := range []string{"hud-theme", "creative-theme"} {
-		target := rl.LoadRenderTexture(1280, 720)
-		rl.BeginTextureMode(target)
-		drawMenuBackdrop()
-		if sample == "creative-theme" {
+		state.InventoryOpen = sample == "creative-theme"
+		if state.InventoryOpen {
 			currentGameMode = ModeCreative
-			a.drawInventory(state)
 		} else {
 			currentGameMode = ModeSurvival
-			a.drawHotbar(state)
-			a.drawCrosshair()
 		}
-		rl.EndTextureMode()
-		img := rl.LoadImageFromTexture(target.Texture)
-		rl.ImageFlipVertical(img)
-		path, _ := filepath.Abs(filepath.Join("work", sample+".png"))
-		ok := rl.ExportImage(*img, path)
-		rl.UnloadImage(img)
-		rl.UnloadRenderTexture(target)
-		if !ok {
-			t.Fatal("theme preview export failed")
-		}
+		captureNativeUI(t, r, sample, 1280, 720, state, nil)
 	}
 }

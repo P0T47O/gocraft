@@ -304,6 +304,9 @@ func (r *webGPUEntityRenderer) Draw(pass *wgpu.RenderPassEncoder, worldRenderer 
 	}
 	batch := r.batch
 	batch.vertices, batch.indices = batch.vertices[:0], batch.indices[:0]
+	if mobWorkshopActive {
+		batch.addWorkshopGuides()
+	}
 	projection, view, eye := webGPUCameraMatrices(worldRenderer.camera, worldRenderer.width, worldRenderer.height)
 	frustum := ExtractFrustum(projection.Mul4(view))
 	flush := func() error {

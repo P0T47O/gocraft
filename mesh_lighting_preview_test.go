@@ -1,35 +1,38 @@
+//go:build windows
+
 package main
 
 import (
-	rl "github.com/gen2brain/raylib-go/raylib"
-	"github.com/go-gl/mathgl/mgl32"
+	"encoding/binary"
+	"github.com/gogpu/wgpu"
 	"gocraft/platform"
+	"image/color"
 	"math"
 	"os"
-	"runtime"
 	"testing"
 )
 
-// Controlled A/B using the production vertex layout, quad triangulation and
-// shader. Synthetic light field isolates shading from texture noise and fog.
+// Render flat and interpolated lighting side-by-side through a WebGPU vertex
+// pipeline, then assert a constant reference and an interpolated pixel ramp.
 func TestSmoothLightingPreview(t *testing.T) {
 	if os.Getenv("GOCRAFT_LIGHT_PREVIEW") != "1" {
 		t.Skip("opt-in GPU shading preview")
 	}
-	runtime.LockOSThread()
-	defer runtime.UnlockOSThread()
-	rl.SetConfigFlags(rl.FlagWindowHidden)
-	rl.InitWindow(1024, 512, "Smooth light comparison")
-	defer rl.CloseWindow()
-	initBlockRegistry()
-	shader := loadCutoutShader()
-	defer rl.UnloadShader(shader)
-	img := rl.GenImageColor(1, 1, rl.White)
-	tex := rl.LoadTextureFromImage(img)
-	rl.UnloadImage(img)
-	defer rl.UnloadTexture(tex)
-	target := rl.LoadRenderTexture(1024, 512)
-	defer rl.UnloadRenderTexture(target)
+	r, closePreview := nativePreviewFixture(t)
+	defer closePreview()
+	pipeline, group, cameraBuffer, cleanup, err := createWebGPUChunkPreviewPipeline(r.device, r.format)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cleanup()
+	identity := make([]byte, 64)
+	for _, i := range []int{0, 5, 10, 15} {
+		binary.LittleEndian.PutUint32(identity[i*4:], math.Float32bits(1))
+	}
+	if err := r.queue.WriteBuffer(cameraBuffer, 0, identity); err != nil {
+		t.Fatal(err)
+	}
+	backend := platform.NewWebGPUMeshBackend(r.device)
 	light := func(x, y, z int) byte { return byte(max(0, 15-int(math.Abs(float64(x-7))+math.Abs(float64(z-7))))) }
 	blocks := func(x, y, z int) byte {
 		if y == 0 {
@@ -38,10 +41,7 @@ func TestSmoothLightingPreview(t *testing.T) {
 		return blockAir
 	}
 	a := &RenderAssets{}
-	rl.BeginTextureMode(target)
-	rl.ClearBackground(rl.Black)
-	rl.DrawRenderBatchActive()
-	rl.DisableBackfaceCulling()
+	var meshes []platform.MeshHandle
 	for panel := 0; panel < 2; panel++ {
 		mb := new(meshBuilder)
 		for x := 0; x < 16; x++ {
@@ -51,7 +51,7 @@ func TestSmoothLightingPreview(t *testing.T) {
 					v := float32(light(x, 1, z))
 					levels = [4]float32{v, v, v, v}
 				}
-				colors := a.applyAOSmooth(blockStone, rl.White, ao, levels, make([]rl.Color, 4))
+				colors := a.applyAOSmooth(blockStone, meshColor(255, 255, 255, 255), ao, levels, make([]color.RGBA, 4))
 				var positions [12]float32
 				for i, c := range faceLightLayouts[lightTop].corners {
 					positions[i*3] = -1 + float32(panel) + (float32(x)+.5+float32(c[0])*.5)/16
@@ -66,29 +66,36 @@ func TestSmoothLightingPreview(t *testing.T) {
 			copy(vertices[i].Color[:], mb.colors[i*4:i*4+4])
 			copy(vertices[i].Texcoord[:], mb.texcoords[i*2:i*2+2])
 		}
-		mesh := &ChunkMesh{glMesh: platform.UploadMesh(vertices, mb.indices)}
-		mesh.Draw(shader.ID, mgl32.Ident4(), tex.ID)
-		mesh.unload()
+		for i := range vertices {
+			vertices[i].Normal = [3]float32{0, 0, 1}
+		}
+		mesh, err := backend.UploadChecked(vertices, mb.indices)
+		if err != nil {
+			t.Fatal(err)
+		}
+		meshes = append(meshes, mesh)
 	}
-	platform.UseProgram(0)
-	rl.EnableBackfaceCulling()
-	rl.EndTextureMode()
-	result := rl.LoadImageFromTexture(target.Texture)
-	defer rl.UnloadImage(result)
-	rl.ImageFlipVertical(result)
-	colors := rl.LoadImageColors(result)
-	defer rl.UnloadImageColors(colors)
-	// Within one tile: old left panel is flat; right panel has a smooth ramp.
-	if colors[240*1024+161].R != colors[240*1024+186].R {
+
+	defer func() {
+		for _, mesh := range meshes {
+			mesh.Unload()
+		}
+	}()
+	image := captureNativePreview(t, r, 1024, 512, func(pass *wgpu.RenderPassEncoder) error {
+		pass.SetPipeline(pipeline)
+		pass.SetBindGroup(0, group, nil)
+		for _, mesh := range meshes {
+			if err := backend.DrawPass(pass, mesh); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if image.RGBAAt(161, 240).R != image.RGBAAt(186, 240).R {
 		t.Fatal("flat reference not flat")
 	}
-	if colors[240*1024+673].R == colors[240*1024+698].R {
+	if image.RGBAAt(673, 240).R == image.RGBAAt(698, 240).R {
 		t.Fatal("GPU did not interpolate smooth light")
 	}
-	if err := os.MkdirAll("work", 0755); err != nil {
-		t.Fatal(err)
-	}
-	if !rl.ExportImage(*result, "work/smooth-light-comparison.png") {
-		t.Fatal("preview export failed")
-	}
+	saveNativePreview(t, image, "work/smooth-light-comparison.png")
 }

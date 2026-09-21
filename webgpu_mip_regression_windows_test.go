@@ -76,7 +76,7 @@ func TestWebGPUMipStabilityGPU(t *testing.T) {
 	check(err)
 	defer readback.Release()
 	backend := platform.EnableExperimentalWebGPU(device)
-	defer platform.SetMeshBackend(platform.OpenGLMeshBackend{})
+	defer platform.SetMeshBackend(nil)
 	mesh, err := backend.UploadChecked([]platform.Vertex{
 		{Position: [3]float32{-1, -1, .5}, Texcoord: [2]float32{112. / 512, 128. / 256}, Color: [4]byte{255, 255, 255, 255}},
 		{Position: [3]float32{1, -1, .5}, Texcoord: [2]float32{128. / 512, 128. / 256}, Color: [4]byte{255, 255, 255, 255}},

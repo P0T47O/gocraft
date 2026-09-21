@@ -1,14 +1,12 @@
+//go:build windows
+
 package main
 
 import (
 	"fmt"
 	"os"
-	"path/filepath"
-	"runtime"
 	"testing"
 	"time"
-
-	rl "github.com/gen2brain/raylib-go/raylib"
 )
 
 // Opt-in actual renderer snapshots. No game saves/settings are read or changed.
@@ -16,11 +14,8 @@ func TestMenuPreview(t *testing.T) {
 	if os.Getenv("GOCRAFT_MENU_PREVIEW") != "1" {
 		t.Skip("opt-in graphical preview")
 	}
-	runtime.LockOSThread()
-	defer runtime.UnlockOSThread()
-	rl.SetConfigFlags(rl.FlagWindowHidden)
-	rl.InitWindow(1280, 720, "Menu preview")
-	defer rl.CloseWindow()
+	r, closePreview := nativePreviewFixture(t)
+	defer closePreview()
 	oldUI, oldSettings, oldPage, oldSaves, oldScroll := ui, currentSettings, menuPage, saveList, worldScroll
 	oldPauseSettings, oldError, oldDelete := pauseSettings, menuError, pendingDelete
 	defer func() {
@@ -42,27 +37,8 @@ func TestMenuPreview(t *testing.T) {
 	worldScroll = 0
 	menuError = ""
 	pendingDelete = ""
-	if err := os.MkdirAll("work", 0755); err != nil {
-		t.Fatal(err)
-	}
-	capture := func(name string, draw func()) {
-		target := rl.LoadRenderTexture(int32(rl.GetScreenWidth()), int32(rl.GetScreenHeight()))
-		rl.BeginTextureMode(target)
-		rl.ClearBackground(invBackground)
-		draw()
-		rl.EndTextureMode()
-		img := rl.LoadImageFromTexture(target.Texture)
-		rl.ImageFlipVertical(img)
-		path, _ := filepath.Abs(filepath.Join("work", name+".png"))
-		ok := rl.ExportImage(*img, path)
-		rl.UnloadImage(img)
-		rl.UnloadRenderTexture(target)
-		if !ok {
-			t.Fatal("capture failed", name)
-		}
-	}
 	for _, size := range [][2]int{{1280, 720}, {800, 600}} {
-		rl.SetWindowSize(size[0], size[1])
+		capture := func(name string, draw func()) { captureNativeUI(t, r, name, size[0], size[1], nil, draw) }
 		for _, page := range []MenuPage{MenuMain, MenuSingleplayer, MenuCreateWorld, MenuMultiplayer, MenuSettings} {
 			menuPage = page
 			capture(fmt.Sprintf("menu-%d-%d", page, size[0]), drawMenu)
