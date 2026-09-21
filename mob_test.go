@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"encoding/binary"
-	rl "github.com/gen2brain/raylib-go/raylib"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -183,8 +182,8 @@ func TestMobSaveAndLegacyMigration(t *testing.T) {
 }
 func TestSharedColliderKeepsPlayerOrigin(t *testing.T) {
 	w := mobTestWorld(t)
-	eye := rl.NewVector3(8, 70.501+playerEyeY, 8)
-	moved := resolveCollision(w, eye, rl.NewVector3(0, -5, 0))
+	eye := newGameVec3(8, 70.501+playerEyeY, 8)
+	moved := resolveCollision(w, eye, newGameVec3(0, -5, 0))
 	if abs32(moved.Y-eye.Y) > .002 {
 		t.Fatal("player eye/feet adapter changed landing")
 	}

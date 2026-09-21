@@ -169,8 +169,8 @@ func drawWebGPUInventoryOverlay(pass *wgpu.RenderPassEncoder, worldRenderer *web
 }
 
 func drawWebGPUCreativeInventory(pass *wgpu.RenderPassEncoder, hud *webGPUHUDRenderer, text *webGPUTextRenderer, state *InputState, width, height uint32) error {
-	layout := inventoryLayout()
-	scale := inventoryScale()
+	layout := inventoryLayoutFor(float32(width), float32(height))
+	scale := inventoryScaleFor(float32(width), float32(height))
 	shapes := newWebGPUHUDBuilder(width, height)
 	labels := newWebGPUTextBatch(width, height)
 	shapes.rect(0, 0, float32(width), float32(height), webGPUUIDim)

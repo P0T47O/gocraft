@@ -12,3 +12,5 @@ func raylibCamera(c gameCamera) rl.Camera3D {
 		Projection: rl.CameraPerspective,
 	}
 }
+
+func raylibVec3FromGame(v gameVec3) rl.Vector3 { return rl.NewVector3(v.X, v.Y, v.Z) }

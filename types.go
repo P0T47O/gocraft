@@ -1,11 +1,5 @@
 package main
 
-import (
-	"math"
-
-	rl "github.com/gen2brain/raylib-go/raylib"
-)
-
 const (
 	chunkWidth    = 16
 	chunkHeight   = 256
@@ -114,14 +108,6 @@ type blockFaces struct {
 	West   string
 }
 
-type faceMesh struct {
-	mesh      rl.Mesh
-	vertices  []float32
-	normals   []float32
-	texcoords []float32
-	indices   []uint16
-}
-
 func inBounds(x, y, z int) bool {
 	return x >= 0 && x < chunkWidth &&
 		y >= 0 && y < chunkHeight &&
@@ -147,33 +133,4 @@ func modFloor(v, d int) int {
 		m += d
 	}
 	return m
-}
-
-func findHit(blocks *[chunkWidth][chunkHeight][chunkWidth]byte, ray rl.Ray) hitInfo {
-	best := hitInfo{distance: float32(math.MaxFloat32)}
-	for x := 0; x < chunkWidth; x++ {
-		for y := 0; y < chunkHeight; y++ {
-			for z := 0; z < chunkWidth; z++ {
-				if blocks[x][y][z] == blockAir {
-					continue
-				}
-				min := rl.NewVector3(float32(x)-0.5, float32(y)-0.5, float32(z)-0.5)
-				max := rl.NewVector3(float32(x)+0.5, float32(y)+0.5, float32(z)+0.5)
-				collision := rl.GetRayCollisionBox(ray, rl.BoundingBox{Min: min, Max: max})
-				if collision.Hit && collision.Distance < best.distance {
-					best = hitInfo{
-						x: x,
-						y: y,
-						z: z,
-						normal: struct {
-							X, Y, Z float32
-						}{X: collision.Normal.X, Y: collision.Normal.Y, Z: collision.Normal.Z},
-						distance: collision.Distance,
-						hit:      true,
-					}
-				}
-			}
-		}
-	}
-	return best
 }

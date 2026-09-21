@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	rl "github.com/gen2brain/raylib-go/raylib"
 )
 
 func handlePacket(pkt Packet) {
@@ -26,11 +25,11 @@ func handlePacket(pkt Packet) {
 			if server != nil {
 				server.Paused.Store(false)
 			}
-			rl.EnableCursor()
+			releaseCursor()
 		} else if wasDead {
 			input.RespawnWaiting = false
 			input.SkipCamera = true
-			rl.DisableCursor()
+			captureCursor()
 		}
 	case *PacketContainerState:
 		if p.Token <= input.ClosedContainerToken {
@@ -42,7 +41,7 @@ func handlePacket(pkt Packet) {
 				input.InventoryOpen = false
 				input.SkipCamera = true
 				if !isPaused {
-					rl.DisableCursor()
+					captureCursor()
 				}
 			}
 		} else {
@@ -50,7 +49,7 @@ func handlePacket(pkt Packet) {
 			input.InventoryOpen = true
 			input.CraftingStation = 0
 			input.SkipCamera = true
-			rl.EnableCursor()
+			releaseCursor()
 		}
 	case *PacketOpenWindow:
 		if p.WindowType == 1 { // Workbench
@@ -58,10 +57,10 @@ func handlePacket(pkt Packet) {
 			input.InventoryOpen = true
 			input.CraftingStation = blockCraftingTable
 			input.SkipCamera = true
-			rl.EnableCursor()
+			releaseCursor()
 
 			// Center the mouse so it feels natural when UI opens
-			rl.SetMousePosition(rl.GetScreenWidth()/2, rl.GetScreenHeight()/2)
+			positionCursor(windowWidth()/2, windowHeight()/2)
 		}
 
 	case *PacketChunkData:

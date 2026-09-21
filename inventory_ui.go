@@ -6,96 +6,6 @@ import (
 	rl "github.com/gen2brain/raylib-go/raylib"
 )
 
-// All drawing and hit testing use this same layout, including window resizing.
-type SurvivalLayout struct{ X, Y, S float32 }
-
-func survivalLayout(w, h float32) SurvivalLayout {
-	s := min((w-32)/1000, (h-32)/620, float32(1.35))
-	return SurvivalLayout{(w - 1000*s) / 2, (h - 620*s) / 2, s}
-}
-func (l SurvivalLayout) Rect(x, y, w, h float32) rl.Rectangle {
-	return rl.NewRectangle(l.X+x*l.S, l.Y+y*l.S, w*l.S, h*l.S)
-}
-func (l SurvivalLayout) Slot(i int) rl.Rectangle {
-	if i < 9 {
-		return l.Rect(354+float32(i)*68, 516, 60, 60)
-	}
-	return l.Rect(354+float32((i-9)%9)*68, 294+float32((i-9)/9)*64, 60, 60)
-}
-func (l SurvivalLayout) Row(i int) rl.Rectangle { return l.Rect(24, 144+float32(i)*64, 284, 58) }
-func inventoryFor(c *Client) *Inventory {
-	if c != nil {
-		return &c.Inventory
-	}
-	return &localInventory
-}
-func selectedBookRecipe(state *InputState, rows []*Recipe) *Recipe {
-	for _, r := range rows {
-		if r.Result.ID == state.RecipeSelected {
-			return r
-		}
-	}
-	if len(rows) > 0 {
-		return rows[0]
-	}
-	return nil
-}
-func recipeAvailable(state *InputState, r *Recipe) bool {
-	return r != nil && (r.Station == 0 || r.Station == state.CraftingStation)
-}
-
-func (s *InputState) updateCraftingInput(l SurvivalLayout, c *Client) {
-	mouse := rl.GetMousePosition()
-	click := rl.IsMouseButtonPressed(rl.MouseLeftButton)
-	if click && rl.CheckCollisionPointRec(mouse, l.Rect(938, 22, 38, 32)) {
-		s.InventoryOpen = false
-		s.CraftingStation = 0
-		s.SkipCamera = true
-		rl.DisableCursor()
-		return
-	}
-	if click && rl.CheckCollisionPointRec(mouse, l.Rect(24, 96, 138, 32)) {
-		s.RecipesReadyOnly = false
-		s.CraftingScroll = 0
-	}
-	if click && rl.CheckCollisionPointRec(mouse, l.Rect(170, 96, 138, 32)) {
-		s.RecipesReadyOnly = true
-		s.CraftingScroll = 0
-	}
-	inv := inventoryFor(c)
-	rows := recipeBook(inv, s.CraftingStation, s.RecipesReadyOnly)
-	if rl.CheckCollisionPointRec(mouse, l.Rect(24, 144, 284, 384)) {
-		s.CraftingScroll -= int(rl.GetMouseWheelMove())
-	}
-	s.CraftingScroll = max(0, min(s.CraftingScroll, max(0, len(rows)-6)))
-	for i := 0; i < 6 && i+s.CraftingScroll < len(rows); i++ {
-		if click && rl.CheckCollisionPointRec(mouse, l.Row(i)) {
-			s.RecipeSelected = rows[i+s.CraftingScroll].Result.ID
-		}
-	}
-	r := selectedBookRecipe(s, rows)
-	if !click || !recipeAvailable(s, r) || craftCapacity(inv, r) == 0 {
-		return
-	}
-	count := 0
-	if rl.CheckCollisionPointRec(mouse, l.Rect(354, 216, 286, 34)) {
-		count = 1
-		if rl.IsKeyDown(rl.KeyLeftShift) || rl.IsKeyDown(rl.KeyRightShift) {
-			count = 64
-		}
-	}
-	if rl.CheckCollisionPointRec(mouse, l.Rect(648, 216, 310, 34)) {
-		count = 64
-	}
-	if count > 0 {
-		if c != nil {
-			c.Send(&PacketCraft{RecipeID: int32(r.ID), Count: int32(count)})
-		} else {
-			inv.Craft(r, count)
-		}
-	}
-}
-
 func (a *RenderAssets) drawInventoryItem(item Item, r rl.Rectangle, s float32) {
 	if item.ID == 0 {
 		return
@@ -124,7 +34,7 @@ func (a *RenderAssets) drawInventoryItem(item Item, r rl.Rectangle, s float32) {
 	}
 }
 func (a *RenderAssets) drawSurvivalInventory(state *InputState) {
-	l := survivalLayout(float32(rl.GetScreenWidth()), float32(rl.GetScreenHeight()))
+	l := legacySurvivalLayoutFor(float32(rl.GetScreenWidth()), float32(rl.GetScreenHeight()))
 	inv := inventoryFor(client)
 	mouse := rl.GetMousePosition()
 	rl.DrawRectangle(0, 0, int32(rl.GetScreenWidth()), int32(rl.GetScreenHeight()), rl.NewColor(9, 17, 22, 190))

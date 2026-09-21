@@ -105,6 +105,12 @@ func main() {
 
 	// Load Settings
 	settings := LoadSettings()
+	if *useWebGPU {
+		if err := runNativeWebGPU(settings); err != nil {
+			fmt.Printf("Native WebGPU failed: %v\n", err)
+		}
+		return
+	}
 	rl.SetTraceLogLevel(rl.LogWarning) // Suppress INFO logs (texture, etc.)
 	rl.InitWindow(int32(settings.ResolutionWidth), int32(settings.ResolutionHeight), "GoCraft")
 	rl.SetExitKey(0) // Disable default ESC exit to allow custom Pause Menu
@@ -144,47 +150,8 @@ func main() {
 		}
 	}
 
-	const webGPUFrameInterval = time.Second / 60
-	var webGPULastFrame time.Time
 	for !rl.WindowShouldClose() && !quitRequested {
-		// The WebGPU path owns presentation while playing. Raylib continues to own
-		// the native window and input, but Begin/EndDrawing must not swap the same
-		// HWND while WebGPU is presenting to it.
-		if *useWebGPU && currentState == StatePlaying {
-			if err := ensureExperimentalWebGPURenderer(); err != nil {
-				fmt.Printf("WebGPU renderer unavailable, falling back to OpenGL: %v\n", err)
-				*useWebGPU = false
-				continue
-			}
-
-			// Raylib normally updates GetFrameTime and enforces SetTargetFPS from
-			// EndDrawing. WebGPU intentionally skips EndDrawing, so own both the
-			// gameplay clock and frame pacing here instead of reusing stale Raylib
-			// timing from the last OpenGL menu frame.
-			frameStarted := time.Now()
-			if webGPULastFrame.IsZero() {
-				setGameFrameTime(defaultGameFrameTime)
-			} else {
-				setGameFrameTime(float32(frameStarted.Sub(webGPULastFrame).Seconds()))
-			}
-			webGPULastFrame = frameStarted
-
-			rl.PollInputEvents()
-			updateGame()
-			if currentState == StatePlaying {
-				if err := drawExperimentalWebGPUFrame(); err != nil {
-					fmt.Printf("WebGPU frame failed: %v\n", err)
-					quitRequested = true
-				}
-			}
-			perfMon.UpdateFrame(gameFrameTime())
-			if remaining := webGPUFrameInterval - time.Since(frameStarted); remaining > 0 {
-				time.Sleep(remaining)
-			}
-			continue
-		}
-
-		webGPULastFrame = time.Time{}
+		captureRaylibInput()
 		rl.BeginDrawing()
 		rl.ClearBackground(invBackground)
 

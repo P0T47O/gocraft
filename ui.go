@@ -1,10 +1,6 @@
 package main
 
-import rl "github.com/gen2brain/raylib-go/raylib"
-
-func uiScale() float32 {
-	w := float32(rl.GetScreenWidth())
-	h := float32(rl.GetScreenHeight())
+func uiScaleFor(w, h float32) float32 {
 	scale := float32(1)
 	if w > 0 && h > 0 {
 		scale = w / 1280
@@ -18,8 +14,8 @@ func uiScale() float32 {
 	return scale
 }
 
-func inventoryScale() float32 {
-	return min(uiScale()*3.2, (float32(rl.GetScreenWidth())-32)/176, (float32(rl.GetScreenHeight())-32)/196)
+func inventoryScaleFor(w, h float32) float32 {
+	return min(uiScaleFor(w, h)*3.2, (w-32)/176, (h-32)/196)
 }
 
 type InventoryLayout struct {
@@ -37,14 +33,14 @@ type InventoryLayout struct {
 	HotbarY  float32
 }
 
-func inventoryLayout() InventoryLayout {
-	scale := inventoryScale()
+func inventoryLayoutFor(w, h float32) InventoryLayout {
+	scale := inventoryScaleFor(w, h)
 	// Creative Layout: 9 columns, 6 rows (54 items)
 	// Base size approx 9*18 = 162 + padding
 	texW := float32(176) * scale
 	texH := float32(196) * scale // Taller for more rows
-	originX := float32(rl.GetScreenWidth())/2 - texW/2
-	originY := float32(rl.GetScreenHeight())/2 - texH/2
+	originX := w/2 - texW/2
+	originY := h/2 - texH/2
 	slot := float32(18) * scale
 	stride := slot
 	// Center the grid in the window

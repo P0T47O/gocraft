@@ -61,24 +61,3 @@ func drawVitalsHUD(s *InputState) {
 		inventoryText("SPRINTING", x, y-24*scale, int32(12*scale), invAccent)
 	}
 }
-func drawDeathScreen(s *InputState) {
-	rl.DrawRectangle(0, 0, int32(rl.GetScreenWidth()), int32(rl.GetScreenHeight()), rl.NewColor(28, 13, 16, 210))
-	l := menuLayout()
-	inventoryBox(l.Rect(220, 144, 560, 340), invBackground, invLine)
-	rl.DrawRectangleRec(l.Rect(220, 144, 560, 3), invWarning)
-	l.Text("YOU DIED", 252, 176, 32, invText)
-	l.Text(s.Vitals.Cause, 252, 226, 18, invWarning)
-	l.Text("Your items were dropped at the death location.", 252, 264, 14, invMuted)
-	l.Text("Respawn restores health and air.", 252, 289, 14, invMuted)
-	label := "Respawn"
-	if s.RespawnWaiting {
-		label = "Preparing a safe spawn..."
-	}
-	if ui.DrawAction(l.Rect(252, 338, 496, 42), label, !s.RespawnWaiting, true) {
-		s.RespawnWaiting = true
-		s.RespawnLast = 0
-	}
-	if ui.DrawButton(l.Rect(252, 394, 496, 38), "Return to menu", true) {
-		exitGame()
-	}
-}

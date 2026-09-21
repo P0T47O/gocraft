@@ -2,144 +2,86 @@ package main
 
 import (
 	"fmt"
-
-	rl "github.com/gen2brain/raylib-go/raylib"
+	"image/color"
 )
 
-// Simple IMGUI-style UI components
-type UIComponents struct {
-	Font       rl.Font
-	ActiveID   string // ID of the currently active/focused element
-	DraggingID string // ID of slider currently being dragged
-}
+// Input and presentation are separate from the native window implementation.
+type UIComponents struct{ ActiveID, DraggingID string }
 
-func NewUIComponents() *UIComponents {
-	return &UIComponents{
-		Font: rl.GetFontDefault(),
-	}
+func NewUIComponents() *UIComponents { return &UIComponents{} }
+func (ui *UIComponents) DrawButton(r uiRect, label string, enabled bool) bool {
+	return ui.DrawAction(r, label, enabled, false)
 }
-
-func (ui *UIComponents) DrawButton(rect rl.Rectangle, text string, active bool) bool {
-	return ui.DrawAction(rect, text, active, false)
-}
-
-func (ui *UIComponents) DrawAction(rect rl.Rectangle, text string, enabled, primary bool) bool {
-	inventoryButton(rect, text, enabled, primary && enabled, rect.Height/38)
-	clicked := enabled && rl.CheckCollisionPointRec(rl.GetMousePosition(), rect) && rl.IsMouseButtonReleased(rl.MouseLeftButton)
+func (ui *UIComponents) DrawAction(r uiRect, label string, enabled, primary bool) bool {
+	menuButton(r, label, enabled, primary && enabled, r.Height/38)
+	clicked := enabled && uiContainsPoint(inputMousePosition(), r) && inputMouseReleased(mouseLeft)
 	if clicked {
 		ui.ActiveID = ""
 		ui.DraggingID = ""
 	}
 	return clicked
 }
-
-func (ui *UIComponents) DrawTextField(rect rl.Rectangle, text *string, id string, maxLength int, blocked bool) {
-	hover := rl.CheckCollisionPointRec(rl.GetMousePosition(), rect)
-	if !blocked && hover && rl.IsMouseButtonPressed(rl.MouseLeftButton) {
-		ui.ActiveID = id
-	} else if rl.IsMouseButtonPressed(rl.MouseLeftButton) && !hover {
-		if ui.ActiveID == id {
+func (ui *UIComponents) DrawTextField(r uiRect, text *string, id string, maxLength int, blocked bool) {
+	hover := uiContainsPoint(inputMousePosition(), r)
+	if inputMousePressed(mouseLeft) {
+		if !blocked && hover {
+			ui.ActiveID = id
+		} else if ui.ActiveID == id {
 			ui.ActiveID = ""
 		}
 	}
-
-	active := !blocked && (ui.ActiveID == id)
-
-	rl.DrawRectangleRec(rect, invBackground)
+	active := !blocked && ui.ActiveID == id
+	menuRect(r, invBackground)
+	border := invLine
 	if active || hover {
-		rl.DrawRectangleLinesEx(rect, 2, invText)
-	} else {
-		rl.DrawRectangleLinesEx(rect, 2, invLine)
+		border = invText
 	}
-
-	// Simple Input Handling
+	menuLines(r, 2, border)
 	if active {
-		// Handle Character Input
-		char := rl.GetCharPressed()
-		for char != 0 {
-			if char >= 32 && len([]rune(*text)) < maxLength {
-				*text += string(char)
-			}
-			char = rl.GetCharPressed()
-		}
-
-		// Handle Special Keys
-		if rl.IsKeyPressed(rl.KeyBackspace) {
-			if len(*text) > 0 {
-				// Handle UTF-8 backspace properly-ish (assuming simple runes for now)
-				runes := []rune(*text)
-				if len(runes) > 0 {
-					*text = string(runes[:len(runes)-1])
-				}
+		for c := inputChar(); c != 0; c = inputChar() {
+			if c >= 32 && len([]rune(*text)) < maxLength {
+				*text += string(c)
 			}
 		}
-		// Repeat Backspace if held
-		if rl.IsKeyDown(rl.KeyBackspace) {
-			// Simple counter-based repeat could go here, but for now single press is safer/simpler
-			// forcing repeated tapping or holding logic requires state.
-			// Let's stick to IsKeyPressed for single delete to avoid accidental wipe.
+		if inputKeyPressed(keyBackspace) {
+			chars := []rune(*text)
+			if len(chars) > 0 {
+				*text = string(chars[:len(chars)-1])
+			}
 		}
 	}
-
 	display := *text
-	if active && (int(rl.GetTime()*2)%2 == 0) {
+	if active && int(inputTime()*2)%2 == 0 {
 		display += "_"
 	}
-
-	fs := rect.Height * 0.4
-	for len(display) > 0 && rl.MeasureTextEx(ui.Font, display, fs, 1).X > rect.Width-20 {
+	fs := r.Height * .4
+	for len(display) > 0 && menuCanvas.Measure(display, fs) > r.Width-20 {
 		display = string([]rune(display)[1:])
 	}
-	rl.DrawTextEx(ui.Font, display, rl.NewVector2(rect.X+10, rect.Y+(rect.Height-fs)/2), fs, 1, invText)
+	menuCanvas.Text(display, r.X+10, r.Y+(r.Height-fs)/2, fs, invText)
 }
-
-func (ui *UIComponents) DrawLabel(x, y float32, text string, fontSize float32, color rl.Color) {
-	rl.DrawTextEx(ui.Font, text, rl.Vector2{X: x, Y: y}, fontSize, 2, color)
+func (ui *UIComponents) DrawLabel(x, y float32, text string, size float32, c color.RGBA) {
+	menuCanvas.Text(text, x, y, size, c)
 }
-
-func (ui *UIComponents) DrawSlider(rect rl.Rectangle, value *float32, min, max float32, id string) {
-	hover := rl.CheckCollisionPointRec(rl.GetMousePosition(), rect)
-
-	if hover && rl.IsMouseButtonPressed(rl.MouseLeftButton) {
+func (ui *UIComponents) DrawSlider(r uiRect, value *float32, low, high float32, id string) {
+	if uiContainsPoint(inputMousePosition(), r) && inputMousePressed(mouseLeft) {
 		ui.DraggingID = id
 	}
-	if rl.IsMouseButtonReleased(rl.MouseLeftButton) {
+	if inputMouseReleased(mouseLeft) {
 		ui.DraggingID = ""
 	}
-
-	if ui.DraggingID == id {
-		mouseBefore := rl.GetMousePosition().X
-		t := (mouseBefore - rect.X) / rect.Width
-		if t < 0 {
-			t = 0
-		}
-		if t > 1 {
-			t = 1
-		}
-		*value = min + float32(t)*(max-min)
+	if ui.DraggingID == id && r.Width > 0 {
+		*value = low + max(float32(0), min(float32(1), (inputMousePosition().X-r.X)/r.Width))*(high-low)
 	}
-
-	// Draw Background
-	rl.DrawRectangleRec(rect, invBackground)
-
-	// Draw Fill
-	t := (*value - min) / (max - min)
-	if t < 0 {
-		t = 0
+	fraction := float32(0)
+	if high > low {
+		fraction = max(float32(0), min(float32(1), (*value-low)/(high-low)))
 	}
-	if t > 1 {
-		t = 1
-	}
-	fillRec := rl.NewRectangle(rect.X, rect.Y, rect.Width*float32(t), rect.Height)
-	rl.DrawRectangleRec(fillRec, rl.NewColor(70, 90, 63, 255))
-
-	rl.DrawRectangleLinesEx(rect, 2, invLine)
-
-	// Value and handle scale with the component rather than screen pixels.
-	fs := rect.Height * 0.48
-	valText := fmt.Sprintf("%.3f", *value)
-	textSize := rl.MeasureTextEx(ui.Font, valText, fs, 1)
-	rl.DrawTextEx(ui.Font, valText, rl.NewVector2(rect.X+(rect.Width-textSize.X)/2, rect.Y+(rect.Height-fs)/2), fs, 1, invText)
-	handle := rl.NewRectangle(rect.X+t*(rect.Width-4), rect.Y, 4, rect.Height)
-	rl.DrawRectangleRec(handle, invAccent)
+	menuRect(r, invBackground)
+	menuRect(newUIRect(r.X, r.Y, r.Width*fraction, r.Height), meshColor(70, 90, 63, 255))
+	menuLines(r, 2, invLine)
+	fs := r.Height * .48
+	text := fmt.Sprintf("%.3f", *value)
+	menuCanvas.Text(text, r.X+(r.Width-menuCanvas.Measure(text, fs))/2, r.Y+(r.Height-fs)/2, fs, invText)
+	menuRect(newUIRect(r.X+fraction*(r.Width-4), r.Y, 4, r.Height), invAccent)
 }

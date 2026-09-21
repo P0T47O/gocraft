@@ -1,5 +1,14 @@
 # WebGPU renderer experiment
 
+## Native window and full menu presentation (2026-09-21)
+
+`-webgpu` now creates an independent Win32 window before any Raylib initialization. Native input handles relative raw mouse movement, keyboard/text events, focus loss, minimization, resizing and DPI messages. Shared menus emit ordered rectangle/text batches through a neutral painter; WebGPU presents main/world/create/multiplayer/settings pages and pause/death overlays. The native path reports initialization errors rather than opening an implicit OpenGL fallback. World exit retains the native window, device and atlas; final shutdown closes gameplay before GPU and HWND.
+
+A hidden-window GPU integration test validates all menu pages, resize, native key/UTF-16 handling, focus release, and two temporary-save sessions including pause/settings and return to menu. Main-menu pixels were read back and visually inspected. Real cross-monitor dragging, physical mouse motion and IME composition are not manually verified. The built-in font still only renders ASCII.
+
+Raylib remains a build dependency through the retained non-WebGPU path, resource types and legacy tools/tests. Older sections below record migration history and do not describe the current window owner.
+
+
 ## Optimization and dependency cleanup (2026-09-20)
 
 ### Follow-up: texture sharpness and mip disable
@@ -90,6 +99,12 @@ The live `-webgpu` Playing path must not call Raylib `BeginDrawing`/`EndDrawing`
 
 The GLFW/WGL warning observed when closing early probes occurred during Raylib's OpenGL-context teardown after WebGPU had presented into the same HWND. It was not a renderer failure in those probes, but the live integration should still be watched for teardown/context issues during local validation.
 # Raylib removal: camera and persistence boundary
+
+## Input and layout boundary
+
+The window owner now captures one input snapshot per frame. Gameplay, session/packet cursor changes and inventory/container interactions consume neutral keys, points and rectangles. The current adapter still calls Raylib; this does not yet replace the native window. The menu text field consumes the same character queue so polling does not swallow its text input.
+
+Creative/survival/container layouts are backend-neutral. Legacy drawing adapts their rectangles at its boundary; WebGPU uses the neutral layout directly. Physics tests now call the neutral movement core, the obsolete Raylib physics wrappers and unused brute-force `findHit` were deleted, and legacy face GPU storage moved out of shared world types. Regression tests cover input edges, character queue order, cursor transitions, camera mouse input and cleared direct-import boundaries. Native window/menu interaction still needs end-to-end verification after replacement.
 
 Gameplay now owns a renderer-neutral `gameCamera`; spawning, aiming, movement and legacy player saves use it directly. Only the legacy draw entry converts it to Raylib. Performance monitoring receives frame time from the main loop and no longer queries the window library. Player save regression tests cover round trips and every truncated byte length without mutating live state.
 

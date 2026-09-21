@@ -450,6 +450,9 @@ func (b *webGPUTextBatch) addDebug(state *InputState, scale float32) {
 }
 
 func (b *webGPUTextBatch) addPauseAndDeath(state *InputState, scale float32) {
+	if nativeWindowActive {
+		return
+	} // The full menu overlay owns these states.
 	if state == nil {
 		return
 	}

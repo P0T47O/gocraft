@@ -287,3 +287,11 @@ func (a *RenderAssets) initFaceModels() {
 		a.getFaceModel("west", def.Textures.West)
 	}
 }
+
+type faceMesh struct {
+	mesh      rl.Mesh
+	vertices  []float32
+	normals   []float32
+	texcoords []float32
+	indices   []uint16
+}

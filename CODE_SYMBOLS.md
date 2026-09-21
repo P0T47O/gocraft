@@ -32,6 +32,10 @@
 
 函数/方法：`ConnectTCP`、`*Client.Close`、`*Client.Send`、`*Client.Update`
 
+## [container_input.go](container_input.go)
+
+函数/方法：`*InputState.closeContainerUI`、`*InputState.updateContainerInput`
+
 ## [container_protocol.go](container_protocol.go)
 
 类型：`PacketContainerState`、`PacketContainerClick`
@@ -40,7 +44,7 @@
 
 ## [container_ui.go](container_ui.go)
 
-函数/方法：`containerUISlot`、`*InputState.closeContainerUI`、`*InputState.updateContainerInput`、`*RenderAssets.drawContainer`
+函数/方法：`*RenderAssets.drawContainer`
 
 ## [containers.go](containers.go)
 
@@ -126,11 +130,7 @@
 
 类型：`InputState`
 
-函数/方法：`NewInputState`、`*InputState.ToggleInventory`、`*InputState.UpdateCamera`、`*InputState.UpdateSelection`、`resolveCollision`、`collides`、`isSolidBlock`、`blockIndexFromCoord`、`HandleInput`、`*InputState.UpdateInventoryPage`、`*InputState.UpdateInventorySelection`、`collidesWithBlock`
-
-## [input_physics_raylib.go](input_physics_raylib.go)
-
-函数/方法：`gameVec3FromRaylib`、`raylibVec3FromGame`、`moveCollider`、`colliderHits`、`feetSupported`、`touchesLiquid`、`*InputState.StepMovement`
+函数/方法：`NewInputState`、`*InputState.ToggleInventory`、`*InputState.UpdateCamera`、`*InputState.UpdateSelection`、`isSolidBlock`、`blockIndexFromCoord`、`HandleInput`、`*InputState.UpdateInventoryPage`、`*InputState.UpdateInventorySelection`、`collidesWithBlock`
 
 ## [inventory.go](inventory.go)
 
@@ -142,11 +142,25 @@
 
 函数/方法：`*Inventory.Click`、`*Inventory.CountItem`、`*Inventory.Craft`、`craftCapacity`、`recipeBook`
 
-## [inventory_ui.go](inventory_ui.go)
+## [inventory_input.go](inventory_input.go)
+
+函数/方法：`inventoryFor`、`selectedBookRecipe`、`recipeAvailable`、`*InputState.updateCraftingInput`
+
+## [inventory_layout.go](inventory_layout.go)
 
 类型：`SurvivalLayout`
 
-函数/方法：`survivalLayout`、`SurvivalLayout.Rect`、`SurvivalLayout.Slot`、`SurvivalLayout.Row`、`inventoryFor`、`selectedBookRecipe`、`recipeAvailable`、`*InputState.updateCraftingInput`、`*RenderAssets.drawInventoryItem`、`*RenderAssets.drawSurvivalInventory`
+函数/方法：`survivalLayout`、`SurvivalLayout.Rect`、`SurvivalLayout.Slot`、`SurvivalLayout.Row`、`containerUISlot`
+
+## [inventory_layout_raylib.go](inventory_layout_raylib.go)
+
+类型：`legacySurvivalLayout`
+
+函数/方法：`legacySurvivalLayoutFor`、`raylibRect`、`legacySurvivalLayout.Rect`、`legacySurvivalLayout.Slot`、`legacySurvivalLayout.Row`
+
+## [inventory_ui.go](inventory_ui.go)
+
+函数/方法：`*RenderAssets.drawInventoryItem`、`*RenderAssets.drawSurvivalInventory`
 
 ## [item_registry.go](item_registry.go)
 
@@ -160,9 +174,31 @@
 
 函数/方法：`main`、`updateMenu`
 
+## [menu_death.go](menu_death.go)
+
+函数/方法：`drawDeathScreen`
+
+## [menu_painter.go](menu_painter.go)
+
+类型：`menuPainter`
+
+函数/方法：`menuWidth`、`menuHeight`、`menuRect`、`menuRectangle`、`menuLines`、`menuFade`、`menuMeasure`、`menuClip`、`menuUnclip`、`menuGradient`、`SurvivalLayout.Text`、`menuBox`、`menuButton`
+
+## [menu_painter_raylib.go](menu_painter_raylib.go)
+
+类型：`raylibMenuPainter`
+
+函数/方法：`init`、`raylibMenuPainter.Size`、`raylibMenuPainter.Rect`、`raylibMenuPainter.Text`、`raylibMenuPainter.Measure`、`raylibMenuPainter.Clip`、`raylibMenuPainter.Unclip`
+
 ## [menu_screens.go](menu_screens.go)
 
 函数/方法：`menuLayout`、`menuNavigate`、`drawMenuBackdrop`、`menuPanel`、`menuMessage`、`drawMenu`、`drawWorldMenu`、`drawCreateMenu`、`drawMultiplayerMenu`、`drawSettingsMenu`、`drawPauseMenu`
+
+## [menu_webgpu_windows.go](menu_webgpu_windows.go)
+
+类型：`gpuMenuBatch`、`gpuMenuPainter`
+
+函数/方法：`*gpuMenuPainter.reset`、`*gpuMenuPainter.Size`、`gpuMenuColor`、`*gpuMenuPainter.batch`、`*gpuMenuPainter.Rect`、`*gpuMenuPainter.Text`、`*gpuMenuPainter.Measure`、`*gpuMenuPainter.Clip`、`*gpuMenuPainter.Unclip`、`*gpuMenuPainter.draw`、`*webGPUWorldRenderer.DrawMenu`
 
 ## [mesh_color.go](mesh_color.go)
 
@@ -224,6 +260,18 @@
 
 函数/方法：`newMob`、`*MobEntity.random`、`*MobEntity.hasBehavior`、`colliderLoaded`、`*MobEntity.Tick`、`*MobEntity.hit`
 
+## [native_game_stub.go](native_game_stub.go)
+
+函数/方法：`runNativeWebGPU`
+
+## [native_game_windows.go](native_game_windows.go)
+
+函数/方法：`runNativeWebGPU`
+
+## [native_window_state.go](native_window_state.go)
+
+常量或包级数据定义。
+
 ## [performance_loading.go](performance_loading.go)
 
 类型：`loadingPhase`、`loadingPhaseCounter`
@@ -267,6 +315,10 @@
 类型：`WebGPUMeshBackend`、`webGPUMesh`
 
 函数/方法：`NewWebGPUMeshBackend`、`*WebGPUMeshBackend.Upload`、`*WebGPUMeshBackend.UploadChecked`、`*WebGPUMeshBackend.Draw`、`*WebGPUMeshBackend.DrawPass`、`*webGPUMesh.Draw`、`*webGPUMesh.IndexCount`、`*webGPUMesh.Unload`、`EnableExperimentalWebGPU`
+
+## [player_collision.go](player_collision.go)
+
+函数/方法：`resolveCollision`、`collides`
 
 ## [player_movement.go](player_movement.go)
 
@@ -346,7 +398,7 @@
 
 ## [render_camera_raylib.go](render_camera_raylib.go)
 
-函数/方法：`raylibCamera`
+函数/方法：`raylibCamera`、`raylibVec3FromGame`
 
 ## [render_cull.go](render_cull.go)
 
@@ -355,6 +407,8 @@
 函数/方法：`ExtractFrustum`、`*Frustum.IntersectsAABB`
 
 ## [render_faces.go](render_faces.go)
+
+类型：`faceMesh`
 
 函数/方法：`*RenderAssets.makeFace`、`*RenderAssets.initFaceMeshes`、`*RenderAssets.getFaceModel`、`*RenderAssets.initFaceModels`
 
@@ -508,13 +562,17 @@
 
 ## [types.go](types.go)
 
-类型：`hitInfo`、`blockFaces`、`faceMesh`
+类型：`hitInfo`、`blockFaces`
 
-函数/方法：`inBounds`、`divFloor`、`modFloor`、`findHit`
+函数/方法：`inBounds`、`divFloor`、`modFloor`
 
 ## [ui.go](ui.go)
 
 类型：`InventoryLayout`
+
+函数/方法：`uiScaleFor`、`inventoryScaleFor`、`inventoryLayoutFor`
+
+## [ui_layout_raylib.go](ui_layout_raylib.go)
 
 函数/方法：`uiScale`、`inventoryScale`、`inventoryLayout`
 
@@ -524,13 +582,17 @@
 
 函数/方法：`NewUIComponents`、`*UIComponents.DrawButton`、`*UIComponents.DrawAction`、`*UIComponents.DrawTextField`、`*UIComponents.DrawLabel`、`*UIComponents.DrawSlider`
 
+## [ui_palette.go](ui_palette.go)
+
+常量或包级数据定义。
+
 ## [ui_theme.go](ui_theme.go)
 
-函数/方法：`inventoryText`、`SurvivalLayout.Text`、`inventoryBox`、`inventoryButton`
+函数/方法：`inventoryText`、`legacySurvivalLayout.Text`、`inventoryBox`、`inventoryButton`
 
 ## [vitals_ui.go](vitals_ui.go)
 
-函数/方法：`*InputState.isDead`、`*InputState.updateRespawnRequest`、`drawVitalsHUD`、`drawDeathScreen`
+函数/方法：`*InputState.isDead`、`*InputState.updateRespawnRequest`、`drawVitalsHUD`
 
 ## [webgpu_animation_windows.go](webgpu_animation_windows.go)
 
@@ -574,7 +636,7 @@
 
 ## [webgpu_game_windows.go](webgpu_game_windows.go)
 
-函数/方法：`webGPUMousePosition`、`webGPUFrameFromRaylib`、`ensureExperimentalWebGPURenderer`、`drawExperimentalWebGPUFrame`、`closeExperimentalWebGPURenderer`
+函数/方法：`webGPUMousePosition`、`webGPUFrameFromWindow`、`ensureExperimentalWebGPURenderer`、`drawExperimentalWebGPUFrame`、`closeExperimentalWebGPURenderer`
 
 ## [webgpu_gameplay_windows.go](webgpu_gameplay_windows.go)
 
@@ -613,6 +675,24 @@
 类型：`webGPUWorldRenderer`
 
 函数/方法：`newWebGPUWorldRenderer`、`*webGPUWorldRenderer.createPipelineResources`、`*webGPUWorldRenderer.configureSurface`、`*webGPUWorldRenderer.drawMeshMap`、`*webGPUWorldRenderer.Close`、`*webGPUWorldRenderer.closeResources`
+
+## [window_input.go](window_input.go)
+
+类型：`uiPoint`、`uiRect`、`windowInputFrame`、`cursorController`
+
+函数/方法：`newUIRect`、`uiContainsPoint`、`inputKeyDown`、`inputKeyPressed`、`inputMouseDown`、`inputMousePressed`、`inputMousePosition`、`inputMouseDelta`、`inputMouseWheel`、`inputTime`、`windowWidth`、`windowHeight`、`inputChar`、`captureCursor`、`releaseCursor`、`positionCursor`、`inputMouseReleased`
+
+## [window_input_raylib.go](window_input_raylib.go)
+
+类型：`raylibCursorController`
+
+函数/方法：`raylibCursorController.SetCaptured`、`raylibCursorController.SetPosition`、`captureRaylibInput`
+
+## [window_win32_windows.go](window_win32_windows.go)
+
+类型：`winPoint`、`winRect`、`winClass`、`winMessage`、`rawMousePacket`、`nativeWindow`
+
+函数/方法：`nativeUserProc`、`createNativeWindow`、`*nativeWindow.Close`、`*nativeWindow.Resize`、`*nativeWindow.SetPosition`、`*nativeWindow.SetCaptured`、`*nativeWindow.updateCapture`、`*nativeWindow.Poll`、`nativeKey`、`nativeWindowProc`
 
 ## [world_core.go](world_core.go)
 

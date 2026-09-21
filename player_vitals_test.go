@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	rl "github.com/gen2brain/raylib-go/raylib"
 	"math"
 	"testing"
 )
@@ -28,12 +27,12 @@ func lifeTestPlayer(w *World) (*Server, *PlayerEntity) {
 }
 func TestMovementWalkSprintAndSneakEdge(t *testing.T) {
 	w := lifeTestWorld(t)
-	start := rl.NewVector3(8, 72.125, 3)
+	start := newGameVec3(8, 72.125, 3)
 	var walk, run InputState
 	p, q := start, start
 	for i := 0; i < 60; i++ {
-		p = walk.StepMovement(w, p, 1.0/60, MovementControls{Forward: 1}, false)
-		q = run.StepMovement(w, q, 1.0/60, MovementControls{Forward: 1, Sprint: true}, false)
+		p = walk.stepMovementCore(w, p, 1.0/60, MovementControls{Forward: 1}, false)
+		q = run.stepMovementCore(w, q, 1.0/60, MovementControls{Forward: 1, Sprint: true}, false)
 	}
 	if math.Abs(float64((q.Z-start.Z)/(p.Z-start.Z))-1.5) > 0.05 {
 		t.Fatal("sprint speed", p, q)
@@ -48,10 +47,10 @@ func TestMovementWalkSprintAndSneakEdge(t *testing.T) {
 		}
 	}
 	c.blocks[8][70][8] = blockStone
-	p = rl.NewVector3(8, 72.125, 8)
+	p = newGameVec3(8, 72.125, 8)
 	var sneak InputState
 	for i := 0; i < 180; i++ {
-		p = sneak.StepMovement(w, p, 1.0/60, MovementControls{Forward: 1, Sneak: true}, false)
+		p = sneak.stepMovementCore(w, p, 1.0/60, MovementControls{Forward: 1, Sneak: true}, false)
 	}
 	if p.Z > 8.81 || p.Y < 72.11 {
 		t.Fatal("sneak walked off edge", p)
@@ -67,17 +66,17 @@ func TestWaterMovementAndSweptCollision(t *testing.T) {
 			}
 		}
 	}
-	start := rl.NewVector3(8, 73, 8)
+	start := newGameVec3(8, 73, 8)
 	up, down := start, start
 	var a, b InputState
 	for i := 0; i < 30; i++ {
-		up = a.StepMovement(w, up, 1.0/60, MovementControls{Jump: true}, false)
-		down = b.StepMovement(w, down, 1.0/60, MovementControls{Sneak: true}, false)
+		up = a.stepMovementCore(w, up, 1.0/60, MovementControls{Jump: true}, false)
+		down = b.stepMovementCore(w, down, 1.0/60, MovementControls{Sneak: true}, false)
 	}
 	if up.Y <= start.Y || down.Y >= start.Y || !a.IsSwimming {
 		t.Fatal("swim controls", up, down)
 	}
-	p := resolveCollision(w, rl.NewVector3(8, 90, 8), rl.NewVector3(0, -40, 0))
+	p := resolveCollision(w, newGameVec3(8, 90, 8), newGameVec3(0, -40, 0))
 	if p.Y < 72.11 || p.Y > 72.14 {
 		t.Fatal("fast fall tunneled through floor", p)
 	}
@@ -168,7 +167,7 @@ func TestDeathDropsOnceBlocksActionsAndRespawns(t *testing.T) {
 		t.Fatal("dead player moved")
 	}
 	s.HandlePacket(PacketWrapper{From: p.UUID, Packet: &PacketRespawn{}})
-	if p.dead() || p.Vitals.Health != 20 || p.Vitals.Air != maxAir || collides(w, rl.NewVector3(float32(p.X), float32(p.Y), float32(p.Z))) {
+	if p.dead() || p.Vitals.Health != 20 || p.Vitals.Air != maxAir || collides(w, newGameVec3(float32(p.X), float32(p.Y), float32(p.Z))) {
 		t.Fatal("unsafe respawn")
 	}
 	if p.Inventory.Slots[0].ID != 0 {
@@ -228,8 +227,8 @@ func TestDestroyedSpawnGetsSafeLanding(t *testing.T) {
 	}
 	p.Vitals.Health = 0
 	s.respawnPlayer(p)
-	pos := rl.NewVector3(float32(p.X), float32(p.Y), float32(p.Z))
-	if p.dead() || collides(w, pos) || !feetSupported(w, pos) {
+	pos := newGameVec3(float32(p.X), float32(p.Y), float32(p.Z))
+	if p.dead() || collides(w, pos) || !feetSupportedCore(w, pos) {
 		t.Fatal("destroyed spawn did not get a safe landing")
 	}
 }
@@ -272,8 +271,8 @@ func TestDistantRespawnSearchSurvivesChunkGC(t *testing.T) {
 		}
 	}
 	s.respawnPlayer(p) // No dry ground: fallback must now be able to complete.
-	pos := rl.NewVector3(float32(p.X), float32(p.Y), float32(p.Z))
-	if p.dead() || !feetSupported(w, pos) || collides(w, pos) {
+	pos := newGameVec3(float32(p.X), float32(p.Y), float32(p.Z))
+	if p.dead() || !feetSupportedCore(w, pos) || collides(w, pos) {
 		t.Fatal("distant respawn did not finish safely")
 	}
 	if len(s.pendingRespawnChunks()) != 0 {
@@ -330,10 +329,10 @@ func TestSwimmingCanExitOntoBank(t *testing.T) {
 			}
 		}
 	}
-	p := rl.NewVector3(8, 75.4, 9)
+	p := newGameVec3(8, 75.4, 9)
 	var state InputState
 	for i := 0; i < 100; i++ {
-		p = state.StepMovement(w, p, 1.0/60, MovementControls{Forward: 1, Jump: true}, false)
+		p = state.stepMovementCore(w, p, 1.0/60, MovementControls{Forward: 1, Jump: true}, false)
 	}
 	if p.Z <= 10.3 || p.Y < 77.11 {
 		t.Fatal("could not swim onto bank", p)

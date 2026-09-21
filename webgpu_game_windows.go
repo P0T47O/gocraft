@@ -4,18 +4,16 @@ package main
 
 import (
 	"fmt"
-
-	rl "github.com/gen2brain/raylib-go/raylib"
 )
 
 var activeWebGPUWorldRenderer *webGPUWorldRenderer
 
 func webGPUMousePosition() webGPUPoint {
-	p := rl.GetMousePosition()
+	p := inputMousePosition()
 	return webGPUPoint{X: p.X, Y: p.Y}
 }
 
-func webGPUFrameFromRaylib() webGPUFrameContext {
+func webGPUFrameFromWindow() webGPUFrameContext {
 	return webGPUFrameContext{
 		Camera: webGPUCamera{
 			Position: webGPUVec3{X: camera.Position.X, Y: camera.Position.Y, Z: camera.Position.Z},
@@ -23,9 +21,9 @@ func webGPUFrameFromRaylib() webGPUFrameContext {
 			Up:       webGPUVec3{X: camera.Up.X, Y: camera.Up.Y, Z: camera.Up.Z},
 			Fovy:     camera.Fovy,
 		},
-		Width:  uint32(max(1, rl.GetScreenWidth())),
-		Height: uint32(max(1, rl.GetScreenHeight())),
-		Time:   float32(rl.GetTime()),
+		Width:  uint32(max(1, windowWidth())),
+		Height: uint32(max(1, windowHeight())),
+		Time:   float32(inputTime()),
 	}
 }
 
@@ -36,8 +34,11 @@ func ensureExperimentalWebGPURenderer() error {
 	if assets == nil {
 		return fmt.Errorf("render assets are not initialized")
 	}
-	frame := webGPUFrameFromRaylib()
-	hwnd := uintptr(rl.GetWindowHandle())
+	frame := webGPUFrameFromWindow()
+	if nativeGameWindow == nil {
+		return fmt.Errorf("native WebGPU window is not initialized")
+	}
+	hwnd := nativeGameWindow.hwnd
 	renderer, err := newWebGPUWorldRenderer(hwnd, assets, frame.Width, frame.Height)
 	if err != nil {
 		return err
@@ -50,7 +51,7 @@ func drawExperimentalWebGPUFrame() error {
 	if activeWebGPUWorldRenderer == nil {
 		return fmt.Errorf("WebGPU world renderer is not initialized")
 	}
-	return activeWebGPUWorldRenderer.DrawGameplay(world, webGPUFrameFromRaylib(), input)
+	return activeWebGPUWorldRenderer.DrawGameplay(world, webGPUFrameFromWindow(), input)
 }
 
 func closeExperimentalWebGPURenderer() {

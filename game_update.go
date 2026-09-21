@@ -1,13 +1,12 @@
 package main
 
 import (
-	rl "github.com/gen2brain/raylib-go/raylib"
 	"math"
 	"time"
 )
 
 func updateGame() {
-	if isPaused && pauseSettings && rl.IsKeyPressed(rl.KeyEscape) {
+	if isPaused && pauseSettings && inputKeyPressed(keyEscape) {
 		SaveSettings()
 		pauseSettings = false
 		ui.ActiveID = ""
@@ -17,50 +16,50 @@ func updateGame() {
 		// Chat Input
 		if isChatOpen {
 			// Handle keys
-			char := rl.GetCharPressed()
+			char := inputChar()
 			for char > 0 {
 				if char >= 32 && char <= 125 {
 					chatInput += string(char)
 				}
-				char = rl.GetCharPressed()
+				char = inputChar()
 			}
 
-			if rl.IsKeyPressed(rl.KeyBackspace) {
+			if inputKeyPressed(keyBackspace) {
 				if len(chatInput) > 0 {
 					chatInput = chatInput[:len(chatInput)-1]
 				}
 			}
 
-			if rl.IsKeyPressed(rl.KeyEnter) {
+			if inputKeyPressed(keyEnter) {
 				if len(chatInput) > 0 {
 					client.Send(&PacketChat{Message: chatInput})
 					chatInput = ""
 				}
 				isChatOpen = false
-				rl.DisableCursor()
+				captureCursor()
 			}
 
-			if rl.IsKeyPressed(rl.KeyEscape) {
+			if inputKeyPressed(keyEscape) {
 				isChatOpen = false
-				rl.DisableCursor()
+				captureCursor()
 			}
 
 			return // Block other inputs while chat is open
-		} else if !isPaused && !input.InventoryOpen && rl.IsKeyPressed(rl.KeyEnter) {
+		} else if !isPaused && !input.InventoryOpen && inputKeyPressed(keyEnter) {
 			isChatOpen = true
-			rl.EnableCursor()
-			// rl.SetMousePosition? No, let cursor be free.
+			releaseCursor()
+			// positionCursor? No, let cursor be free.
 			return
 		}
 
-		if rl.IsKeyPressed(rl.KeyEscape) {
+		if inputKeyPressed(keyEscape) {
 			if input.InventoryOpen {
 				input.closeContainerUI()
 				input.InventoryOpen = false
 				input.CraftingStation = 0
 				input.SkipCamera = true
 				if !isPaused {
-					rl.DisableCursor()
+					captureCursor()
 				}
 			} else {
 				isPaused = !isPaused
@@ -68,12 +67,12 @@ func updateGame() {
 					server.Paused.Store(isPaused)
 				}
 				if isPaused {
-					rl.EnableCursor()
+					releaseCursor()
 					ui.ActiveID = ""
 				} else {
-					rl.DisableCursor()
+					captureCursor()
 					// Reset mouse to center to prevent view jump
-					rl.SetMousePosition(rl.GetScreenWidth()/2, rl.GetScreenHeight()/2)
+					positionCursor(windowWidth()/2, windowHeight()/2)
 				}
 			}
 		}
@@ -116,7 +115,7 @@ Loop:
 	world.ProcessMeshResults(assets, 16)
 
 	if input.isDead() {
-		if *useWebGPU && !input.RespawnWaiting && rl.IsKeyPressed(rl.KeyR) {
+		if *useWebGPU && !input.RespawnWaiting && inputKeyPressed(keyR) {
 			input.RespawnWaiting = true
 			input.RespawnLast = 0
 		}

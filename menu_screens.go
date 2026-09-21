@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	rl "github.com/gen2brain/raylib-go/raylib"
+	"image/color"
 )
 
 var (
@@ -18,7 +18,7 @@ var (
 )
 
 func menuLayout() SurvivalLayout {
-	return survivalLayout(float32(rl.GetScreenWidth()), float32(rl.GetScreenHeight()))
+	return survivalLayout(float32(menuWidth()), float32(menuHeight()))
 }
 func menuNavigate(page MenuPage) {
 	menuPage = page
@@ -28,40 +28,40 @@ func menuNavigate(page MenuPage) {
 	pendingDelete = ""
 }
 func drawMenuBackdrop() {
-	w, h := rl.GetScreenWidth(), rl.GetScreenHeight()
-	rl.DrawRectangleGradientV(0, 0, int32(w), int32(h), rl.NewColor(17, 29, 32, 255), invBackground)
+	w, h := menuWidth(), menuHeight()
+	menuGradient(0, 0, int32(w), int32(h), meshColor(17, 29, 32, 255), invBackground)
 	unit := max(8, float32(w)/100)
 	// Quiet, deterministic voxel silhouettes: no external menu textures required.
 	for layer := 0; layer < 3; layer++ {
-		color := []rl.Color{rl.NewColor(32, 48, 47, 255), rl.NewColor(38, 57, 48, 255), rl.NewColor(28, 43, 38, 255)}[layer]
+		color := []color.RGBA{meshColor(32, 48, 47, 255), meshColor(38, 57, 48, 255), meshColor(28, 43, 38, 255)}[layer]
 		step := unit * 4
 		for x := float32(0); x < float32(w)+step; x += step {
 			height := float32(h)*(0.69+float32(layer)*0.095) + float32(math.Sin(float64(x/float32(w))*9+float64(layer))*35+math.Sin(float64(x/float32(w))*21)*18)
 			height = float32(int(height/unit)) * unit
-			rl.DrawRectangleRec(rl.NewRectangle(x, height, step, float32(h)-height), color)
+			menuRect(newUIRect(x, height, step, float32(h)-height), color)
 		}
 	}
 	l := menuLayout()
 	for i := 0; i < 16; i++ {
 		x := float32((i*173 + 27) % 980)
 		y := float32((i*59 + 16) % 220)
-		rl.DrawRectangleRec(l.Rect(x, y, 2, 2), rl.NewColor(91, 113, 95, 100))
+		menuRect(l.Rect(x, y, 2, 2), meshColor(91, 113, 95, 100))
 	}
 }
 func menuPanel(l SurvivalLayout, title, subtitle string) {
-	rl.DrawRectangleRec(l.Rect(6, 8, 1000, 620), rl.Fade(rl.Black, 0.25))
-	inventoryBox(l.Rect(0, 0, 1000, 620), invBackground, invLine)
-	rl.DrawRectangleRec(l.Rect(0, 0, 1000, 3), invAccent)
+	menuRect(l.Rect(6, 8, 1000, 620), menuFade(color.RGBA{A: 255}, 0.25))
+	menuBox(l.Rect(0, 0, 1000, 620), invBackground, invLine)
+	menuRect(l.Rect(0, 0, 1000, 3), invAccent)
 	l.Text("GOCRAFT", 28, 26, 16, invAccent)
 	l.Text(title, 28, 67, 32, invText)
 	l.Text(subtitle, 28, 110, 14, invMuted)
-	rl.DrawRectangleRec(l.Rect(28, 144, 944, 1), invLine)
+	menuRect(l.Rect(28, 144, 944, 1), invLine)
 }
 func menuMessage(l SurvivalLayout) {
 	if menuError != "" {
 		// Clip verbose network/filesystem errors to keep them within the panel.
 		text := menuError
-		for len(text) > 0 && float32(rl.MeasureText(text, int32(13*l.S))) > 930*l.S {
+		for len(text) > 0 && float32(menuMeasure(text, int32(13*l.S))) > 930*l.S {
 			text = string([]rune(text)[:len([]rune(text))-1])
 		}
 		l.Text(text, 28, 592, 13, invWarning)
@@ -77,7 +77,7 @@ func drawMenu() {
 		l.Text("Gather. Build. Make it yours.", 44, 250, 21, invMuted)
 		for i, label := range []string{"EXPLORE", "CRAFT", "BUILD"} {
 			x := float32(44 + i*150)
-			inventoryBox(l.Rect(x, 304, 136, 32), rl.Fade(invPanel, 0.8), invLine)
+			menuBox(l.Rect(x, 304, 136, 32), menuFade(invPanel, 0.8), invLine)
 			l.Text(label, x+16, 314, 12, invMuted)
 		}
 		// Small block monument ties the menu art to the game's grid.
@@ -85,13 +85,13 @@ func drawMenu() {
 			for y := float32(0); y < height; y++ {
 				color := invPanel
 				if y == height-1 {
-					color = rl.NewColor(82, 104, 64, 255)
+					color = meshColor(82, 104, 64, 255)
 				}
-				inventoryBox(l.Rect(46+float32(i)*54, 494-y*24, 52, 22), color, rl.NewColor(42, 56, 44, 255))
+				menuBox(l.Rect(46+float32(i)*54, 494-y*24, 52, 22), color, meshColor(42, 56, 44, 255))
 			}
 		}
-		inventoryBox(l.Rect(608, 110, 348, 410), invBackground, invLine)
-		rl.DrawRectangleRec(l.Rect(608, 110, 348, 3), invAccent)
+		menuBox(l.Rect(608, 110, 348, 410), invBackground, invLine)
+		menuRect(l.Rect(608, 110, 348, 3), invAccent)
 		l.Text("LET'S PLAY", 632, 140, 22, invText)
 		l.Text("Your next adventure starts here.", 632, 174, 12, invMuted)
 		if ui.DrawAction(l.Rect(632, 210, 300, 48), "Singleplayer", true, true) {
@@ -123,8 +123,8 @@ func drawMenu() {
 }
 func drawWorldMenu(l SurvivalLayout) {
 	menuPanel(l, "Your worlds", "Pick up where you left off, or start somewhere new.")
-	if rl.CheckCollisionPointRec(rl.GetMousePosition(), l.Rect(28, 160, 944, 350)) {
-		worldScroll -= int(rl.GetMouseWheelMove())
+	if uiContainsPoint(inputMousePosition(), l.Rect(28, 160, 944, 350)) {
+		worldScroll -= int(inputMouseWheel())
 	}
 	worldScroll = max(0, min(worldScroll, max(0, len(saveList)-5)))
 	if len(saveList) == 0 {
@@ -135,8 +135,8 @@ func drawWorldMenu(l SurvivalLayout) {
 		save := saveList[worldScroll+i]
 		y := float32(160 + i*68)
 		rect := l.Rect(28, y, 944, 60)
-		inventoryBox(rect, invPanel, invLine)
-		rl.BeginScissorMode(int32(rect.X+12*l.S), int32(rect.Y), int32(598*l.S), int32(rect.Height))
+		menuBox(rect, invPanel, invLine)
+		menuClip(int32(rect.X+12*l.S), int32(rect.Y), int32(598*l.S), int32(rect.Height))
 		l.Text(save.Name, 44, y+10, 18, invText)
 		detail := fmt.Sprintf("Seed %d", save.Seed)
 		if save.IsLegacy {
@@ -146,7 +146,7 @@ func drawWorldMenu(l SurvivalLayout) {
 			detail += "  /  " + save.LastPlayed.Format("2006-01-02 15:04")
 		}
 		l.Text(detail, 44, y+37, 12, invMuted)
-		rl.EndScissorMode()
+		menuUnclip()
 		if ui.DrawAction(l.Rect(666, y+10, 138, 40), "Play", true, true) {
 			startGame(save.Path, "", false)
 			return
@@ -283,7 +283,7 @@ func drawSettingsMenu(l SurvivalLayout, fromPause bool) {
 	for i, line := range []string{"WASD  Move", "Space  Jump / swim up", "Ctrl + W  Sprint", "Shift  Sneak / dive", "E  Inventory", "Esc  Pause / back"} {
 		l.Text(line, 28, 364+float32(i)*26, 14, invMuted)
 	}
-	if rl.IsMouseButtonReleased(rl.MouseLeftButton) || rl.IsKeyPressed(rl.KeyEnter) {
+	if inputMouseReleased(mouseLeft) || inputKeyPressed(keyEnter) {
 		SaveSettings()
 		if input != nil {
 			input.Sensitivity = settings.Sensitivity
@@ -303,14 +303,14 @@ func drawSettingsMenu(l SurvivalLayout, fromPause bool) {
 	}
 }
 func drawPauseMenu() {
-	rl.DrawRectangle(0, 0, int32(rl.GetScreenWidth()), int32(rl.GetScreenHeight()), rl.NewColor(9, 17, 22, 195))
+	menuRectangle(0, 0, int32(menuWidth()), int32(menuHeight()), meshColor(9, 17, 22, 195))
 	l := menuLayout()
 	if pauseSettings {
 		drawSettingsMenu(l, true)
 		return
 	}
-	inventoryBox(l.Rect(260, 108, 480, 408), invBackground, invLine)
-	rl.DrawRectangleRec(l.Rect(260, 108, 480, 3), invAccent)
+	menuBox(l.Rect(260, 108, 480, 408), invBackground, invLine)
+	menuRect(l.Rect(260, 108, 480, 3), invAccent)
 	l.Text("GOCRAFT", 292, 140, 13, invAccent)
 	l.Text("Take a moment.", 292, 174, 30, invText)
 	label := "Your world is right here."
@@ -324,7 +324,7 @@ func drawPauseMenu() {
 			server.Paused.Store(false)
 		}
 		input.SkipCamera = true
-		rl.DisableCursor()
+		captureCursor()
 	}
 	if ui.DrawButton(l.Rect(292, 324, 416, 46), "Settings", true) {
 		pauseSettings = true

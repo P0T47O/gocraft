@@ -2,8 +2,6 @@ package main
 
 import (
 	"math"
-
-	rl "github.com/gen2brain/raylib-go/raylib"
 )
 
 const (
@@ -91,33 +89,33 @@ func NewInputState() *InputState {
 }
 
 func (s *InputState) ToggleInventory() {
-	if s.Container != nil && (rl.IsKeyPressed(rl.KeyE) || rl.IsKeyPressed(rl.KeyEscape)) {
+	if s.Container != nil && (inputKeyPressed(keyE) || inputKeyPressed(keyEscape)) {
 		s.closeContainerUI()
 	}
-	if rl.IsKeyPressed(rl.KeyE) {
+	if inputKeyPressed(keyE) {
 		s.InventoryOpen = !s.InventoryOpen
 		s.SkipCamera = true
 		if s.InventoryOpen {
-			rl.EnableCursor()
-			rl.SetMousePosition(rl.GetScreenWidth()/2, rl.GetScreenHeight()/2)
+			releaseCursor()
+			positionCursor(windowWidth()/2, windowHeight()/2)
 		} else {
 			s.CraftingStation = 0 // Clear crafting state
-			rl.SetMousePosition(rl.GetScreenWidth()/2, rl.GetScreenHeight()/2)
-			rl.DisableCursor()
+			positionCursor(windowWidth()/2, windowHeight()/2)
+			captureCursor()
 		}
 	}
-	if s.InventoryOpen && rl.IsKeyPressed(rl.KeyEscape) {
+	if s.InventoryOpen && inputKeyPressed(keyEscape) {
 		s.InventoryOpen = false
 		s.SkipCamera = true
 		s.CraftingStation = 0
 
-		rl.SetMousePosition(rl.GetScreenWidth()/2, rl.GetScreenHeight()/2)
-		rl.DisableCursor()
+		positionCursor(windowWidth()/2, windowHeight()/2)
+		captureCursor()
 	}
 }
 
 func (s *InputState) UpdateCamera(world *World, camera *gameCamera) {
-	delta := rl.GetMouseDelta()
+	delta := inputMouseDelta()
 	s.Yaw -= delta.X * s.Sensitivity
 	s.Pitch -= delta.Y * s.Sensitivity
 	if s.Pitch > 1.55 {
@@ -135,31 +133,31 @@ func (s *InputState) UpdateCamera(world *World, camera *gameCamera) {
 	up := newGameVec3(0, 1, 0)
 
 	controls := MovementControls{}
-	if rl.IsKeyPressed(rl.KeyW) {
-		now := rl.GetTime()
+	if inputKeyPressed(keyW) {
+		now := inputTime()
 		if s.LastWTime > 0 && now-s.LastWTime < doubleTapTime {
 			s.SprintLatched = true
 		}
 		s.LastWTime = now
 	}
-	if !rl.IsKeyDown(rl.KeyW) {
+	if !inputKeyDown(keyW) {
 		s.SprintLatched = false
 	}
-	if rl.IsKeyDown(rl.KeyW) {
+	if inputKeyDown(keyW) {
 		controls.Forward++
 	}
-	if rl.IsKeyDown(rl.KeyS) {
+	if inputKeyDown(keyS) {
 		controls.Forward--
 	}
-	if rl.IsKeyDown(rl.KeyD) {
+	if inputKeyDown(keyD) {
 		controls.Side++
 	}
-	if rl.IsKeyDown(rl.KeyA) {
+	if inputKeyDown(keyA) {
 		controls.Side--
 	}
-	controls.Jump = rl.IsKeyDown(rl.KeySpace)
-	controls.Sneak = rl.IsKeyDown(rl.KeyLeftShift) || rl.IsKeyDown(rl.KeyRightShift)
-	controls.Sprint = s.SprintLatched || rl.IsKeyDown(rl.KeyLeftControl) || rl.IsKeyDown(rl.KeyRightControl)
+	controls.Jump = inputKeyDown(keySpace)
+	controls.Sneak = inputKeyDown(keyLeftShift) || inputKeyDown(keyRightShift)
+	controls.Sprint = s.SprintLatched || inputKeyDown(keyLeftControl) || inputKeyDown(keyRightControl)
 	camera.Position = s.stepMovementCore(world, camera.Position, gameFrameTime(), controls, currentGameMode == ModeCreative)
 
 	camera.Target = gameVec3Add(camera.Position, forward)
@@ -168,7 +166,7 @@ func (s *InputState) UpdateCamera(world *World, camera *gameCamera) {
 
 func (s *InputState) UpdateSelection(allowWheel bool) {
 	if allowWheel {
-		wheel := rl.GetMouseWheelMove()
+		wheel := inputMouseWheel()
 		if wheel > 0 {
 			s.SelectedSlot--
 		} else if wheel < 0 {
@@ -185,7 +183,7 @@ func (s *InputState) UpdateSelection(allowWheel bool) {
 		}
 	}
 	for i := 0; i < 9; i++ {
-		if rl.IsKeyPressed(int32(rl.KeyOne + int32(i))) {
+		if inputKeyPressed(int32(keyOne + int32(i))) {
 			if i < len(s.Hotbar) {
 				s.SelectedSlot = i
 				if client != nil {
@@ -196,18 +194,6 @@ func (s *InputState) UpdateSelection(allowWheel bool) {
 		}
 	}
 	s.CurrentBlock = s.Hotbar[s.SelectedSlot]
-}
-
-func resolveCollision(world *World, pos, delta rl.Vector3) rl.Vector3 {
-	feet := pos
-	feet.Y -= playerEyeY
-	result := moveCollider(world, feet, delta, Collider{Width: playerRadius * 2, Depth: playerRadius * 2, Height: playerHeight})
-	result.Y += playerEyeY
-	return result
-}
-func collides(world *World, pos rl.Vector3) bool {
-	pos.Y -= playerEyeY
-	return colliderHits(world, pos, Collider{Width: playerRadius * 2, Depth: playerRadius * 2, Height: playerHeight})
 }
 
 func isSolidBlock(b byte) bool {
@@ -223,10 +209,10 @@ func blockIndexFromCoord(v float32) int {
 }
 
 func HandleInput(world *World, camera *gameCamera, state *InputState, client *Client) hitInfo {
-	if rl.IsKeyPressed(rl.KeyF3) {
+	if inputKeyPressed(keyF3) {
 		state.ShowDebug = !state.ShowDebug
 	}
-	if rl.IsKeyPressed(rl.KeyF1) {
+	if inputKeyPressed(keyF1) {
 		if currentGameMode == ModeCreative {
 			currentGameMode = ModeSurvival
 		} else {
@@ -238,7 +224,7 @@ func HandleInput(world *World, camera *gameCamera, state *InputState, client *Cl
 	}
 	state.ToggleInventory()
 	if state.SkipCamera {
-		rl.GetMouseDelta()
+		inputMouseDelta()
 		state.SkipCamera = false
 	}
 	if state.InventoryOpen {
@@ -254,7 +240,7 @@ func HandleInput(world *World, camera *gameCamera, state *InputState, client *Cl
 	state.UpdateCamera(world, camera)
 	state.UpdateSelection(true)
 
-	if rl.IsKeyPressed(rl.KeyQ) {
+	if inputKeyPressed(keyQ) {
 		item := state.Hotbar[state.SelectedSlot]
 		if item != blockAir && client != nil {
 			// Send Drop Packet
@@ -327,17 +313,17 @@ func HandleInput(world *World, camera *gameCamera, state *InputState, client *Cl
 			mobTarget = e.ID
 		}
 	}
-	if mobTarget != "" && rl.IsMouseButtonDown(rl.MouseLeftButton) {
+	if mobTarget != "" && inputMouseDown(mouseLeft) {
 		state.MiningProgress = 0
 		state.MiningTarget = nil
-		if rl.IsMouseButtonPressed(rl.MouseLeftButton) && client != nil {
+		if inputMousePressed(mouseLeft) && client != nil {
 			client.Send(&PacketAttackMob{Target: mobTarget})
 		}
 		return hit
 	}
 
 	// Progressive Mining Logic
-	if hit.hit && rl.IsMouseButtonDown(rl.MouseLeftButton) {
+	if hit.hit && inputMouseDown(mouseLeft) {
 		// 1. Get Block Hardness
 		blockType := world.BlockAt(hit.x, hit.y, hit.z)
 		def := GetBlock(blockType)
@@ -348,7 +334,7 @@ func HandleInput(world *World, camera *gameCamera, state *InputState, client *Cl
 		}
 		seconds := MiningSeconds(state.Hotbar[state.SelectedSlot], blockType)
 		if currentGameMode == ModeCreative {
-			if rl.GetTime()-state.LastBreakTime < 0.15 {
+			if inputTime()-state.LastBreakTime < 0.15 {
 				return hit
 			}
 			seconds = 0
@@ -392,7 +378,7 @@ func HandleInput(world *World, camera *gameCamera, state *InputState, client *Cl
 			state.MiningProgress = 0
 			// Update target to nil so we re-acquire next frame if raycast hits something else
 			state.MiningTarget = nil
-			state.LastBreakTime = rl.GetTime()
+			state.LastBreakTime = inputTime()
 		}
 	} else {
 		// Not holding button or not hitting block
@@ -400,10 +386,10 @@ func HandleInput(world *World, camera *gameCamera, state *InputState, client *Cl
 		state.MiningProgress = 0
 	}
 
-	if hit.hit && rl.IsMouseButtonPressed(rl.MouseRightButton) {
+	if hit.hit && inputMousePressed(mouseRight) {
 		// 1. Check for Block Interaction (Server Authoritative)
 		blockID := world.BlockAt(hit.x, hit.y, hit.z)
-		if (blockID == blockCraftingTable || containerSize(blockID) > 0) && !rl.IsKeyDown(rl.KeyLeftShift) {
+		if (blockID == blockCraftingTable || containerSize(blockID) > 0) && !inputKeyDown(keyLeftShift) {
 			if client != nil {
 				client.Send(&PacketBlockInteract{
 					X:      int32(hit.x),
@@ -448,11 +434,11 @@ func HandleInput(world *World, camera *gameCamera, state *InputState, client *Cl
 }
 
 func (s *InputState) UpdateInventoryPage() {
-	wheel := rl.GetMouseWheelMove()
+	wheel := inputMouseWheel()
 	if wheel == 0 {
 		return
 	}
-	layout := inventoryLayout()
+	layout := inventoryLayoutFor(float32(windowWidth()), float32(windowHeight()))
 	itemsPerPage := layout.Cols * layout.Rows
 	totalPages := (len(allBlocks) + itemsPerPage - 1) / itemsPerPage
 	if wheel > 0 {
@@ -491,17 +477,17 @@ func (s *InputState) UpdateInventorySelection(client *Client) {
 	}
 
 	// Constants
-	scale := inventoryScale()
-	mouse := rl.GetMousePosition()
-	leftClick := rl.IsMouseButtonPressed(rl.MouseLeftButton)
-	rightClick := rl.IsMouseButtonPressed(rl.MouseRightButton)
+	scale := inventoryScaleFor(float32(windowWidth()), float32(windowHeight()))
+	mouse := inputMousePosition()
+	leftClick := inputMousePressed(mouseLeft)
+	rightClick := inputMousePressed(mouseRight)
 
 	// Unified Interaction Handler
 	handleSlotInteraction := func(slotIndex int, isCreativeSource bool) {
 		button := -1
-		if rl.IsMouseButtonPressed(rl.MouseLeftButton) {
+		if inputMousePressed(mouseLeft) {
 			button = 0
-		} else if rl.IsMouseButtonPressed(rl.MouseRightButton) {
+		} else if inputMousePressed(mouseRight) {
 			button = 1
 		}
 
@@ -509,7 +495,7 @@ func (s *InputState) UpdateInventorySelection(client *Client) {
 			return
 		}
 
-		if button == 0 && (rl.IsKeyDown(rl.KeyLeftShift) || rl.IsKeyDown(rl.KeyRightShift)) && !isCreativeSource {
+		if button == 0 && (inputKeyDown(keyLeftShift) || inputKeyDown(keyRightShift)) && !isCreativeSource {
 			button = 2
 		}
 
@@ -579,7 +565,7 @@ func (s *InputState) UpdateInventorySelection(client *Client) {
 
 	// ---- CREATIVE MODE ----
 	if currentGameMode == ModeCreative {
-		layout := inventoryLayout()
+		layout := inventoryLayoutFor(float32(windowWidth()), float32(windowHeight()))
 		itemsPerPage := layout.Cols * layout.Rows
 		start := s.InventoryPage * itemsPerPage
 		slotX := func(col int) float32 { return layout.GridX + float32(col)*layout.Stride }
@@ -612,7 +598,7 @@ func (s *InputState) UpdateInventorySelection(client *Client) {
 		winW := float32(176) * scale
 		winH := float32(196) * scale
 		if (leftClick || rightClick) &&
-			!rl.CheckCollisionPointRec(mouse, rl.NewRectangle(layout.OriginX, layout.OriginY, winW, winH)) {
+			!uiContainsPoint(mouse, newUIRect(layout.OriginX, layout.OriginY, winW, winH)) {
 			s.CursorItem = Item{} // Drop
 			if client != nil {
 				client.Send(&PacketInventoryUpdate{SlotID: -1, ItemID: 0, Count: 0})
@@ -620,9 +606,9 @@ func (s *InputState) UpdateInventorySelection(client *Client) {
 		}
 
 	} else {
-		layout := survivalLayout(float32(rl.GetScreenWidth()), float32(rl.GetScreenHeight()))
+		layout := survivalLayout(float32(windowWidth()), float32(windowHeight()))
 		for i := 0; i < 36; i++ {
-			if rl.CheckCollisionPointRec(mouse, layout.Slot(i)) {
+			if uiContainsPoint(mouse, layout.Slot(i)) {
 				handleSlotInteraction(i, false)
 			}
 		}

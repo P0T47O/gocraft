@@ -5,75 +5,13 @@ import (
 	rl "github.com/gen2brain/raylib-go/raylib"
 )
 
-func containerUISlot(l SurvivalLayout, kind byte, i int) rl.Rectangle {
-	n := containerSize(kind)
-	if i < n {
-		if kind == blockChest {
-			return l.Rect(198+float32(i%9)*66, 70+float32(i/9)*62, 58, 56)
-		}
-		switch i {
-		case 0:
-			return l.Rect(330, 80, 64, 64)
-		case 1:
-			return l.Rect(330, 170, 64, 64)
-		default:
-			return l.Rect(600, 120, 76, 76)
-		}
-	}
-	i -= n
-	if i < 9 {
-		return l.Rect(198+float32(i)*66, 516, 58, 56)
-	}
-	return l.Rect(198+float32((i-9)%9)*66, 310+float32((i-9)/9)*62, 58, 56)
-}
-func (s *InputState) closeContainerUI() {
-	if s.Container != nil {
-		s.ClosedContainerToken = s.Container.Token
-	}
-	if s.Container != nil && client != nil {
-		client.Send(&PacketContainerClick{Token: s.Container.Token, Slot: -1})
-	}
-	s.Container = nil
-}
-func (s *InputState) updateContainerInput() {
-	view := s.Container
-	if view == nil {
-		return
-	}
-	l := survivalLayout(float32(rl.GetScreenWidth()), float32(rl.GetScreenHeight()))
-	mouse := rl.GetMousePosition()
-	left, right := rl.IsMouseButtonPressed(rl.MouseLeftButton), rl.IsMouseButtonPressed(rl.MouseRightButton)
-	if left && rl.CheckCollisionPointRec(mouse, l.Rect(938, 22, 38, 32)) {
-		s.closeContainerUI()
-		s.InventoryOpen = false
-		s.SkipCamera = true
-		rl.DisableCursor()
-		return
-	}
-	if !left && !right {
-		return
-	}
-	button := int32(0)
-	if right {
-		button = 1
-	}
-	if rl.IsKeyDown(rl.KeyLeftShift) || rl.IsKeyDown(rl.KeyRightShift) {
-		button = 2
-	}
-	for i := 0; i < len(view.State.Slots)+36; i++ {
-		if rl.CheckCollisionPointRec(mouse, containerUISlot(l, view.State.Kind, i)) && client != nil {
-			client.Send(&PacketContainerClick{Token: view.Token, Revision: view.State.Revision, Slot: int32(i), Button: button})
-			return
-		}
-	}
-}
 func (a *RenderAssets) drawContainer(state *InputState) {
 	view := state.Container
 	if view == nil {
 		return
 	}
 	c := &view.State
-	l := survivalLayout(float32(rl.GetScreenWidth()), float32(rl.GetScreenHeight()))
+	l := legacySurvivalLayoutFor(float32(rl.GetScreenWidth()), float32(rl.GetScreenHeight()))
 	rl.DrawRectangle(0, 0, int32(rl.GetScreenWidth()), int32(rl.GetScreenHeight()), rl.NewColor(9, 17, 22, 190))
 	inventoryBox(l.Rect(0, 0, 1000, 620), invBackground, invLine)
 	rl.DrawRectangleRec(l.Rect(0, 0, 1000, 3), invAccent)
@@ -117,7 +55,7 @@ func (a *RenderAssets) drawContainer(state *InputState) {
 		} else {
 			slot = inv.Slots[i-len(c.Slots)]
 		}
-		r := containerUISlot(l, c.Kind, i)
+		r := raylibRect(containerUISlot(l.SurvivalLayout, c.Kind, i))
 		inventoryBox(r, invSlot, invLine)
 		if rl.CheckCollisionPointRec(mouse, r) {
 			rl.DrawRectangleLinesEx(r, 2*l.S, invAccent)

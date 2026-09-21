@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	rl "github.com/gen2brain/raylib-go/raylib"
 	"time"
 )
 
@@ -13,8 +12,14 @@ func startGame(savePath string, ip string, isMultiplayer bool) {
 	// chunkPool = NewChunkPool(1024) // Share the global pool? Or new? Global is fine.
 	// initBlockRegistry() // Already initialized in main()
 	if *useWebGPU {
-		assets = newWebGPUCPUAssets()
+		if !nativeWindowActive {
+			assets = newWebGPUCPUAssets()
+		}
 		if err := ensureExperimentalWebGPURenderer(); err != nil {
+			if nativeWindowActive {
+				menuError = err.Error()
+				return
+			}
 			fmt.Printf("WebGPU initialization failed, using OpenGL: %v\n", err)
 			closeExperimentalWebGPURenderer()
 			*useWebGPU = false
@@ -48,9 +53,11 @@ func startGame(savePath string, ip string, isMultiplayer bool) {
 			fmt.Printf("Cannot start local server: %v\n", err)
 			server.World.Close()
 			server = nil
-			closeExperimentalWebGPURenderer()
-			assets.unload()
-			assets = nil
+			if !nativeWindowActive {
+				closeExperimentalWebGPURenderer()
+				assets.unload()
+				assets = nil
+			}
 			return
 		}
 		ip = server.Listener.Addr().String()
@@ -79,7 +86,7 @@ func startGame(savePath string, ip string, isMultiplayer bool) {
 	input = NewInputState()
 	input.InitFromCamera(camera)
 
-	rl.DisableCursor()
+	captureCursor()
 	isPaused = false
 	pauseSettings = false
 	currentState = StatePlaying
@@ -106,8 +113,10 @@ func exitGame() {
 		world.Close()
 		world = nil
 	}
-	closeExperimentalWebGPURenderer()
-	if assets != nil {
+	if !nativeWindowActive {
+		closeExperimentalWebGPURenderer()
+	}
+	if assets != nil && !nativeWindowActive {
 		assets.unload()
 		assets = nil
 	}
@@ -118,5 +127,5 @@ func exitGame() {
 	menuPage = MenuMain
 	isPaused = false
 	pauseSettings = false
-	rl.EnableCursor()
+	releaseCursor()
 }

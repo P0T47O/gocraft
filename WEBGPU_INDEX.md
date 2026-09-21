@@ -1,46 +1,26 @@
-# WebGPU experiment code index
+# WebGPU feature index
 
-This supplements `CODE_INDEX.md` without replacing the main project's complete navigation.
+See [CODE_INDEX.md](CODE_INDEX.md) for the maintained full feature map and [CODE_SYMBOLS.md](CODE_SYMBOLS.md) for symbols.
 
-| Function | File / entry |
+| Area | Files |
 | --- | --- |
-| Migration plan and milestones | `WEBGPU_MIGRATION.md` |
-| Backend-neutral vertex and current OpenGL mesh | `platform/mesh.go` |
-| `MeshBackend` / `MeshHandle`, upload/draw routing | `platform/renderer.go` |
-| Real WebGPU vertex/index buffer backend | `platform/webgpu_backend.go`: `NewWebGPUMeshBackend`, `UploadChecked`, `DrawPass` |
-| Windows WebGPU surface + indexed mesh smoke probe | `cmd/webgpu-smoke/main_windows.go` |
-| Chunk mesh backend-neutral GPU handle | `render_mesh.go` |
-| Backend-neutral atlas UV rectangle shared by legacy/WebGPU mesh consumers | `render_assets.go`: `AtlasRect` |
-| CPU-built WebGPU texture atlas, including block/item sprites, mob skins, crack stages and retained animated-liquid frames | `webgpu_atlas.go` |
-| Atlas-backed water/lava frame uploads using existing `.mcmeta` timing | `webgpu_animation_windows.go`: `updateWebGPUAtlasAnimations` |
-| Native WebGPU camera matrices, scene uniforms and visible-section collection | `webgpu_camera_windows.go` |
-| Live WebGPU world renderer: surface, depth, opaque/cutout, water/glass, fog, mesh drawing | `webgpu_world_renderer_windows.go` |
-| Live WebGPU entity/effect batch: remote players, dropped items, content-driven animated mobs, mining cracks | `webgpu_entities_windows.go` |
-| Live WebGPU shape/icon HUD: crosshair, hotbar, vitals | `webgpu_hud_windows.go` |
-| Live WebGPU text overlay: built-in pixel font, hotbar labels/counts, chat, debug, pause/death text | `webgpu_text_windows.go` |
-| WebGPU creative/survival inventory and item/tool presentation | `webgpu_inventory_windows.go` |
-| WebGPU chest/furnace container presentation | `webgpu_container_windows.go` |
-| Single-pass live gameplay compositor | `webgpu_gameplay_windows.go`: `DrawGameplay` |
-| `-webgpu` Playing-state lifetime, frame snapshot and temporary Raylib window/input bridge | `webgpu_game_windows.go` |
-| Raylib-free TCP client transport and movement snapshot emission | `client.go`: `Client.Update` |
-| Backend-neutral voxel DDA ray cast | `world_ray.go`: `rayCast` |
-| Renderer-neutral input-facing hit-test facade (legacy filename retained temporarily) | `world_ray_raylib.go`: `HitTest` |
-| Renderer-neutral gameplay vectors and collision/movement core | `game_math.go`, `actor_physics.go`, `player_movement.go` |
-| Temporary Raylib vector adapters for camera/input and legacy tests | `input_physics_raylib.go` |
-| Raylib-free mob movement/spawn simulation and authoritative attack validation | `mob_simulation.go`, `mob_server.go`, `mob_protocol.go` |
-| Raylib-free server vitals/liquid/support checks | `player_vitals.go` |
-| Reference-renderer-only mob debug AABB | `mob_render_bounds.go` |
+| Native Win32 window, raw mouse, focus, resize and UTF-16 input | window_win32_windows.go |
+| Independent WebGPU main loop and session lifecycle | native_game_windows.go, native_window_state.go, game_session.go |
+| Window-neutral input, camera, menu state and layouts | window_input.go, game_camera.go, menu_screens.go, ui_menu.go, inventory_layout.go, ui.go |
+| Menu draw contract and WebGPU ordered batches/scissors | menu_painter.go, menu_webgpu_windows.go, menu_death.go, ui_palette.go |
+| Surface, world pipelines and camera | webgpu_game_windows.go, webgpu_world_renderer_windows.go, webgpu_camera_windows.go |
+| One-pass world/entities/HUD/inventory/menu compositor | webgpu_gameplay_windows.go |
+| Atlas, mipmaps, animation and AF | webgpu_atlas.go, webgpu_mipmap.go, webgpu_animation_windows.go, webgpu_filter_windows.go |
+| Compact GPU mesh payload and upload slots | platform/compact_vertex.go, platform/webgpu_backend.go, webgpu_upload_windows.go |
+| Entities, conservative culling and split batches | webgpu_entities_windows.go, webgpu_entity_bounds_windows.go |
+| HUD/text/inventory/container | webgpu_hud_windows.go, webgpu_text_windows.go, webgpu_inventory_windows.go, webgpu_container_windows.go |
+| GPU regressions and native-window/session integration | webgpu_regression_windows_test.go, webgpu_mip_regression_windows_test.go, native_window_windows_test.go |
+| Optional GPU menu PNG readback | menu_preview_webgpu_windows_test.go |
 
-Current state: on real Windows hardware the Raylib-created HWND is presented by WebGPU through the GoGPU Vulkan backend. The live `-webgpu` path renders streamed chunk terrain, atlas textures, animated water/lava atlas tiles, cutout foliage, transparent water/glass, fog, remote players, dropped block/tool items, content-driven mobs, mining crack overlays, crosshair/hotbar/vitals, ASCII text, creative/survival inventories, standalone item/tool sprites, and chest/furnace container screens while Raylib/OpenGL presentation stays idle during `StatePlaying`.
+## Current state
 
-Entity presentation uses one dynamic WebGPU vertex/index batch in world space. Mob geometry follows the JSON bone model and animation channels already used by the reference renderer, including walk/flee leg swing, hurt tint and death tilt. Larger mob skins are stored in the atlas at their native resolution within the padded cell. Mining cracks reuse the same batch as a slightly expanded textured cube to avoid z-fighting.
+On Windows, `go run . -webgpu` creates a native Win32 window and uses WebGPU for menus and gameplay. No Raylib window/input/presentation is used on that path. Session exit releases world meshes but retains the menu window and GPU atlas; final shutdown releases GPU before destroying the HWND.
 
-Animated block textures keep the same vertical-strip interpretation and `.mcmeta` `frametime` used by the reference renderer. The WebGPU atlas retains the decoded frames on the CPU and updates only the affected atlas tile when the frame index changes; meshes and UVs remain stable. This restores existing water/lava animation parity rather than adding a new gameplay feature.
+The default non-WebGPU path, legacy assets, OpenGL renderer, preview tests and tools still compile against Raylib. This is **not** complete dependency removal. WebGPU's built-in font is ASCII-only. IME composition and live cross-monitor DPI behavior remain unverified.
 
-No new gameplay presentation is being added during the dependency-removal phase. The experimental viewmodel prototype was removed because the reference game did not have that feature. HUD, text, inventory, container, entity/effect presentation, gameplay composition, native camera math, the CPU WebGPU atlas builder and the core WebGPU world renderer no longer import Raylib directly. `webgpu_game_windows.go` is the intentional temporary presentation boundary that snapshots screen size, time, camera and mouse data and supplies the Raylib-created HWND used to create the WebGPU surface. The obsolete standalone world `Draw` path and duplicate Raylib-camera scene/culling helpers have been removed.
-
-Milestone A (runtime WebGPU renderer internals are Raylib-free) is complete. `TextureAtlas.UVs` uses backend-neutral `AtlasRect`, so the WebGPU atlas no longer inherits `rl.Rectangle` from the legacy mesher. Milestone B is well underway: `Client.Update` accepts primitive movement state; `world_ray.go` performs voxel DDA with primitive coordinates/directions and a backend-neutral hit normal; `HitTest` accepts `gameVec3` origin/direction; authoritative mob attack validation performs its own slab AABB test; shared actor/player/mob movement uses `gameVec3` instead of `rl.Vector3`; server vitals use the same renderer-neutral liquid/support helpers; and client block/mob targeting no longer constructs `rl.Ray` or calls Raylib ray/AABB collision helpers.
-
-Raylib vector compatibility for the existing camera/input path is concentrated in `input_physics_raylib.go`, while the reference mob debug bounds live in `mob_render_bounds.go`. The remaining gameplay-side dependency is now the camera/input owner itself: `input.go`, `game_update.go` and `game_packets.go` still receive or mutate `rl.Camera3D` and read Raylib keyboard/mouse state. After that boundary is replaced, the next major step is the native window owner; the OpenGL/Raylib renderer remains only as the temporary reference path until parity is stable.
-
-Local validation for the live path: `go test ./...`, `go vet ./...`, `go build .`, then run the built executable with `-webgpu` if local application-control policy blocks `go run`. Preview tests are opt-in only and are no longer part of the normal iteration loop. This targeting cleanup changes signatures but does not add, delete or move Go symbols, so no symbol-index rewrite is required for this slice.
+Validation: `go test ./...`, `go vet ./...`, `go build .`, and `go run ./tools/codeindex -check`. On Windows, set `GOCRAFT_WEBGPU_REGRESSION=1` and run `go test . -run 'TestNativeWebGPUWindow|TestWebGPUUIUploadIsolationGPU|TestWebGPUMipStabilityGPU' -count=1`. The native test uses a hidden window and temporary save, not user worlds. Optional `GOCRAFT_NATIVE_MENU_PREVIEW` names a PNG output path.

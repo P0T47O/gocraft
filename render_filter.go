@@ -8,6 +8,9 @@ import (
 var textureAnisotropyLimit int
 
 func supportedAnisotropy() int {
+	if nativeWindowActive {
+		return 16
+	}
 	if textureAnisotropyLimit == 0 {
 		textureAnisotropyLimit = normalizeAnisotropy(platform.MaxTextureAnisotropy())
 	}

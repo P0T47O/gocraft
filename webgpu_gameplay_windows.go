@@ -162,6 +162,14 @@ func (r *webGPUWorldRenderer) DrawGameplay(world *World, frame webGPUFrameContex
 		return err
 	}
 
+	if nativeWindowActive && (isPaused || state.isDead()) {
+		if err := nativeMenuCanvas.draw(pass, r); err != nil {
+			_ = pass.End()
+			r.surface.DiscardTexture()
+			return err
+		}
+	}
+
 	if err := pass.End(); err != nil {
 		r.surface.DiscardTexture()
 		return err
