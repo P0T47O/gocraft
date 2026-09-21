@@ -3,6 +3,7 @@
 package main
 
 import (
+	"github.com/gogpu/wgpu"
 	"os"
 	"runtime"
 	"testing"
@@ -98,6 +99,33 @@ func TestNativeWebGPUWindow(t *testing.T) {
 	if err = r.DrawMenu(p); err != nil {
 		t.Fatalf("resized menu: %v", err)
 	}
+	// Reconfigure even when dimensions have not changed (e.g. restore or a
+	// recoverable Present error). Menu and gameplay share this recovery path.
+	depthBefore := r.depthView
+	if err = r.recoverOutdatedSurface(wgpu.ErrSurfaceOutdated); err != nil {
+		t.Fatal(err)
+	}
+	if err = r.DrawMenu(p); err != nil {
+		t.Fatal(err)
+	}
+	if r.depthView == depthBefore {
+		t.Fatal("same-size stale surface was not rebuilt")
+	}
+	// Simulate an external resize after the frame snapshot (not a settings request).
+	w.Resize(1024, 768)
+	w.applyPendingResize()
+	if err = r.DrawMenu(p); err != nil {
+		t.Fatalf("menu resize race: %v", err)
+	}
+	w.Poll()
+	p.reset(uint32(w.width), uint32(w.height))
+	drawMenu()
+	if err = r.DrawMenu(p); err != nil {
+		t.Fatal(err)
+	}
+	if r.width != uint32(w.width) || r.height != uint32(w.height) {
+		t.Fatal("surface dimensions did not catch up")
+	}
 	if path := os.Getenv("GOCRAFT_NATIVE_MENU_PREVIEW"); path != "" {
 		exportNativeMenuPreview(t, r, p, path)
 	}
@@ -150,6 +178,27 @@ func TestNativeWebGPUWindow(t *testing.T) {
 				drawPauseMenu()
 				if err = drawExperimentalWebGPUFrame(); err != nil {
 					t.Fatal(err)
+				}
+			}
+			// Settings are applied after input capture, before rendering this frame.
+			// Previously this changed the HWND immediately, leaving the frame stale.
+			for _, size := range [][2]int{{1024, 768}, {1280, 720}, {1600, 900}, {1280, 720}} {
+				w.Poll()
+				nativeMenuCanvas.reset(uint32(w.width), uint32(w.height))
+				drawPauseMenu()
+				settings.ResolutionWidth, settings.ResolutionHeight = size[0], size[1]
+				ApplySettings() // No SaveSettings: preserve the user's preferences.
+				if err = drawExperimentalWebGPUFrame(); err != nil {
+					t.Fatalf("same-frame resolution change: %v", err)
+				}
+				w.Poll()
+				nativeMenuCanvas.reset(uint32(w.width), uint32(w.height))
+				drawPauseMenu()
+				if err = drawExperimentalWebGPUFrame(); err != nil {
+					t.Fatalf("resized frame: %v", err)
+				}
+				if client == nil || server == nil || world == nil {
+					t.Fatal("resize terminated the session")
 				}
 			}
 		}()

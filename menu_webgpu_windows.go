@@ -87,12 +87,10 @@ func (p *gpuMenuPainter) draw(pass *wgpu.RenderPassEncoder, r *webGPUWorldRender
 	pass.SetScissorRect(gputypes.ScissorRect{Width: r.width, Height: r.height})
 	return nil
 }
-func (r *webGPUWorldRenderer) DrawMenu(p *gpuMenuPainter) error {
-	if p.width != r.width || p.height != r.height {
-		r.width, r.height = p.width, p.height
-		if err := r.configureSurface(); err != nil {
-			return err
-		}
+func (r *webGPUWorldRenderer) DrawMenu(p *gpuMenuPainter) (err error) {
+	defer func() { err = r.recoverOutdatedSurface(err) }()
+	if err := r.prepareSurface(p.width, p.height); err != nil {
+		return err
 	}
 	if activeWebGPUHUDRenderer != nil {
 		activeWebGPUHUDRenderer.uploads.begin()
@@ -100,7 +98,10 @@ func (r *webGPUWorldRenderer) DrawMenu(p *gpuMenuPainter) error {
 	if activeWebGPUTextRenderer != nil {
 		activeWebGPUTextRenderer.uploads.begin()
 	}
-	texture, _, err := r.surface.GetCurrentTexture()
+	texture, suboptimal, err := r.surface.GetCurrentTexture()
+	if suboptimal {
+		r.surfaceNeedsReconfigure = true
+	}
 	if err != nil {
 		return err
 	}

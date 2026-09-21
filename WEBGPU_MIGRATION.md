@@ -1,5 +1,11 @@
 # WebGPU renderer experiment
 
+## Resolution-change recovery
+
+Reproduced `hal: surface outdated` by applying a resolution change after input capture and before drawing the paused world. Native settings resize now coalesces until the next event poll. Both menu and gameplay classify only `wgpu.ErrSurfaceOutdated` (including wrapped errors) as recoverable, discard any stale acquisition, skip that frame and reconfigure on the next draw even at unchanged dimensions. Suboptimal acquisitions also request reconfiguration. Device loss, surface loss, allocation errors and unrelated errors still propagate. UI actions are not replayed during recovery.
+
+The hidden-window regression now exercises same-frame settings changes across four resolutions in each of two temporary-save sessions, same-size recovery, and an external resize after a menu snapshot. The original regression failed before this fix and passed afterward; user settings and worlds are not modified by it.
+
 ## Native window and full menu presentation (2026-09-21)
 
 `-webgpu` now creates an independent Win32 window before any Raylib initialization. Native input handles relative raw mouse movement, keyboard/text events, focus loss, minimization, resizing and DPI messages. Shared menus emit ordered rectangle/text batches through a neutral painter; WebGPU presents main/world/create/multiplayer/settings pages and pause/death overlays. The native path reports initialization errors rather than opening an implicit OpenGL fallback. World exit retains the native window, device and atlas; final shutdown closes gameplay before GPU and HWND.

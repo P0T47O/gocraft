@@ -100,25 +100,26 @@ type webGPUWorldRenderer struct {
 	queue    *wgpu.Queue
 	backend  *platform.WebGPUMeshBackend
 
-	format              gputypes.TextureFormat
-	opaquePipeline      *wgpu.RenderPipeline
-	solidPipeline       *wgpu.RenderPipeline
-	translucentPipeline *wgpu.RenderPipeline
-	bindGroup           *wgpu.BindGroup
-	sceneBuffer         *wgpu.Buffer
-	shader              *wgpu.ShaderModule
-	layout              *wgpu.PipelineLayout
-	bindGroupLayout     *wgpu.BindGroupLayout
-	atlasTexture        *wgpu.Texture
-	atlasView           *wgpu.TextureView
-	atlasBaseView       *wgpu.TextureView
-	atlasSampler        *wgpu.Sampler
-	filterMipmaps       bool
-	filterAF            int
-	depthTexture        *wgpu.Texture
-	depthView           *wgpu.TextureView
-	width, height       uint32
-	camera              webGPUCamera
+	format                  gputypes.TextureFormat
+	opaquePipeline          *wgpu.RenderPipeline
+	solidPipeline           *wgpu.RenderPipeline
+	translucentPipeline     *wgpu.RenderPipeline
+	bindGroup               *wgpu.BindGroup
+	sceneBuffer             *wgpu.Buffer
+	shader                  *wgpu.ShaderModule
+	layout                  *wgpu.PipelineLayout
+	bindGroupLayout         *wgpu.BindGroupLayout
+	atlasTexture            *wgpu.Texture
+	atlasView               *wgpu.TextureView
+	atlasBaseView           *wgpu.TextureView
+	atlasSampler            *wgpu.Sampler
+	filterMipmaps           bool
+	filterAF                int
+	depthTexture            *wgpu.Texture
+	depthView               *wgpu.TextureView
+	width, height           uint32
+	surfaceNeedsReconfigure bool
+	camera                  webGPUCamera
 }
 
 func newWebGPUWorldRenderer(hwnd uintptr, assets *RenderAssets, width, height uint32) (*webGPUWorldRenderer, error) {

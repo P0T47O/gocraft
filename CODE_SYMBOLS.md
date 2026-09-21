@@ -658,6 +658,10 @@
 
 函数/方法：`buildWebGPUMips`、`refreshWebGPUMips`、`*webGPUAtlasAnimation.mipFrame`
 
+## [webgpu_surface_windows.go](webgpu_surface_windows.go)
+
+函数/方法：`*webGPUWorldRenderer.prepareSurface`、`*webGPUWorldRenderer.recoverOutdatedSurface`
+
 ## [webgpu_text_windows.go](webgpu_text_windows.go)
 
 类型：`webGPUTextVertex`、`webGPUTextRenderer`、`webGPUTextBatch`
@@ -692,7 +696,7 @@
 
 类型：`winPoint`、`winRect`、`winClass`、`winMessage`、`rawMousePacket`、`nativeWindow`
 
-函数/方法：`nativeUserProc`、`createNativeWindow`、`*nativeWindow.Close`、`*nativeWindow.Resize`、`*nativeWindow.SetPosition`、`*nativeWindow.SetCaptured`、`*nativeWindow.updateCapture`、`*nativeWindow.Poll`、`nativeKey`、`nativeWindowProc`
+函数/方法：`nativeUserProc`、`createNativeWindow`、`*nativeWindow.Close`、`*nativeWindow.Resize`、`*nativeWindow.applyPendingResize`、`*nativeWindow.SetPosition`、`*nativeWindow.SetCaptured`、`*nativeWindow.updateCapture`、`*nativeWindow.Poll`、`nativeKey`、`nativeWindowProc`
 
 ## [world_core.go](world_core.go)
 

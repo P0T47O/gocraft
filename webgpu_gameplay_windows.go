@@ -13,7 +13,8 @@ import (
 // entities/effects, HUD, text, inventory and container screens are encoded into
 // one render pass so the Raylib/OpenGL presenter remains completely idle while
 // StatePlaying owns the HWND through WebGPU.
-func (r *webGPUWorldRenderer) DrawGameplay(world *World, frame webGPUFrameContext, state *InputState) error {
+func (r *webGPUWorldRenderer) DrawGameplay(world *World, frame webGPUFrameContext, state *InputState) (err error) {
+	defer func() { err = r.recoverOutdatedSurface(err) }()
 	if activeWebGPUHUDRenderer != nil {
 		activeWebGPUHUDRenderer.uploads.begin()
 	}
@@ -28,11 +29,8 @@ func (r *webGPUWorldRenderer) DrawGameplay(world *World, frame webGPUFrameContex
 	}
 	width := max(uint32(1), frame.Width)
 	height := max(uint32(1), frame.Height)
-	if width != r.width || height != r.height {
-		r.width, r.height = width, height
-		if err := r.configureSurface(); err != nil {
-			return err
-		}
+	if err := r.prepareSurface(width, height); err != nil {
+		return err
 	}
 	if err := updateWebGPUAtlasAnimations(r, frame.Time); err != nil {
 		return fmt.Errorf("update WebGPU atlas animations: %w", err)
@@ -49,7 +47,10 @@ func (r *webGPUWorldRenderer) DrawGameplay(world *World, frame webGPUFrameContex
 		cache.translucent = cache.translucent[:0]
 	}()
 
-	surfaceTexture, _, err := r.surface.GetCurrentTexture()
+	surfaceTexture, suboptimal, err := r.surface.GetCurrentTexture()
+	if suboptimal {
+		r.surfaceNeedsReconfigure = true
+	}
 	if err != nil {
 		return err
 	}

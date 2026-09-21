@@ -63,6 +63,7 @@ type rawMousePacket struct {
 type nativeWindow struct {
 	hwnd                                 uintptr
 	width, height                        int
+	pendingWidth, pendingHeight          int
 	closed, focused, minimized, captured bool
 	started                              time.Time
 	highSurrogate                        uint16
@@ -116,6 +117,18 @@ func (w *nativeWindow) Close() {
 	w.hwnd = 0
 }
 func (w *nativeWindow) Resize(width, height int) {
+	if width > 0 && height > 0 {
+		w.pendingWidth, w.pendingHeight = width, height
+	}
+}
+
+// Apply settings before capturing a new frame, not during menu drawing.
+func (w *nativeWindow) applyPendingResize() {
+	width, height := w.pendingWidth, w.pendingHeight
+	w.pendingWidth, w.pendingHeight = 0, 0
+	if width <= 0 || height <= 0 || (width == w.width && height == w.height) {
+		return
+	}
 	r := winRect{Right: int32(width), Bottom: int32(height)}
 	nativeUserProc("AdjustWindowRectEx").Call(uintptr(unsafe.Pointer(&r)), 0x00cf0000, 0, 0)
 	nativeUserProc("SetWindowPos").Call(w.hwnd, 0, 0, 0, uintptr(r.Right-r.Left), uintptr(r.Bottom-r.Top), 0x0016)
@@ -146,6 +159,7 @@ func (w *nativeWindow) updateCapture() {
 	}
 }
 func (w *nativeWindow) Poll() {
+	w.applyPendingResize()
 	w.frame.Pressed = [keyCount]bool{}
 	w.frame.MousePressed = [mouseButtonCount]bool{}
 	w.frame.MouseReleased = [mouseButtonCount]bool{}

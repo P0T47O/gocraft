@@ -18,6 +18,7 @@
 | 游戏场景绘制 | [game_render.go](game_render.go) |
 | 原生 Windows 窗口与主循环（不初始化 Raylib 窗口） | [window_win32_windows.go](window_win32_windows.go)、[native_game_windows.go](native_game_windows.go)、[native_game_stub.go](native_game_stub.go)、[native_window_state.go](native_window_state.go) |
 | WebGPU 主菜单、设置和菜单覆盖层：保序批次与裁剪 | [menu_webgpu_windows.go](menu_webgpu_windows.go) |
+| 分辨率切换：帧边界应用窗口尺寸、交换链过期跳帧并重建（菜单/游戏共用） | [window_win32_windows.go](window_win32_windows.go)：`applyPendingResize`；[webgpu_surface_windows.go](webgpu_surface_windows.go)、[webgpu_surface_windows_test.go](webgpu_surface_windows_test.go)；实机回归 [native_window_windows_test.go](native_window_windows_test.go) |
 | 原生窗口/GPU/临时存档双会话回归与图像回读 | [native_window_windows_test.go](native_window_windows_test.go)、[menu_preview_webgpu_windows_test.go](menu_preview_webgpu_windows_test.go)；设置 `GOCRAFT_WEBGPU_REGRESSION=1` |
 | WebGPU 原生帧快照与渲染器生命周期 | [webgpu_game_windows.go](webgpu_game_windows.go)、[webgpu_game_stub.go](webgpu_game_stub.go) |
 | WebGPU Playing 单 pass 合成（world + entities/effects + HUD/text + inventory/container + 暂停/死亡菜单） | [webgpu_gameplay_windows.go](webgpu_gameplay_windows.go)：`DrawGameplay` |
