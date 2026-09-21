@@ -78,7 +78,7 @@
 | WebGPU 近景像素采样、mipmap 关闭时的单层视图、多帧移动/动画与 LOD 回读 | [webgpu_world_renderer_windows.go](webgpu_world_renderer_windows.go)：`sample_atlas`；[webgpu_filter_windows.go](webgpu_filter_windows.go)：`filteredAtlasView`；[webgpu_mip_regression_windows_test.go](webgpu_mip_regression_windows_test.go) |
 | WebGPU gameplay HUD / 文本（准星、热键栏、生命、像素字体、聊天、debug、暂停/死亡提示） | [webgpu_hud_windows.go](webgpu_hud_windows.go)、[webgpu_text_windows.go](webgpu_text_windows.go) |
 | WebGPU 背包/容器与物品工具图标 | [webgpu_inventory_windows.go](webgpu_inventory_windows.go)、[webgpu_container_windows.go](webgpu_container_windows.go) |
-| WebGPU 迁移验证/交互预览 | [webgpu_chunk_preview_test.go](webgpu_chunk_preview_test.go)、[webgpu_region_preview_test.go](webgpu_region_preview_test.go)、[webgpu_surface_preview_test.go](webgpu_surface_preview_test.go)、[webgpu_textured_preview_test.go](webgpu_textured_preview_test.go)、[webgpu_transparency_preview_test.go](webgpu_transparency_preview_test.go)、[WEBGPU_MIGRATION.md](WEBGPU_MIGRATION.md) |
+| WebGPU 原生窗口迁移验证/交互预览（不再依赖 Raylib 窗口） | [webgpu_chunk_preview_test.go](webgpu_chunk_preview_test.go)、[webgpu_region_preview_test.go](webgpu_region_preview_test.go)、[webgpu_surface_preview_test.go](webgpu_surface_preview_test.go)、[webgpu_textured_preview_test.go](webgpu_textured_preview_test.go)、[webgpu_transparency_preview_test.go](webgpu_transparency_preview_test.go)、[WEBGPU_MIGRATION.md](WEBGPU_MIGRATION.md) |
 | 地形颜色缓存 | [mesh_tint.go](mesh_tint.go) |
 | 资源持有、初始化与释放 | [render_assets.go](render_assets.go) |
 | 纹理加载、材质、透明像素处理 | [render_textures.go](render_textures.go) |
@@ -136,3 +136,9 @@
 实体模型实例化、大地形缓冲区子分配/间接绘制仍待性能采样后推进。buildAllMeshData、HandlePacket 和 input.go 仍有较大流程，后续可按面策略、消息域和输入状态机拆分。
 网格上传的旧材质绑定集中在 [render_mesh_bindings_raylib.go](render_mesh_bindings_raylib.go)；共享上传文件不再导入 Raylib。窗口设置仅调用当前窗口所有者的 Resize 接口。
 窗口设置委托与原生上传无旧资源分配回归：[settings_window_test.go](settings_window_test.go)。
+## 后续依赖清理与验证
+
+- 五个地形预览共用 [webgpu_preview_window_windows_test.go](webgpu_preview_window_windows_test.go) 的原生窗口。保留各自开关：`GOCRAFT_WEBGPU_CHUNK_PREVIEW`、`GOCRAFT_WEBGPU_REGION_PREVIEW`、`GOCRAFT_WEBGPU_SURFACE_PREVIEW`、`GOCRAFT_WEBGPU_TEXTURE_PREVIEW`、`GOCRAFT_WEBGPU_TRANSPARENCY_PREVIEW`，设为 `1` 启用；另设 `GOCRAFT_WEBGPU_PREVIEW_FRAMES=3` 可隐藏窗口、第二帧调整尺寸、三帧后退出。不设帧数仍为交互预览。
+- 当前 WebGPU 生物骨骼姿态计算提取到 [mob_pose.go](mob_pose.go)，[mob_pose_test.go](mob_pose_test.go) 检查父子旋转、偏移、混合归零及缓冲区复用；[mob_test.go](mob_test.go) 验证当前姿态实现而非旧 Raylib 动画。
+- [mesh_lighting_test.go](mesh_lighting_test.go) 使用标准颜色和标量行列式；[webgpu_optimization_test.go](webgpu_optimization_test.go) 使用独立 Rodrigues 公式验证旋转，无 Raylib 测试依赖。
+- [window_input_test.go](window_input_test.go) 自动扫描所有 `webgpu*.go` 导入，禁止重新引入 Raylib；这是直接导入边界保护，不表示整个模块依赖已删除。

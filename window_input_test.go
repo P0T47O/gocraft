@@ -4,6 +4,7 @@ import (
 	"go/parser"
 	"go/token"
 	"math"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -89,7 +90,7 @@ func TestNeutralCameraConsumesMouseSnapshot(t *testing.T) {
 
 func TestSharedGameplayHasNoWindowLibraryImports(t *testing.T) {
 	// Keep the cleared boundary from silently growing dependencies again.
-	for _, path := range []string{"input.go", "game_camera.go", "game_math.go", "game_update.go", "game_packets.go", "game_session.go", "window_input.go", "inventory_input.go", "container_input.go", "inventory_layout.go", "ui.go", "types.go", "player_collision.go", "save.go", "save_player.go", "performance_monitor.go", "menu_screens.go", "ui_menu.go", "menu_painter.go", "menu_death.go", "ui_palette.go", "webgpu_game_windows.go", "native_game_windows.go", "window_win32_windows.go"} {
+	for _, path := range []string{"main.go", "settings_window.go", "render_mesh_upload.go", "mesh_lighting_test.go", "webgpu_optimization_test.go", "webgpu_chunk_preview_test.go", "webgpu_region_preview_test.go", "webgpu_surface_preview_test.go", "webgpu_textured_preview_test.go", "webgpu_transparency_preview_test.go", "webgpu_preview_window_windows_test.go", "input.go", "game_camera.go", "game_math.go", "game_update.go", "game_packets.go", "game_session.go", "window_input.go", "inventory_input.go", "container_input.go", "inventory_layout.go", "ui.go", "types.go", "player_collision.go", "save.go", "save_player.go", "performance_monitor.go", "menu_screens.go", "ui_menu.go", "menu_painter.go", "menu_death.go", "ui_palette.go", "webgpu_game_windows.go", "native_game_windows.go", "window_win32_windows.go"} {
 		file, err := parser.ParseFile(token.NewFileSet(), path, nil, parser.ImportsOnly)
 		if err != nil {
 			t.Fatal(err)
@@ -101,6 +102,29 @@ func TestSharedGameplayHasNoWindowLibraryImports(t *testing.T) {
 			}
 			if strings.Contains(name, "raylib") {
 				t.Errorf("%s imports window library %s", path, name)
+			}
+		}
+	}
+}
+
+func TestWebGPUAndPoseHaveNoRaylibImports(t *testing.T) {
+	paths, err := filepath.Glob("webgpu*.go")
+	if err != nil || len(paths) == 0 {
+		t.Fatalf("find WebGPU files: %v", err)
+	}
+	paths = append(paths, "mob_pose.go", "mob_pose_test.go", "mob_test.go")
+	for _, path := range paths {
+		file, err := parser.ParseFile(token.NewFileSet(), path, nil, parser.ImportsOnly)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, imp := range file.Imports {
+			name, err := strconv.Unquote(imp.Path.Value)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if strings.Contains(name, "raylib") {
+				t.Errorf("%s imports %s", path, name)
 			}
 		}
 	}

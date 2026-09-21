@@ -16,7 +16,6 @@ import (
 	"time"
 	"unsafe"
 
-	rl "github.com/gen2brain/raylib-go/raylib"
 	"github.com/go-gl/mathgl/mgl32"
 	"github.com/gogpu/gputypes"
 	"github.com/gogpu/wgpu"
@@ -188,15 +187,9 @@ func TestWebGPUTexturedPreview(t *testing.T) {
 		}
 	}()
 
-	rl.SetTraceLogLevel(rl.LogWarning)
-	rl.InitWindow(1280, 800, "GoCraft textured terrain - WebGPU preview")
-	defer rl.CloseWindow()
-	rl.SetExitKey(0)
-
-	hwnd := uintptr(rl.GetWindowHandle())
-	if hwnd == 0 {
-		t.Fatal("raylib returned a null native window handle")
-	}
+	preview, closePreview := newNativePreviewWindow(t, 1280, 800)
+	defer closePreview()
+	hwnd := preview.window.hwnd
 	instance, err := wgpu.CreateInstance(nil)
 	if err != nil {
 		t.Fatalf("create WebGPU instance: %v", err)
@@ -298,15 +291,15 @@ func TestWebGPUTexturedPreview(t *testing.T) {
 		t.Fatal("textured preview produced no atlas-backed meshes")
 	}
 
-	width := uint32(max(1, rl.GetScreenWidth()))
-	height := uint32(max(1, rl.GetScreenHeight()))
+	width := uint32(max(1, preview.window.width))
+	height := uint32(max(1, preview.window.height))
 	var depthTexture *wgpu.Texture
 	var depthView *wgpu.TextureView
 	reconfigure := func() error {
 		if err := surface.Configure(device, &wgpu.SurfaceConfiguration{
 			Format: format, Usage: gputypes.TextureUsageRenderAttachment,
 			Width: width, Height: height,
-			AlphaMode: gputypes.CompositeAlphaModeOpaque,
+			AlphaMode:   gputypes.CompositeAlphaModeOpaque,
 			PresentMode: gputypes.PresentModeFifo,
 		}); err != nil {
 			return err
@@ -339,13 +332,9 @@ func TestWebGPUTexturedPreview(t *testing.T) {
 	t.Log("Expected result: real GoCraft grass/dirt/stone/tree/plant textures sampled through a WebGPU atlas; cutout texels are discarded and existing vertex AO/tint modulates the texture color.")
 
 	started := time.Now()
-	for {
-		rl.PollInputEvents()
-		if rl.WindowShouldClose() {
-			break
-		}
-		newWidth := uint32(max(1, rl.GetScreenWidth()))
-		newHeight := uint32(max(1, rl.GetScreenHeight()))
+	for preview.nextFrame() {
+		newWidth := uint32(max(1, preview.window.width))
+		newHeight := uint32(max(1, preview.window.height))
 		if newWidth != width || newHeight != height {
 			width, height = newWidth, newHeight
 			if err := reconfigure(); err != nil {
@@ -467,11 +456,11 @@ func createWebGPUTexturedPreviewPipeline(
 		return nil, nil, nil, nil, nil, nil, nil, err
 	}
 	texture, err := device.CreateTexture(&wgpu.TextureDescriptor{
-		Label: "GoCraft WebGPU block atlas",
-		Size: wgpu.Extent3D{Width: uint32(atlasWidth), Height: uint32(atlasHeight), DepthOrArrayLayers: 1},
+		Label:         "GoCraft WebGPU block atlas",
+		Size:          wgpu.Extent3D{Width: uint32(atlasWidth), Height: uint32(atlasHeight), DepthOrArrayLayers: 1},
 		MipLevelCount: 1, SampleCount: 1, Dimension: gputypes.TextureDimension2D,
 		Format: gputypes.TextureFormatRGBA8Unorm,
-		Usage: gputypes.TextureUsageTextureBinding | gputypes.TextureUsageCopyDst,
+		Usage:  gputypes.TextureUsageTextureBinding | gputypes.TextureUsageCopyDst,
 	})
 	if err != nil {
 		cameraBuffer.Release()
@@ -497,11 +486,11 @@ func createWebGPUTexturedPreviewPipeline(
 		return nil, nil, nil, nil, nil, nil, nil, err
 	}
 	sampler, err := device.CreateSampler(&wgpu.SamplerDescriptor{
-		Label: "GoCraft block atlas nearest sampler",
+		Label:        "GoCraft block atlas nearest sampler",
 		AddressModeU: gputypes.AddressModeClampToEdge,
 		AddressModeV: gputypes.AddressModeClampToEdge,
-		MagFilter: gputypes.FilterModeNearest,
-		MinFilter: gputypes.FilterModeNearest,
+		MagFilter:    gputypes.FilterModeNearest,
+		MinFilter:    gputypes.FilterModeNearest,
 		MipmapFilter: gputypes.FilterModeNearest,
 	})
 	if err != nil {
@@ -558,10 +547,10 @@ func createWebGPUTexturedPreviewPipeline(
 	}
 
 	ignoreStencil := wgpu.StencilFaceState{
-		Compare: gputypes.CompareFunctionAlways,
-		FailOp: gputypes.StencilOperationKeep,
+		Compare:     gputypes.CompareFunctionAlways,
+		FailOp:      gputypes.StencilOperationKeep,
 		DepthFailOp: gputypes.StencilOperationKeep,
-		PassOp: gputypes.StencilOperationKeep,
+		PassOp:      gputypes.StencilOperationKeep,
 	}
 	stride := uint64(unsafe.Sizeof(platform.Vertex{}))
 	pipeline, err := device.CreateRenderPipeline(&wgpu.RenderPipelineDescriptor{

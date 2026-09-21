@@ -234,6 +234,12 @@
 
 函数/方法：`mustMobContent`、`loadMobContent`、`reloadMobPreview`、`loadRuntimeMobs`
 
+## [mob_pose.go](mob_pose.go)
+
+类型：`mobBonePose`
+
+函数/方法：`evaluateMobPose`、`rotateXVec`、`addVec3`
+
 ## [mob_preview.go](mob_preview.go)
 
 函数/方法：`runMobPreview`
@@ -622,9 +628,9 @@
 
 ## [webgpu_entities_windows.go](webgpu_entities_windows.go)
 
-类型：`webGPUEntityRenderer`、`webGPUEntityBatch`、`webGPUMobPose`
+类型：`webGPUEntityRenderer`、`webGPUEntityBatch`
 
-函数/方法：`ensureWebGPUEntityRenderer`、`closeWebGPUEntityRenderer`、`*webGPUEntityRenderer.Close`、`newWebGPUEntityBatch`、`webGPUEntityUV`、`webGPUEntitySubUV`、`webGPUEntityItemTexture`、`*webGPUEntityBatch.addQuad`、`rotateY`、`rotateXVec`、`rotateZVec`、`addVec3`、`*webGPUEntityBatch.addBox`、`*webGPUEntityBatch.addPlayer`、`*webGPUEntityBatch.addItem`、`webGPUMobFaceUVs`、`*webGPUEntityBatch.addMobBone`、`*webGPUEntityBatch.addMob`、`*webGPUEntityBatch.addMobPlaceholder`、`*webGPUEntityBatch.addMiningCrack`、`*webGPUEntityRenderer.Draw`
+函数/方法：`ensureWebGPUEntityRenderer`、`closeWebGPUEntityRenderer`、`*webGPUEntityRenderer.Close`、`newWebGPUEntityBatch`、`webGPUEntityUV`、`webGPUEntitySubUV`、`webGPUEntityItemTexture`、`*webGPUEntityBatch.addQuad`、`rotateY`、`rotateZVec`、`*webGPUEntityBatch.addBox`、`*webGPUEntityBatch.addPlayer`、`*webGPUEntityBatch.addItem`、`webGPUMobFaceUVs`、`*webGPUEntityBatch.addMobBone`、`*webGPUEntityBatch.addMob`、`*webGPUEntityBatch.addMobPlaceholder`、`*webGPUEntityBatch.addMiningCrack`、`*webGPUEntityRenderer.Draw`
 
 ## [webgpu_entity_bounds_windows.go](webgpu_entity_bounds_windows.go)
 

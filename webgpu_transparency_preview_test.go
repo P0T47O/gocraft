@@ -14,7 +14,6 @@ import (
 	"time"
 	"unsafe"
 
-	rl "github.com/gen2brain/raylib-go/raylib"
 	"github.com/go-gl/mathgl/mgl32"
 	"github.com/gogpu/gputypes"
 	"github.com/gogpu/wgpu"
@@ -238,15 +237,9 @@ func TestWebGPUTransparencyPreview(t *testing.T) {
 		}
 	}()
 
-	rl.SetTraceLogLevel(rl.LogWarning)
-	rl.InitWindow(1280, 800, "GoCraft water + glass + fog - WebGPU preview")
-	defer rl.CloseWindow()
-	rl.SetExitKey(0)
-
-	hwnd := uintptr(rl.GetWindowHandle())
-	if hwnd == 0 {
-		t.Fatal("raylib returned a null native window handle")
-	}
+	preview, closePreview := newNativePreviewWindow(t, 1280, 800)
+	defer closePreview()
+	hwnd := preview.window.hwnd
 	instance, err := wgpu.CreateInstance(nil)
 	if err != nil {
 		t.Fatalf("create WebGPU instance: %v", err)
@@ -351,17 +344,17 @@ func TestWebGPUTransparencyPreview(t *testing.T) {
 		t.Fatalf("transparency fixture did not reach translucent passes: meshes=%d waterTriangles=%d glassTriangles=%d", len(translucentMeshes), indicesByPass["water"]/3, indicesByPass["glass"]/3)
 	}
 
-	width := uint32(max(1, rl.GetScreenWidth()))
-	height := uint32(max(1, rl.GetScreenHeight()))
+	width := uint32(max(1, preview.window.width))
+	height := uint32(max(1, preview.window.height))
 	var depthTexture *wgpu.Texture
 	var depthView *wgpu.TextureView
 	reconfigure := func() error {
 		if err := surface.Configure(device, &wgpu.SurfaceConfiguration{
-			Format: format,
-			Usage: gputypes.TextureUsageRenderAttachment,
-			Width: width,
-			Height: height,
-			AlphaMode: gputypes.CompositeAlphaModeOpaque,
+			Format:      format,
+			Usage:       gputypes.TextureUsageRenderAttachment,
+			Width:       width,
+			Height:      height,
+			AlphaMode:   gputypes.CompositeAlphaModeOpaque,
 			PresentMode: gputypes.PresentModeFifo,
 		}); err != nil {
 			return err
@@ -394,13 +387,9 @@ func TestWebGPUTransparencyPreview(t *testing.T) {
 	t.Log("Expected result: textured terrain plus a small water pad and glass wall rendered translucent; distant terrain fades into the sky color. Transparent batches are sorted back-to-front and do not write depth.")
 
 	started := time.Now()
-	for {
-		rl.PollInputEvents()
-		if rl.WindowShouldClose() {
-			break
-		}
-		newWidth := uint32(max(1, rl.GetScreenWidth()))
-		newHeight := uint32(max(1, rl.GetScreenHeight()))
+	for preview.nextFrame() {
+		newWidth := uint32(max(1, preview.window.width))
+		newHeight := uint32(max(1, preview.window.height))
 		if newWidth != width || newHeight != height {
 			width, height = newWidth, newHeight
 			if err := reconfigure(); err != nil {
@@ -437,13 +426,13 @@ func createWebGPUTransparencyPipelines(
 		return nil, nil, nil, nil, nil, err
 	}
 	texture, err := device.CreateTexture(&wgpu.TextureDescriptor{
-		Label: "GoCraft water/glass/fog atlas",
-		Size: wgpu.Extent3D{Width: uint32(atlasWidth), Height: uint32(atlasHeight), DepthOrArrayLayers: 1},
+		Label:         "GoCraft water/glass/fog atlas",
+		Size:          wgpu.Extent3D{Width: uint32(atlasWidth), Height: uint32(atlasHeight), DepthOrArrayLayers: 1},
 		MipLevelCount: 1,
-		SampleCount: 1,
-		Dimension: gputypes.TextureDimension2D,
-		Format: gputypes.TextureFormatRGBA8Unorm,
-		Usage: gputypes.TextureUsageTextureBinding | gputypes.TextureUsageCopyDst,
+		SampleCount:   1,
+		Dimension:     gputypes.TextureDimension2D,
+		Format:        gputypes.TextureFormatRGBA8Unorm,
+		Usage:         gputypes.TextureUsageTextureBinding | gputypes.TextureUsageCopyDst,
 	})
 	if err != nil {
 		sceneBuffer.Release()
@@ -469,11 +458,11 @@ func createWebGPUTransparencyPipelines(
 		return nil, nil, nil, nil, nil, err
 	}
 	sampler, err := device.CreateSampler(&wgpu.SamplerDescriptor{
-		Label: "GoCraft water/glass/fog atlas sampler",
+		Label:        "GoCraft water/glass/fog atlas sampler",
 		AddressModeU: gputypes.AddressModeClampToEdge,
 		AddressModeV: gputypes.AddressModeClampToEdge,
-		MagFilter: gputypes.FilterModeNearest,
-		MinFilter: gputypes.FilterModeNearest,
+		MagFilter:    gputypes.FilterModeNearest,
+		MinFilter:    gputypes.FilterModeNearest,
 		MipmapFilter: gputypes.FilterModeNearest,
 	})
 	if err != nil {
@@ -510,8 +499,8 @@ func createWebGPUTransparencyPipelines(
 		return nil, nil, nil, nil, nil, err
 	}
 	bindGroup, err := device.CreateBindGroup(&wgpu.BindGroupDescriptor{
-		Label: "GoCraft water/glass/fog bind group",
-		Layout: bgl,
+		Label:   "GoCraft water/glass/fog bind group",
+		Layout:  bgl,
 		Entries: []wgpu.BindGroupEntry{{Binding: 0, Buffer: sceneBuffer, Size: webGPUTransparencySceneBytes}, {Binding: 1, TextureView: view}, {Binding: 2, Sampler: sampler}},
 	})
 	if err != nil {
@@ -527,25 +516,25 @@ func createWebGPUTransparencyPipelines(
 
 	ignoreStencil := wgpu.StencilFaceState{Compare: gputypes.CompareFunctionAlways, FailOp: gputypes.StencilOperationKeep, DepthFailOp: gputypes.StencilOperationKeep, PassOp: gputypes.StencilOperationKeep}
 	vertexState := wgpu.VertexState{
-		Module: shader,
+		Module:     shader,
 		EntryPoint: "vs_main",
 		Buffers: []gputypes.VertexBufferLayout{{
 			ArrayStride: uint64(unsafe.Sizeof(platform.Vertex{})),
-			StepMode: gputypes.VertexStepModeVertex,
-			Attributes: []gputypes.VertexAttribute{{Format: gputypes.VertexFormatFloat32x3, Offset: 0, ShaderLocation: 0}, {Format: gputypes.VertexFormatFloat32x2, Offset: 12, ShaderLocation: 1}, {Format: gputypes.VertexFormatFloat32x3, Offset: 24, ShaderLocation: 2}, {Format: gputypes.VertexFormatUnorm8x4, Offset: 20, ShaderLocation: 3}},
+			StepMode:    gputypes.VertexStepModeVertex,
+			Attributes:  []gputypes.VertexAttribute{{Format: gputypes.VertexFormatFloat32x3, Offset: 0, ShaderLocation: 0}, {Format: gputypes.VertexFormatFloat32x2, Offset: 12, ShaderLocation: 1}, {Format: gputypes.VertexFormatFloat32x3, Offset: 24, ShaderLocation: 2}, {Format: gputypes.VertexFormatUnorm8x4, Offset: 20, ShaderLocation: 3}},
 		}},
 	}
 	primitive := gputypes.PrimitiveState{Topology: gputypes.PrimitiveTopologyTriangleList, FrontFace: gputypes.FrontFaceCCW, CullMode: gputypes.CullModeNone}
 	multisample := gputypes.MultisampleState{Count: 1, Mask: 0xFFFFFFFF}
 
 	opaquePipeline, err := device.CreateRenderPipeline(&wgpu.RenderPipelineDescriptor{
-		Label: "GoCraft fogged opaque pipeline",
-		Layout: layout,
-		Vertex: vertexState,
-		Primitive: primitive,
+		Label:        "GoCraft fogged opaque pipeline",
+		Layout:       layout,
+		Vertex:       vertexState,
+		Primitive:    primitive,
 		DepthStencil: &wgpu.DepthStencilState{Format: webGPUChunkPreviewDepthFormat, DepthWriteEnabled: true, DepthCompare: gputypes.CompareFunctionLess, StencilFront: ignoreStencil, StencilBack: ignoreStencil, StencilReadMask: 0, StencilWriteMask: 0},
-		Multisample: multisample,
-		Fragment: &wgpu.FragmentState{Module: shader, EntryPoint: "fs_opaque", Targets: []gputypes.ColorTargetState{{Format: format, WriteMask: gputypes.ColorWriteMaskAll}}},
+		Multisample:  multisample,
+		Fragment:     &wgpu.FragmentState{Module: shader, EntryPoint: "fs_opaque", Targets: []gputypes.ColorTargetState{{Format: format, WriteMask: gputypes.ColorWriteMaskAll}}},
 	})
 	if err != nil {
 		bindGroup.Release()
@@ -564,13 +553,13 @@ func createWebGPUTransparencyPipelines(
 		Alpha: gputypes.BlendComponent{SrcFactor: gputypes.BlendFactorOne, DstFactor: gputypes.BlendFactorOneMinusSrcAlpha, Operation: gputypes.BlendOperationAdd},
 	}
 	translucentPipeline, err := device.CreateRenderPipeline(&wgpu.RenderPipelineDescriptor{
-		Label: "GoCraft fogged translucent pipeline",
-		Layout: layout,
-		Vertex: vertexState,
-		Primitive: primitive,
+		Label:        "GoCraft fogged translucent pipeline",
+		Layout:       layout,
+		Vertex:       vertexState,
+		Primitive:    primitive,
 		DepthStencil: &wgpu.DepthStencilState{Format: webGPUChunkPreviewDepthFormat, DepthWriteEnabled: false, DepthCompare: gputypes.CompareFunctionLess, StencilFront: ignoreStencil, StencilBack: ignoreStencil, StencilReadMask: 0, StencilWriteMask: 0},
-		Multisample: multisample,
-		Fragment: &wgpu.FragmentState{Module: shader, EntryPoint: "fs_translucent", Targets: []gputypes.ColorTargetState{{Format: format, Blend: blend, WriteMask: gputypes.ColorWriteMaskAll}}},
+		Multisample:  multisample,
+		Fragment:     &wgpu.FragmentState{Module: shader, EntryPoint: "fs_translucent", Targets: []gputypes.ColorTargetState{{Format: format, Blend: blend, WriteMask: gputypes.ColorWriteMaskAll}}},
 	})
 	if err != nil {
 		opaquePipeline.Release()
@@ -613,7 +602,9 @@ func updateWebGPUTransparencyScene(queue *wgpu.Queue, buffer *wgpu.Buffer, width
 	fogEnd := float32(chunkWidth) * 10.0
 	fogColor := [4]float32{0.52, 0.72, 0.92, 1.0}
 	bytes := make([]byte, webGPUTransparencySceneBytes)
-	put := func(offset int, value float32) { binary.LittleEndian.PutUint32(bytes[offset:], math.Float32bits(value)) }
+	put := func(offset int, value float32) {
+		binary.LittleEndian.PutUint32(bytes[offset:], math.Float32bits(value))
+	}
 	for i := 0; i < 16; i++ {
 		put(i*4, vp[i])
 	}
@@ -683,8 +674,8 @@ func drawWebGPUTransparencyFrame(
 		return err
 	}
 	pass, err := encoder.BeginRenderPass(&wgpu.RenderPassDescriptor{
-		Label: "GoCraft water/glass/fog pass",
-		ColorAttachments: []wgpu.RenderPassColorAttachment{{View: view, LoadOp: gputypes.LoadOpClear, StoreOp: gputypes.StoreOpStore, ClearValue: gputypes.Color{R: 0.52, G: 0.72, B: 0.92, A: 1}}},
+		Label:                  "GoCraft water/glass/fog pass",
+		ColorAttachments:       []wgpu.RenderPassColorAttachment{{View: view, LoadOp: gputypes.LoadOpClear, StoreOp: gputypes.StoreOpStore, ClearValue: gputypes.Color{R: 0.52, G: 0.72, B: 0.92, A: 1}}},
 		DepthStencilAttachment: &wgpu.RenderPassDepthStencilAttachment{View: depthView, DepthLoadOp: gputypes.LoadOpClear, DepthStoreOp: gputypes.StoreOpStore, DepthClearValue: 1, DepthReadOnly: false},
 	})
 	if err != nil {

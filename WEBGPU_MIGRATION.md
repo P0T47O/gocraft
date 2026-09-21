@@ -115,3 +115,11 @@ Creative/survival/container layouts are backend-neutral. Legacy drawing adapts t
 Gameplay now owns a renderer-neutral `gameCamera`; spawning, aiming, movement and legacy player saves use it directly. Only the legacy draw entry converts it to Raylib. Performance monitoring receives frame time from the main loop and no longer queries the window library. Player save regression tests cover round trips and every truncated byte length without mutating live state.
 
 This is a partial migration, not removal of the module: window/input ownership, menus, UI layout and legacy rendering/tests still require migration. No interactive window behavior was changed or visually verified in this step.
+
+## Native preview and test dependency cleanup
+
+The five WebGPU terrain previews now create native Win32 windows directly, with no Raylib window or OpenGL context. `GOCRAFT_WEBGPU_PREVIEW_FRAMES=3` runs an enabled preview hidden for three frames and resizes before the second frame. Without this setting the preview remains interactive. The texture preview switch is `GOCRAFT_WEBGPU_TEXTURE_PREVIEW` (not TEXTURED).
+
+Smooth-light and mesh-math tests no longer import Raylib. Rotation expectations use an independent float64 Rodrigues formula. The active WebGPU bone-pose evaluator is shared CPU code in `mob_pose.go`; content tests now exercise this path instead of the legacy renderer. Import guards cover all WebGPU source and test files, including future additions.
+
+Raylib remains in go.mod because legacy rendering/resources, older UI/mob previews and the standalone smoke tool still require it. No claim of complete dependency removal is made. Existing saves/settings are unchanged by this migration.

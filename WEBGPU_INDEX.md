@@ -21,6 +21,7 @@ See [CODE_INDEX.md](CODE_INDEX.md) for the maintained full feature map and [CODE
 
 On Windows, `go run . -webgpu` creates a native Win32 window and uses WebGPU for menus and gameplay. No Raylib window/input/presentation is used on that path. Session exit releases world meshes but retains the menu window and GPU atlas; final shutdown releases GPU before destroying the HWND.
 
-The default non-WebGPU path, legacy assets, OpenGL renderer, preview tests and tools still compile against Raylib. This is **not** complete dependency removal. WebGPU's built-in font is ASCII-only. IME composition and live cross-monitor DPI behavior remain unverified.
+WebGPU is the default. The explicit `-webgpu=false` legacy path, legacy assets, OpenGL renderer, older UI/mob previews and standalone smoke tool still compile against Raylib. This is **not** complete dependency removal. WebGPU's built-in font is ASCII-only. IME composition and live cross-monitor DPI behavior remain unverified.
 
 Validation: `go test ./...`, `go vet ./...`, `go build .`, and `go run ./tools/codeindex -check`. On Windows, set `GOCRAFT_WEBGPU_REGRESSION=1` and run `go test . -run 'TestNativeWebGPUWindow|TestWebGPUUIUploadIsolationGPU|TestWebGPUMipStabilityGPU' -count=1`. The native test uses a hidden window and temporary save, not user worlds. Optional `GOCRAFT_NATIVE_MENU_PREVIEW` names a PNG output path.
+The five WebGPU terrain previews now use native windows (helper: `webgpu_preview_window_windows_test.go`). Set their existing opt-in environment flag plus `GOCRAFT_WEBGPU_PREVIEW_FRAMES=3` for hidden, bounded execution with a resize. `mob_pose.go` holds the active CPU bone-pose calculation, shared by WebGPU rendering and normal unit tests.

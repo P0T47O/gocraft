@@ -37,8 +37,10 @@ func TestMobContentValidationAndPose(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	pose := mobPose(c, "pig", 1, 0, 0)
-	walking := mobPose(c, "pig", 1, 1, 0)
+	definition := c.Definitions["pig"]
+	model, animation := c.Models[definition.Model], c.Animations[definition.Animation]
+	pose := evaluateMobPose(model, animation, 1, 0, nil)
+	walking := evaluateMobPose(model, animation, 1, 1, nil)
 	if reflect.DeepEqual(pose, walking) || pose[0] != walking[0] {
 		t.Fatal("animation did not isolate leg joints")
 	}

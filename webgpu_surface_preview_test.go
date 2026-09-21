@@ -11,7 +11,6 @@ import (
 	"testing"
 	"time"
 
-	rl "github.com/gen2brain/raylib-go/raylib"
 	"github.com/go-gl/mathgl/mgl32"
 	"github.com/gogpu/gputypes"
 	"github.com/gogpu/wgpu"
@@ -136,15 +135,9 @@ func TestWebGPUSurfacePreview(t *testing.T) {
 		}
 	}()
 
-	rl.SetTraceLogLevel(rl.LogWarning)
-	rl.InitWindow(1200, 760, "GoCraft haloed surface - WebGPU preview")
-	defer rl.CloseWindow()
-	rl.SetExitKey(0)
-
-	hwnd := uintptr(rl.GetWindowHandle())
-	if hwnd == 0 {
-		t.Fatal("raylib returned a null native window handle")
-	}
+	preview, closePreview := newNativePreviewWindow(t, 1200, 760)
+	defer closePreview()
+	hwnd := preview.window.hwnd
 	instance, err := wgpu.CreateInstance(nil)
 	if err != nil {
 		t.Fatalf("create WebGPU instance: %v", err)
@@ -231,15 +224,15 @@ func TestWebGPUSurfacePreview(t *testing.T) {
 		t.Fatal("surface mesher produced no opaque/cutout meshes")
 	}
 
-	width := uint32(max(1, rl.GetScreenWidth()))
-	height := uint32(max(1, rl.GetScreenHeight()))
+	width := uint32(max(1, preview.window.width))
+	height := uint32(max(1, preview.window.height))
 	var depthTexture *wgpu.Texture
 	var depthView *wgpu.TextureView
 	reconfigure := func() error {
 		if err := surface.Configure(device, &wgpu.SurfaceConfiguration{
 			Format: format, Usage: gputypes.TextureUsageRenderAttachment,
 			Width: width, Height: height,
-			AlphaMode: gputypes.CompositeAlphaModeOpaque,
+			AlphaMode:   gputypes.CompositeAlphaModeOpaque,
 			PresentMode: gputypes.PresentModeFifo,
 		}); err != nil {
 			return err
@@ -271,13 +264,9 @@ func TestWebGPUSurfacePreview(t *testing.T) {
 	t.Log("Expected result: a normal-looking 3x3 terrain surface viewed from above; the 5x5 halo supplies neighbor culling while remaining invisible.")
 
 	started := time.Now()
-	for {
-		rl.PollInputEvents()
-		if rl.WindowShouldClose() {
-			break
-		}
-		newWidth := uint32(max(1, rl.GetScreenWidth()))
-		newHeight := uint32(max(1, rl.GetScreenHeight()))
+	for preview.nextFrame() {
+		newWidth := uint32(max(1, preview.window.width))
+		newHeight := uint32(max(1, preview.window.height))
 		if newWidth != width || newHeight != height {
 			width, height = newWidth, newHeight
 			if err := reconfigure(); err != nil {

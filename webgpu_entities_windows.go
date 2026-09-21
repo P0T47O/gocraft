@@ -124,18 +124,9 @@ func rotateY(x, z, yaw float32) (float32, float32) {
 	return x*c - z*s, x*s + z*c
 }
 
-func rotateXVec(v [3]float32, angle float32) [3]float32 {
-	s, c := float32(math.Sin(float64(angle))), float32(math.Cos(float64(angle)))
-	return [3]float32{v[0], v[1]*c - v[2]*s, v[1]*s + v[2]*c}
-}
-
 func rotateZVec(v [3]float32, angle float32) [3]float32 {
 	s, c := float32(math.Sin(float64(angle))), float32(math.Cos(float64(angle)))
 	return [3]float32{v[0]*c - v[1]*s, v[0]*s + v[1]*c, v[2]}
-}
-
-func addVec3(a, c [3]float32) [3]float32 {
-	return [3]float32{a[0] + c[0], a[1] + c[1], a[2] + c[2]}
 }
 
 func (b *webGPUEntityBatch) addBox(cx, cy, cz, sx, sy, sz, yaw float32, uv [4]float32, color [4]uint8) {
@@ -198,11 +189,6 @@ func (b *webGPUEntityBatch) addItem(e *RemoteEntity, now float32) {
 	}
 }
 
-type webGPUMobPose struct {
-	joint  [3]float32
-	angleX float32
-}
-
 func webGPUMobFaceUVs(model MobModel, bone MobBone) ([6][4]float32, bool) {
 	w, h, d := bone.Size[0]*16, bone.Size[1]*16, bone.Size[2]*16
 	if bone.UVAxis == "z" {
@@ -256,36 +242,26 @@ func (b *webGPUEntityBatch) addMob(e *RemoteEntity) {
 		return
 	}
 	anim := mobContent.Animations[definition.Animation]
-	angles := make(map[string]float32, len(anim.Channels))
-	for _, ch := range anim.Channels {
-		angles[ch.Bone] = float32(math.Sin(float64(e.AnimPhase+ch.Phase))) * anim.Amplitude * e.AnimBlend
-	}
 	death := float32(0)
 	if anim.DeathSeconds > 0 {
 		death = min(e.DeathTime/anim.DeathSeconds, float32(1))
 	}
 	root := [3]float32{float32(e.X), float32(e.Y) + death*0.32, float32(e.Z)}
 	deathAngle := death * float32(math.Pi/2)
-	poses := make(map[string]webGPUMobPose, len(model.Bones))
+	// Validated models have at most 64 bones; avoid a per-entity result allocation.
+	var scratch [64]mobBonePose
+	poses := evaluateMobPose(model, anim, e.AnimPhase, e.AnimBlend, scratch[:0])
 	color := [4]uint8{255, 255, 255, 255}
 	if e.MobHurt > 0 {
 		color = [4]uint8{255, 115, 115, 255}
 	}
-	for _, bone := range model.Bones {
-		parent := webGPUMobPose{}
-		if bone.Parent != "" {
-			parent = poses[bone.Parent]
-		}
-		pivot := rotateXVec(bone.Pivot, parent.angleX)
-		joint := addVec3(parent.joint, pivot)
-		angleX := parent.angleX + angles[bone.Name]
-		center := addVec3(joint, rotateXVec(bone.Offset, angleX))
-		poses[bone.Name] = webGPUMobPose{joint: joint, angleX: angleX}
+	for i, bone := range model.Bones {
+		pose := poses[i]
 		uvs, ok := webGPUMobFaceUVs(model, bone)
 		if !ok {
 			continue
 		}
-		b.addMobBone(center, bone.Size, angleX, e.Yaw, deathAngle, root, uvs, color)
+		b.addMobBone(pose.center, bone.Size, pose.angleX, e.Yaw, deathAngle, root, uvs, color)
 	}
 }
 

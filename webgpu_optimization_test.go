@@ -1,7 +1,6 @@
 package main
 
 import (
-	rl "github.com/gen2brain/raylib-go/raylib"
 	"math"
 	"testing"
 )
@@ -40,7 +39,18 @@ func TestMeshMathMatchesReference(t *testing.T) {
 		for _, angle := range []float32{0, .3, -.7, 1.57} {
 			v := meshVec3(.2, .5, -.1)
 			got := meshTransform(v, meshRotation(axis, angle))
-			want := rl.Vector3Transform(rl.Vector3(v), rl.MatrixRotate(rl.Vector3(axis), angle))
+			// Rodrigues' formula in float64 is independent of the matrix library.
+			x, y, z := float64(axis.X), float64(axis.Y), float64(axis.Z)
+			length := math.Sqrt(x*x + y*y + z*z)
+			x, y, z = x/length, y/length, z/length
+			vx, vy, vz := float64(v.X), float64(v.Y), float64(v.Z)
+			c, s := math.Cos(float64(angle)), math.Sin(float64(angle))
+			dot := x*vx + y*vy + z*vz
+			want := gameVec3{
+				float32(vx*c + (y*vz-z*vy)*s + x*dot*(1-c)),
+				float32(vy*c + (z*vx-x*vz)*s + y*dot*(1-c)),
+				float32(vz*c + (x*vy-y*vx)*s + z*dot*(1-c)),
+			}
 			if math.Abs(float64(got.X-want.X))+math.Abs(float64(got.Y-want.Y))+math.Abs(float64(got.Z-want.Z)) > 1e-5 {
 				t.Fatalf("transform changed: %v vs %v", got, want)
 			}

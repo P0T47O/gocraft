@@ -12,7 +12,6 @@ import (
 	"time"
 	"unsafe"
 
-	rl "github.com/gen2brain/raylib-go/raylib"
 	"github.com/go-gl/mathgl/mgl32"
 	"github.com/gogpu/gputypes"
 	"github.com/gogpu/wgpu"
@@ -133,15 +132,9 @@ func TestWebGPUChunkPreview(t *testing.T) {
 	results := assets.buildAllMeshData(&center.heightMap, 0, 0, 0, chunkHeight, getBlock, getLight, getMeta, seed)
 	defer releaseMeshResults(results)
 
-	rl.SetTraceLogLevel(rl.LogWarning)
-	rl.InitWindow(1100, 720, "GoCraft real chunk - WebGPU preview")
-	defer rl.CloseWindow()
-	rl.SetExitKey(0)
-
-	hwnd := uintptr(rl.GetWindowHandle())
-	if hwnd == 0 {
-		t.Fatal("raylib returned a null native window handle")
-	}
+	preview, closePreview := newNativePreviewWindow(t, 1100, 720)
+	defer closePreview()
+	hwnd := preview.window.hwnd
 
 	instance, err := wgpu.CreateInstance(nil)
 	if err != nil {
@@ -231,8 +224,8 @@ func TestWebGPUChunkPreview(t *testing.T) {
 		t.Fatal("real chunk mesher produced no opaque/cutout meshes")
 	}
 
-	width := uint32(max(1, rl.GetScreenWidth()))
-	height := uint32(max(1, rl.GetScreenHeight()))
+	width := uint32(max(1, preview.window.width))
+	height := uint32(max(1, preview.window.height))
 	var depthTexture *wgpu.Texture
 	var depthView *wgpu.TextureView
 	reconfigure := func() error {
@@ -277,13 +270,9 @@ func TestWebGPUChunkPreview(t *testing.T) {
 	t.Log("Expected result: the actual generated GoCraft center chunk rotates slowly; textures are intentionally omitted in this milestone, so vertex lighting/tint shows the terrain shape.")
 
 	started := time.Now()
-	for {
-		rl.PollInputEvents()
-		if rl.WindowShouldClose() {
-			break
-		}
-		newWidth := uint32(max(1, rl.GetScreenWidth()))
-		newHeight := uint32(max(1, rl.GetScreenHeight()))
+	for preview.nextFrame() {
+		newWidth := uint32(max(1, preview.window.width))
+		newHeight := uint32(max(1, preview.window.height))
 		if newWidth != width || newHeight != height {
 			width, height = newWidth, newHeight
 			if err := reconfigure(); err != nil {
@@ -348,10 +337,10 @@ func createWebGPUChunkPreviewPipeline(device *wgpu.Device, format gputypes.Textu
 	}
 
 	ignoreStencil := wgpu.StencilFaceState{
-		Compare: gputypes.CompareFunctionAlways,
-		FailOp: gputypes.StencilOperationKeep,
+		Compare:     gputypes.CompareFunctionAlways,
+		FailOp:      gputypes.StencilOperationKeep,
 		DepthFailOp: gputypes.StencilOperationKeep,
-		PassOp: gputypes.StencilOperationKeep,
+		PassOp:      gputypes.StencilOperationKeep,
 	}
 	stride := uint64(unsafe.Sizeof(platform.Vertex{}))
 	pipeline, err := device.CreateRenderPipeline(&wgpu.RenderPipelineDescriptor{
@@ -375,7 +364,7 @@ func createWebGPUChunkPreviewPipeline(device *wgpu.Device, format gputypes.Textu
 			StencilFront: ignoreStencil, StencilBack: ignoreStencil, StencilReadMask: 0, StencilWriteMask: 0,
 		},
 		Multisample: gputypes.MultisampleState{Count: 1, Mask: 0xFFFFFFFF},
-		Fragment: &wgpu.FragmentState{Module: shader, EntryPoint: "fs_main", Targets: []gputypes.ColorTargetState{{Format: format, WriteMask: gputypes.ColorWriteMaskAll}}},
+		Fragment:    &wgpu.FragmentState{Module: shader, EntryPoint: "fs_main", Targets: []gputypes.ColorTargetState{{Format: format, WriteMask: gputypes.ColorWriteMaskAll}}},
 	})
 	if err != nil {
 		bindGroup.Release()
@@ -398,8 +387,8 @@ func createWebGPUChunkPreviewPipeline(device *wgpu.Device, format gputypes.Textu
 
 func createWebGPUChunkPreviewDepth(device *wgpu.Device, width, height uint32) (*wgpu.Texture, *wgpu.TextureView, error) {
 	texture, err := device.CreateTexture(&wgpu.TextureDescriptor{
-		Label: "GoCraft real chunk depth",
-		Size: wgpu.Extent3D{Width: width, Height: height, DepthOrArrayLayers: 1},
+		Label:         "GoCraft real chunk depth",
+		Size:          wgpu.Extent3D{Width: width, Height: height, DepthOrArrayLayers: 1},
 		MipLevelCount: 1, SampleCount: 1, Dimension: gputypes.TextureDimension2D,
 		Format: webGPUChunkPreviewDepthFormat, Usage: gputypes.TextureUsageRenderAttachment,
 	})

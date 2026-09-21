@@ -1,7 +1,7 @@
 package main
 
 import (
-	rl "github.com/gen2brain/raylib-go/raylib"
+	"image/color"
 	"testing"
 )
 
@@ -97,18 +97,18 @@ func TestSmoothLightOccludedDiagonalDoesNotLeak(t *testing.T) {
 func TestSmoothColorEmissionAndAlpha(t *testing.T) {
 	initBlockRegistry()
 	a := &RenderAssets{}
-	tints := make([]rl.Color, 4)
+	tints := make([]color.RGBA, 4)
 	ao := [4]float32{1, 1, 1, 1}
-	c := a.applyAOSmooth(blockLava, rl.NewColor(140, 140, 140, 255), ao, [4]float32{}, tints)
+	c := a.applyAOSmooth(blockLava, meshColor(140, 140, 140, 255), ao, [4]float32{}, tints)
 	for _, v := range c {
 		if v.R != 255 {
 			t.Fatal("emissive face darkened")
 		}
 	}
 	for i := range tints {
-		tints[i] = rl.White
+		tints[i] = color.RGBA{255, 255, 255, 255}
 	}
-	c = a.applyAOSmooth(blockWater, rl.White, ao, [4]float32{0, 5, 10, 15}, tints)
+	c = a.applyAOSmooth(blockWater, color.RGBA{255, 255, 255, 255}, ao, [4]float32{0, 5, 10, 15}, tints)
 	for _, v := range c {
 		if v.A != 200 {
 			t.Fatal("light changed water alpha")
@@ -121,9 +121,9 @@ func TestSmoothColorEmissionAndAlpha(t *testing.T) {
 
 func TestSmoothQuadDiagonalPreservesWinding(t *testing.T) {
 	for _, flip := range []bool{false, true} {
-		colors := []rl.Color{rl.Black, rl.White, rl.Black, rl.White}
+		colors := []color.RGBA{color.RGBA{0, 0, 0, 255}, color.RGBA{255, 255, 255, 255}, color.RGBA{0, 0, 0, 255}, color.RGBA{255, 255, 255, 255}}
 		if flip {
-			colors = []rl.Color{rl.White, rl.Black, rl.White, rl.Black}
+			colors = []color.RGBA{color.RGBA{255, 255, 255, 255}, color.RGBA{0, 0, 0, 255}, color.RGBA{255, 255, 255, 255}, color.RGBA{0, 0, 0, 255}}
 		}
 		for _, f := range faceLightLayouts {
 			var positions [12]float32
@@ -133,16 +133,18 @@ func TestSmoothQuadDiagonalPreservesWinding(t *testing.T) {
 				}
 			}
 			mb := new(meshBuilder)
-			n := rl.NewVector3(float32(f.normal[0]), float32(f.normal[1]), float32(f.normal[2]))
+			n := newGameVec3(float32(f.normal[0]), float32(f.normal[1]), float32(f.normal[2]))
 			mb.addFaceSmooth(positions[:], gameVec3(n), make([]float32, 8), colors)
 			if (mb.indices[2] == 3) != flip {
 				t.Fatal("incorrect diagonal")
 			}
-			vertex := func(i uint32) rl.Vector3 { return rl.NewVector3(positions[i*3], positions[i*3+1], positions[i*3+2]) }
+			vertex := func(i uint32) gameVec3 { return newGameVec3(positions[i*3], positions[i*3+1], positions[i*3+2]) }
 			for i := 0; i < 6; i += 3 {
 				p, q, r := vertex(mb.indices[i]), vertex(mb.indices[i+1]), vertex(mb.indices[i+2])
-				cross := rl.Vector3CrossProduct(rl.Vector3Subtract(q, p), rl.Vector3Subtract(r, p))
-				if rl.Vector3DotProduct(cross, n) <= 0 {
+				// Scalar determinant independently checks the generated triangle orientation.
+				ux, uy, uz := q.X-p.X, q.Y-p.Y, q.Z-p.Z
+				vx, vy, vz := r.X-p.X, r.Y-p.Y, r.Z-p.Z
+				if (uy*vz-uz*vy)*n.X+(uz*vx-ux*vz)*n.Y+(ux*vy-uy*vx)*n.Z <= 0 {
 					t.Fatal("diagonal reversed face winding")
 				}
 			}
