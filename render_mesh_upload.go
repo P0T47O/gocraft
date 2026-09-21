@@ -1,7 +1,6 @@
 package main
 
 import (
-	rl "github.com/gen2brain/raylib-go/raylib"
 	"gocraft/platform"
 	"sync"
 )
@@ -15,14 +14,7 @@ var interleaveBufferPool = sync.Pool{
 func (a *RenderAssets) applyMeshData(data map[string][]*MeshBuildData) map[string][]*ChunkMesh {
 	meshes := map[string][]*ChunkMesh{}
 	for path, list := range data {
-		var tex rl.Texture2D
-		if a.webGPU {
-			// Atlas metadata is CPU-owned; do not allocate Raylib resources.
-		} else if path == "atlas" && a.atlas != nil {
-			tex = a.atlas.Texture
-		} else {
-			tex = a.loadTexture(path)
-		}
+		textureID, shaderID := a.legacyMeshBindings(path)
 
 		for _, d := range list {
 			if d.vertCount == 0 {
@@ -49,26 +41,16 @@ func (a *RenderAssets) applyMeshData(data map[string][]*MeshBuildData) map[strin
 				}
 			}
 
-			// Upload to PureGL (Manual Memory Management)
-			// Note: UploadMesh likely copies the data, so we can reuse `buffer` immediately
+			// The active backend copies the vertex data before returning.
 			glMesh := platform.UploadMesh(buffer, indices)
 
 			// Return buffer to pool
 			interleaveBufferPool.Put(buffer)
 
-			var material rl.Material
-			if a.webGPU {
-				// WebGPU binds its own atlas and sampler.
-			} else if path == "atlas" && a.atlas != nil {
-				material = a.getMaterial("atlas", tex)
-			} else {
-				material = a.getMaterial(path, tex)
-			}
-
 			meshes[path] = append(meshes[path], &ChunkMesh{
 				glMesh:    glMesh,
-				textureID: tex.ID,
-				shaderID:  material.Shader.ID,
+				textureID: textureID,
+				shaderID:  shaderID,
 			})
 
 			// Return builder to pool

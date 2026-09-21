@@ -36,3 +36,9 @@ func captureRaylibInput() {
 		windowFrame.Text = append(windowFrame.Text, r)
 	}
 }
+
+func (raylibCursorController) Resize(width, height int) {
+	if int(rl.GetScreenWidth()) != width || int(rl.GetScreenHeight()) != height {
+		rl.SetWindowSize(width, height)
+	}
+}

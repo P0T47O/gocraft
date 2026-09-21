@@ -172,7 +172,11 @@
 
 类型：`ProgramState`、`MenuPage`、`RemoteEntity`
 
-函数/方法：`main`、`updateMenu`
+函数/方法：`main`
+
+## [main_raylib.go](main_raylib.go)
+
+函数/方法：`runLegacyRaylib`、`updateMenu`
 
 ## [menu_death.go](menu_death.go)
 
@@ -432,6 +436,10 @@
 
 函数/方法：`*ChunkMesh.unload`
 
+## [render_mesh_bindings_raylib.go](render_mesh_bindings_raylib.go)
+
+函数/方法：`*RenderAssets.legacyMeshBindings`
+
 ## [render_mesh_opengl.go](render_mesh_opengl.go)
 
 类型：`meshShaderState`、`meshRenderState`
@@ -540,7 +548,7 @@
 
 函数/方法：`renderDistance`、`clampRenderDistance`、`LoadSettings`、`SaveSettings`
 
-## [settings_window_raylib.go](settings_window_raylib.go)
+## [settings_window.go](settings_window.go)
 
 函数/方法：`ApplySettings`
 
@@ -690,7 +698,7 @@
 
 类型：`raylibCursorController`
 
-函数/方法：`raylibCursorController.SetCaptured`、`raylibCursorController.SetPosition`、`captureRaylibInput`
+函数/方法：`raylibCursorController.SetCaptured`、`raylibCursorController.SetPosition`、`captureRaylibInput`、`raylibCursorController.Resize`
 
 ## [window_win32_windows.go](window_win32_windows.go)
 

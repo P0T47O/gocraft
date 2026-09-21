@@ -7,7 +7,7 @@
 
 | 功能 | 文件与入口 |
 | --- | --- |
-| 程序入口、全局界面状态与旧主循环（`-webgpu` 启动独立原生窗口主循环） | [main.go](main.go)：`main`、`updateMenu` |
+| 程序入口、全局界面状态（默认原生 WebGPU） | [main.go](main.go)：`main`；旧参考循环 [main_raylib.go](main_raylib.go)：`runLegacyRaylib`、`updateMenu` |
 | 游戏会话建立与退出 | [game_session.go](game_session.go)：`startGame`、`exitGame` |
 | 每帧更新、暂停、输入与地形就绪 | [game_update.go](game_update.go)：`updateGame` |
 | 后端中立玩家摄像机、朝向初始化与瞄准射线 | [game_camera.go](game_camera.go)、[game_camera_test.go](game_camera_test.go)；旧绘制入口临时转换：[render_camera_raylib.go](render_camera_raylib.go) |
@@ -22,7 +22,7 @@
 | 原生窗口/GPU/临时存档双会话回归与图像回读 | [native_window_windows_test.go](native_window_windows_test.go)、[menu_preview_webgpu_windows_test.go](menu_preview_webgpu_windows_test.go)；设置 `GOCRAFT_WEBGPU_REGRESSION=1` |
 | WebGPU 原生帧快照与渲染器生命周期 | [webgpu_game_windows.go](webgpu_game_windows.go)、[webgpu_game_stub.go](webgpu_game_stub.go) |
 | WebGPU Playing 单 pass 合成（world + entities/effects + HUD/text + inventory/container + 暂停/死亡菜单） | [webgpu_gameplay_windows.go](webgpu_gameplay_windows.go)：`DrawGameplay` |
-| 后端中立帧快照与窗口设置桥接 | [webgpu_frame.go](webgpu_frame.go)、[settings_window_raylib.go](settings_window_raylib.go)；配置读写本身在 Raylib-free 的 [settings.go](settings.go) |
+| 后端中立帧快照与窗口设置桥接 | [webgpu_frame.go](webgpu_frame.go)、[settings_window.go](settings_window.go)；配置读写本身在 Raylib-free 的 [settings.go](settings.go) |
 | 客户端连接与收发（网络层不依赖 Raylib；位置/朝向以标量传入） | [client.go](client.go) |
 | 配置、渲染距离 | [settings.go](settings.go)、[menu_screens.go](menu_screens.go) |
 
@@ -118,7 +118,7 @@
 - 存档与协议：`save_file_test.go`、`protocol_varint_test.go`，各玩法测试也覆盖消息往返。
 - 重生与生命：`player_vitals_test.go`；视距：`settings_distance_test.go`、`world_fog_test.go`。
 - 界面预览：`*_preview_test.go`；性能：`engine_bench_test.go`。
-- WebGPU 实机路径：Windows 下 `go run . -webgpu` 使用独立 Win32 窗口（含原始鼠标输入、焦点、缩放/尺寸事件），主菜单/世界列表/创建/联机/设置、Playing、暂停/死亡菜单全由 WebGPU 显示。退出世界保留窗口与图集；最终退出先关 World 再释放 GPU，最后销毁窗口。未带参数仍是旧 Raylib 路径，模块依赖尚未删除。
+- WebGPU 实机路径：Windows 下 `go run . -webgpu` 使用独立 Win32 窗口（含原始鼠标输入、焦点、缩放/尺寸事件），主菜单/世界列表/创建/联机/设置、Playing、暂停/死亡菜单全由 WebGPU 显示。退出世界保留窗口与图集；最终退出先关 World 再释放 GPU，最后销毁窗口。默认启动原生 WebGPU；`-webgpu=false` 显式选择旧参考路径，模块依赖尚未删除。
 - 纹理过滤：`render_filter_test.go` 检查设置往返与图集留白；设置 `GOCRAFT_FILTER_GPU_TEST=1` 后运行 `go test . -run TestTextureFilterGPU`，实测倍率、mipmap 开关回读及 GL 错误。
 - 过滤设置默认 mipmap 开启、AF 8×，即时生效并保存；AF 自动限制到硬件能力。图集使用加宽留白，8× 保留 0–4 级，16× 限至 0–3 级；关闭 mipmap 仅停用采样，不释放层级内存。
 - 新增功能或移动职责时，同一批修改更新本页；符号清单运行 `go run ./tools/codeindex -write` 更新。
@@ -134,3 +134,5 @@
 原生窗口隐藏集成测试已覆盖全部菜单、尺寸变化、键盘/UTF-16 事件、焦点释放、临时存档两次连接和退出以及暂停设置；主菜单通过 GPU 像素回读检查。尚未人工验证真实鼠标高频输入、不同 DPI 显示器间拖动和 IME 组合输入。内置 WebGPU 字体目前仍仅显示 ASCII，其他字符显示问号。
 
 实体模型实例化、大地形缓冲区子分配/间接绘制仍待性能采样后推进。buildAllMeshData、HandlePacket 和 input.go 仍有较大流程，后续可按面策略、消息域和输入状态机拆分。
+网格上传的旧材质绑定集中在 [render_mesh_bindings_raylib.go](render_mesh_bindings_raylib.go)；共享上传文件不再导入 Raylib。窗口设置仅调用当前窗口所有者的 Resize 接口。
+窗口设置委托与原生上传无旧资源分配回归：[settings_window_test.go](settings_window_test.go)。
