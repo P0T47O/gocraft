@@ -10,11 +10,14 @@ func TestChunkLightRoundTripAndApply(t *testing.T) {
 	w := NewClientWorld()
 	defer w.Close()
 	c := lifecycleChunk(w, chunkKey{-2, 3})
-	c.blocks[3][20][4] = blockStone
+	c.blocks.Set(3, 20, 4, blockStone)
 	c.rebuildTorchCount()
 	clear(c.sectionDirty)
 	source := new(Chunk)
-	source.skyLight[3][20][4], source.blockLight[3][20][4] = 7, 11
+	{
+		source.skyLight.Set(3, 20, 4, 7)
+		source.blockLight.Set(3, 20, 4, 11)
+	}
 	p := chunkLightPacket(chunkKey{-2, 3}, source, 1<<1)
 	if len(p.Data) != 4096 {
 		t.Fatal("light packet unexpectedly includes whole chunk")
@@ -30,7 +33,7 @@ func TestChunkLightRoundTripAndApply(t *testing.T) {
 	if !w.applyChunkLight(r.(*PacketChunkLight)) {
 		t.Fatal("delta rejected")
 	}
-	if c.skyLight[3][20][4] != 7 || c.blockLight[3][20][4] != 11 || c.blocks[3][20][4] != blockStone {
+	if c.skyLight.Get(3, 20, 4) != 7 || c.blockLight.Get(3, 20, 4) != 11 || c.blocks.Get(3, 20, 4) != blockStone {
 		t.Fatal("light update changed geometry or lost light")
 	}
 	versions := append([]uint32(nil), c.meshVersion...)
@@ -87,7 +90,7 @@ func TestServerSendsLightOnlyToKnownChunks(t *testing.T) {
 	c := w.ensureChunk(0, 0)
 	c.generated = true
 	c.lightDirtySections = 1 << 2
-	c.skyLight[1][35][1] = 8
+	c.skyLight.Set(1, 35, 1, 8)
 	key := chunkKey{}
 	w.lightChanged[key] = true
 	known := &ClientConnection{KnownChunks: map[chunkKey]bool{key: true}, Send: make(chan Packet, 8)}

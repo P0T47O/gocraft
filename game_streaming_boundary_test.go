@@ -78,8 +78,48 @@ func TestChunkStreamingClosedConnection(t *testing.T) {
 	}
 }
 
+func TestChunkStreamingInFlightWindow(t *testing.T) {
+	setupStreamingTest(t)
+	now := time.Unix(100, 0)
+	drain := func() {
+		for len(client.Outgoing) > 0 {
+			<-client.Outgoing
+		}
+	}
+	for i := 0; i < 40; i++ {
+		requestMissingChunksAt(gameVec3{}, now)
+		drain()
+	}
+	if len(pendingChunkRequests) != maxPendingChunkRequests {
+		t.Fatalf("unbounded window: %d", len(pendingChunkRequests))
+	}
+	// Expiration must retry even with no free slots, retaining the first time.
+	for i := 0; i < 10; i++ {
+		requestMissingChunksAt(gameVec3{}, now.Add(4*time.Second))
+		drain()
+	}
+	if pendingChunkRequests[chunkKey{}] != now.Add(4*time.Second) || chunkLoadStarts[chunkKey{}] != now {
+		t.Fatal("full window stranded retry or reset latency")
+	}
+	if len(pendingChunkRequests) != maxPendingChunkRequests {
+		t.Fatal("retry consumed new slots")
+	}
+	// Simulate accepted receipt: releasing a slot permits a new request.
+	key := chunkKey{}
+	c := world.requestChunk(0, 0)
+	c.generated = true
+	delete(pendingChunkRequests, key)
+	for i := 0; i < 10; i++ {
+		requestMissingChunksAt(gameVec3{}, now.Add(4*time.Second))
+		drain()
+	}
+	if len(pendingChunkRequests) != maxPendingChunkRequests {
+		t.Fatal("did not refill window")
+	}
+}
+
 func TestChunkRequestPlanTranslation(t *testing.T) {
-	for _, radius := range []int{16, 32, 64} {
+	for _, radius := range []int{16, 32, 64, 128} {
 		var moved, fresh chunkRequestPlan
 		now := time.Unix(100, 0)
 		moved.prepare(chunkKey{}, radius, now)

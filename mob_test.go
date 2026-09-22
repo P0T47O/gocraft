@@ -19,7 +19,7 @@ func mobTestWorld(t *testing.T) *World {
 	c := lifecycleChunk(w, chunkKey{0, 0})
 	for x := 0; x < 16; x++ {
 		for z := 0; z < 16; z++ {
-			c.blocks[x][70][z] = blockStone
+			c.blocks.Set(x, 70, z, blockStone)
 		}
 	}
 	return w

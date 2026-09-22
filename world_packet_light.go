@@ -22,8 +22,11 @@ func (w *World) applyChunkLight(p *PacketChunkLight) bool {
 					for z := 0; z < chunkWidth; z++ {
 						v := p.Data[i]
 						i++
-						if c.skyLight[x][y][z] != v>>4 || c.blockLight[x][y][z] != v&15 {
-							c.skyLight[x][y][z], c.blockLight[x][y][z] = v>>4, v&15
+						if c.skyLight.Get(x, y, z) != v>>4 || c.blockLight.Get(x, y, z) != v&15 {
+							{
+								c.skyLight.Set(x, y, z, v>>4)
+								c.blockLight.Set(x, y, z, v&15)
+							}
 							changes.mark(x, y, z)
 						}
 					}
@@ -32,5 +35,7 @@ func (w *World) applyChunkLight(p *PacketChunkLight) bool {
 		}
 	}
 	changes.apply(w, cx, cz)
+	c.skyLight.Compact()
+	c.blockLight.Compact()
 	return true
 }

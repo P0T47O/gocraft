@@ -31,7 +31,7 @@ func chunkLightPacket(key chunkKey, c *Chunk, mask uint16) *PacketChunkLight {
 			for x := 0; x < chunkWidth; x++ {
 				for y := sec * sectionHeight; y < (sec+1)*sectionHeight; y++ {
 					for z := 0; z < chunkWidth; z++ {
-						p.Data[i] = c.skyLight[x][y][z]<<4 | c.blockLight[x][y][z]&15
+						p.Data[i] = c.skyLight.Get(x, y, z)<<4 | c.blockLight.Get(x, y, z)&15
 						i++
 					}
 				}

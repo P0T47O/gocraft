@@ -89,7 +89,7 @@ func updateGame() {
 	dt := gameFrameTime()
 
 	// Packet Loop
-	packetDeadline := time.Now().Add(2 * time.Millisecond)
+	packetDeadline := time.Now().Add(clientPacketBudget(dt, len(client.Incoming)))
 Loop:
 	for packets := 0; packets < 64; packets++ {
 		if packets > 0 && time.Now().After(packetDeadline) {

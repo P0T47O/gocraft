@@ -131,7 +131,7 @@ func TestWebGPUTransparencyPreview(t *testing.T) {
 		for z := 2; z <= 6; z++ {
 			y := int(centerChunk.heightMap[x][z])
 			if y > 0 && y < chunkHeight-1 {
-				centerChunk.blocks[x][y][z] = blockWater
+				centerChunk.blocks.Set(x, y, z, blockWater)
 			}
 		}
 	}
@@ -141,7 +141,7 @@ func TestWebGPUTransparencyPreview(t *testing.T) {
 		for dy := 0; dy < 3; dy++ {
 			y := baseY + dy
 			if y > 0 && y < chunkHeight-1 {
-				centerChunk.blocks[x][y][z] = blockGlass
+				centerChunk.blocks.Set(x, y, z, blockGlass)
 			}
 		}
 	}
@@ -179,7 +179,7 @@ func TestWebGPUTransparencyPreview(t *testing.T) {
 		if chunk == nil {
 			return blockAir
 		}
-		return chunk.blocks[lx][wy][lz]
+		return chunk.blocks.Get(lx, wy, lz)
 	}
 	getLight := func(wx, wy, wz int) byte {
 		if wy < 0 || wy >= chunkHeight {
@@ -189,8 +189,8 @@ func TestWebGPUTransparencyPreview(t *testing.T) {
 		if chunk == nil {
 			return 15
 		}
-		sky := chunk.skyLight[lx][wy][lz]
-		block := chunk.blockLight[lx][wy][lz]
+		sky := chunk.skyLight.Get(lx, wy, lz)
+		block := chunk.blockLight.Get(lx, wy, lz)
 		if block > sky {
 			return block
 		}
@@ -204,7 +204,7 @@ func TestWebGPUTransparencyPreview(t *testing.T) {
 		if chunk == nil {
 			return 0
 		}
-		return chunk.meta[lx][wy][lz]
+		return chunk.meta.Get(lx, wy, lz)
 	}
 
 	yMin := max(0, maxTop-28)

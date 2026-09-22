@@ -53,7 +53,7 @@ func TestStreamingBackpressureLeavesGameplayQueueFree(t *testing.T) {
 	w := NewClientWorld()
 	defer w.Close()
 	chunk := lifecycleChunk(w, chunkKey{0, 0})
-	chunk.blocks[2][70][2] = blockStone
+	chunk.blocks.Set(2, 70, 2, blockStone)
 	player := &PlayerEntity{BaseEntity: BaseEntity{UUID: "collector", Type: EntityPlayer, X: 2, Y: 71.2, Z: 2}, GameMode: ModeSurvival}
 	burst := &ClientConnection{Name: player.UUID, Send: make(chan Packet, 128), StreamSend: make(chan Packet, serverStreamQueueCapacity), KnownChunks: make(map[chunkKey]bool), done: make(chan struct{})}
 	w.entities = []Entity{player}

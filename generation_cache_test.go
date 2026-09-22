@@ -18,7 +18,7 @@ func TestTerrainCacheMatchesReference(t *testing.T) {
 			cached, reference := new(Chunk), new(Chunk)
 			generateChunkData(seed, pos[0], pos[1], cached)
 			generateChunkDataSampled(seed, pos[0], pos[1], reference, sampleTerrainColumn)
-			if cached.blocks != reference.blocks || cached.heightMap != reference.heightMap {
+			if !cached.blocks.Equal(&reference.blocks) || cached.heightMap != reference.heightMap {
 				t.Fatalf("generated chunk differs: seed %d at %v", seed, pos)
 			}
 		}

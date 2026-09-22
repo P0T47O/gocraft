@@ -9,6 +9,12 @@ import (
 
 const worldRenderRadius = defaultRenderDistance
 
+// Cover the requested horizontal radius plus vertical relief and grid margin.
+// Keep the old near/default-distance projection range unchanged.
+func worldFarPlane(radius int) float32 {
+	return float32(max(1000, radius*chunkWidth+chunkHeight+2*chunkWidth))
+}
+
 // Leave most of the view clear, with a soft fade before the circular chunk
 // boundary. The margin covers chunk-grid rounding and camera motion in a chunk.
 func worldFogRange(radius int) (start, end float32) {

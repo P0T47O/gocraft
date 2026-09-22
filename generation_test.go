@@ -28,11 +28,11 @@ func TestGenerationDeterminismAndReuse(t *testing.T) {
 		generateChunkData(12345, p[0], p[1], &a)
 		generateChunkData(98765, 10, -10, &b)
 		generateChunkData(12345, p[0], p[1], &b)
-		if a.blocks != b.blocks || a.heightMap != b.heightMap {
+		if !a.blocks.Equal(&b.blocks) || a.heightMap != b.heightMap {
 			t.Fatalf("reuse changed chunk %v", p)
 		}
 		generateChunkData(12346, p[0], p[1], &b)
-		if a.blocks == b.blocks {
+		if a.blocks.Equal(&b.blocks) {
 			t.Fatalf("seed had no effect at %v", p)
 		}
 	}
@@ -59,7 +59,7 @@ func TestGenerationProceduralConsistency(t *testing.T) {
 					t.Fatal("out of range fallback")
 				}
 				for y := 0; y < chunkHeight; y++ {
-					got := chunk.blocks[x][y][z]
+					got := chunk.blocks.Get(x, y, z)
 					want := blockAtProcedural(12345, wx, y, wz)
 					if y >= c.topY() { // Decorations are excluded from fallback.
 						if want != blockAir {
@@ -79,7 +79,7 @@ func TestGenerationProceduralConsistency(t *testing.T) {
 				}
 				top := 0
 				for y := 0; y < chunkHeight; y++ {
-					if chunk.blocks[x][y][z] != blockAir {
+					if chunk.blocks.Get(x, y, z) != blockAir {
 						top = y + 1
 					}
 				}
@@ -174,7 +174,7 @@ func TestGenerationFlowersInChunks(t *testing.T) {
 			for x := 0; x < chunkWidth; x++ {
 				for z := 0; z < chunkWidth; z++ {
 					col := sampleTerrainColumn(12345, cx*chunkWidth+x, cz*chunkWidth+z)
-					switch chunk.blocks[x][col.height][z] {
+					switch chunk.blocks.Get(x, col.height, z) {
 					case blockRose:
 						roses++
 					case blockDandelion:
@@ -273,7 +273,7 @@ func TestGenerationTreeBoundariesAndOverlap(t *testing.T) {
 				for z := 0; z < chunkWidth; z++ {
 					for y := 0; y < chunkHeight; y++ {
 						wx, wz := cx*chunkWidth+x, cz*chunkWidth+z
-						want, got := ref[pos{wx, y, wz}], chunk.blocks[x][y][z]
+						want, got := ref[pos{wx, y, wz}], chunk.blocks.Get(x, y, z)
 						if generationIsLog(want) || generationIsLeaf(want) || generationIsLog(got) || generationIsLeaf(got) {
 							if got != want {
 								t.Fatalf("tree seam (%d,%d,%d): %d != %d", wx, y, wz, got, want)

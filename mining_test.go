@@ -62,7 +62,7 @@ func TestServerMiningDrops(t *testing.T) {
 			w := NewClientWorld()
 			defer w.Close()
 			c := lifecycleChunk(w, chunkKey{0, 0})
-			c.blocks[2][70][2] = tc.block
+			c.blocks.Set(2, 70, 2, tc.block)
 			p := &PlayerEntity{BaseEntity: BaseEntity{UUID: "miner", Type: EntityPlayer, X: 2, Y: 71, Z: 2}, GameMode: ModeSurvival}
 			if tc.tool != 0 {
 				p.Inventory.Slots[0] = Item{ID: int32(tc.tool), Count: 1}

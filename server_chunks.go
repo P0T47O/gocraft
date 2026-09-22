@@ -68,9 +68,9 @@ func chunkPacket(key chunkKey, chunk *Chunk) *PacketChunkData {
 	for x := 0; x < chunkWidth; x++ {
 		for y := 0; y < chunkHeight; y++ {
 			for z := 0; z < chunkWidth; z++ {
-				data[idx] = chunk.blocks[x][y][z]
-				meta[idx] = chunk.meta[x][y][z]
-				light[idx] = (chunk.skyLight[x][y][z] << 4) | (chunk.blockLight[x][y][z] & 15)
+				data[idx] = chunk.blocks.Get(x, y, z)
+				meta[idx] = chunk.meta.Get(x, y, z)
+				light[idx] = (chunk.skyLight.Get(x, y, z) << 4) | (chunk.blockLight.Get(x, y, z) & 15)
 				idx++
 			}
 		}

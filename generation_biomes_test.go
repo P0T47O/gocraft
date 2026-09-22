@@ -65,7 +65,7 @@ func TestGenerationClassicVegetation(t *testing.T) {
 						if col.biomeID != id {
 							continue
 						}
-						top := chunk.blocks[lx][col.height-1][lz]
+						top := chunk.blocks.Get(lx, col.height-1, lz)
 						if top >= blockCoalOre && top <= blockLapisOre {
 							top = blockStone
 						}

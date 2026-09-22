@@ -18,7 +18,7 @@ type GameSettings struct {
 }
 
 const minRenderDistance = 8
-const maxRenderDistance = 32
+const maxRenderDistance = 128
 const defaultRenderDistance = 24
 
 func renderDistance() int {

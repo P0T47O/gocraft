@@ -80,11 +80,11 @@ func TestSaveFileRenameFailureCleansTemp(t *testing.T) {
 func TestChunkSaveRoundTripAndDirtyFailure(t *testing.T) {
 	dir := t.TempDir()
 	c := &Chunk{}
-	c.blocks[0][0][0] = blockStone
-	c.blocks[15][255][15] = blockTorch
-	c.meta[15][255][15] = 4
+	c.blocks.Set(0, 0, 0, blockStone)
+	c.blocks.Set(15, 255, 15, blockTorch)
+	c.meta.Set(15, 255, 15, 4)
 	for _, id := range []byte{blockStone, blockGrass} {
-		c.blocks[3][20][7] = id
+		c.blocks.Set(3, 20, 7, id)
 		c.dirty = true
 		if err := SaveChunk(dir, c, -2, 3); err != nil {
 			t.Fatal(err)
@@ -96,7 +96,7 @@ func TestChunkSaveRoundTripAndDirtyFailure(t *testing.T) {
 		if err := loadChunkFile(dir, -2, 0, 3, &loaded.blocks, &loaded.meta); err != nil {
 			t.Fatal(err)
 		}
-		if loaded.blocks != c.blocks || loaded.meta != c.meta {
+		if !loaded.blocks.Equal(&c.blocks) || !loaded.meta.Equal(&c.meta) {
 			t.Fatal("round trip lost block/metadata")
 		}
 	}
@@ -140,7 +140,7 @@ func TestServerRetainsChunkWhenUnloadSaveFails(t *testing.T) {
 	defer w.Close()
 	key := chunkKey{X: 100, Z: 100}
 	c := lifecycleChunk(w, key)
-	c.blocks[0][1][0] = blockStone
+	c.blocks.Set(0, 1, 0, blockStone)
 	c.dirty = true
 	root := filepath.Join(t.TempDir(), "not-a-directory")
 	if err := writeSaveFile(root, []byte("occupied")); err != nil {
@@ -149,7 +149,7 @@ func TestServerRetainsChunkWhenUnloadSaveFails(t *testing.T) {
 	client := &ClientConnection{KnownChunks: map[chunkKey]bool{key: true}, Send: make(chan Packet, 8), done: make(chan struct{})}
 	s := &Server{World: w, SavePath: root, Clients: map[string]*ClientConnection{"test": client}, PendingChunks: make(map[chunkKey][]string)}
 	s.Tick()
-	if w.chunks[key] != c || !c.dirty || c.blocks[0][1][0] != blockStone || !client.KnownChunks[key] {
+	if w.chunks[key] != c || !c.dirty || c.blocks.Get(0, 1, 0) != blockStone || !client.KnownChunks[key] {
 		t.Fatal("failed save discarded resident data/client state")
 	}
 	s.SavePath = t.TempDir()
@@ -161,7 +161,7 @@ func TestServerRetainsChunkWhenUnloadSaveFails(t *testing.T) {
 	if err := loadChunkFile(s.SavePath, key.X, 0, key.Z, &loaded.blocks, &loaded.meta); err != nil {
 		t.Fatal(err)
 	}
-	if loaded.blocks[0][1][0] != blockStone {
+	if loaded.blocks.Get(0, 1, 0) != blockStone {
 		t.Fatal("retry lost edits")
 	}
 }

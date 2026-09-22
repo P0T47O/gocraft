@@ -229,19 +229,11 @@ func buildMeshSnapshotFromNeighbors(job meshJob) *meshSnapshot {
 			}
 			lx := modFloor(wx, chunkWidth)
 			lz := modFloor(wz, chunkWidth)
-			for y := snapYMin; y < snapYMax; y++ {
-				iy := y - snapYMin
-				idx := ((ix+1)*sizeY+iy)*sizeZ + (iz + 1)
-				blocks[idx] = chunk.blocks[lx][y][lz]
-				meta[idx] = chunk.meta[lx][y][lz]
-				sky := chunk.skyLight[lx][y][lz]
-				blk := chunk.blockLight[lx][y][lz]
-				if blk > sky {
-					light[idx] = blk
-				} else {
-					light[idx] = sky
-				}
-			}
+			idx := (ix+1)*sizeY*sizeZ + iz + 1
+			chunk.blocks.CopyColumn(blocks, idx, sizeZ, lx, lz, snapYMin, snapYMax, false)
+			chunk.meta.CopyColumn(meta, idx, sizeZ, lx, lz, snapYMin, snapYMax, false)
+			chunk.skyLight.CopyColumn(light, idx, sizeZ, lx, lz, snapYMin, snapYMax, false)
+			chunk.blockLight.CopyColumn(light, idx, sizeZ, lx, lz, snapYMin, snapYMax, true)
 		}
 	}
 	for dx := 0; dx < 3; dx++ {

@@ -278,6 +278,9 @@ func drawSettingsMenu(l SurvivalLayout, fromPause bool) {
 	distance := float32(settings.RenderDistance)
 	ui.DrawSlider(l.Rect(354, 514, 600, 24), &distance, minRenderDistance, maxRenderDistance, "render_distance")
 	settings.RenderDistance = clampRenderDistance(int(distance + .5))
+	if settings.RenderDistance > 32 {
+		l.Text("EXTREME: HIGH RAM / VRAM USE", 354, 554, 12, invAccent)
+	}
 	for i, line := range []string{"WASD  Move", "Space  Jump / swim up", "Ctrl + W  Sprint", "Shift  Sneak / dive", "E  Inventory", "Esc  Pause / back"} {
 		l.Text(line, 28, 364+float32(i)*26, 14, invMuted)
 	}

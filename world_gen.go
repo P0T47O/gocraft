@@ -139,10 +139,11 @@ func generateChunkData(seed uint32, cx, cz int, chunk *Chunk) {
 }
 
 func generateChunkDataSampled(seed uint32, cx, cz int, chunk *Chunk, column func(uint32, int, int) terrainColumn) {
+	defer chunk.blocks.Compact()
 	blocks := &chunk.blocks
 	heightMap := &chunk.heightMap
 	// Pool reuse must not retain air-space blocks from previous coordinates.
-	*blocks = [chunkWidth][chunkHeight][chunkWidth]byte{}
+	*blocks = chunkPlane{}
 	var columns [chunkWidth][chunkWidth]terrainColumn
 	for x := 0; x < chunkWidth; x++ {
 		for z := 0; z < chunkWidth; z++ {
@@ -150,7 +151,7 @@ func generateChunkDataSampled(seed uint32, cx, cz int, chunk *Chunk, column func
 			col := column(seed, wx, wz)
 			columns[x][z] = col
 			for y := 0; y < col.topY(); y++ {
-				blocks[x][y][z] = col.blockAt(seed, wx, y, wz)
+				blocks.Set(x, y, z, col.blockAt(seed, wx, y, wz))
 			}
 			heightMap[x][z] = int16(col.topY())
 		}
@@ -239,8 +240,8 @@ func generateChunkDataSampled(seed uint32, cx, cz int, chunk *Chunk, column func
 							if dx2+dy2+dz*dz >= 1.0 {
 								continue
 							}
-							if blocks[xi][yi][zi] == blockStone {
-								blocks[xi][yi][zi] = ore
+							if blocks.Get(xi, yi, zi) == blockStone {
+								blocks.Set(xi, yi, zi, ore)
 							}
 						}
 					}
@@ -260,16 +261,16 @@ func generateChunkDataSampled(seed uint32, cx, cz int, chunk *Chunk, column func
 		for z := 0; z < chunkWidth; z++ {
 			col := columns[x][z]
 			y := col.height
-			if y >= chunkHeight-2 || col.top != blockGrass && col.top != blockSand || blocks[x][y][z] != blockAir || y < seaLevel {
+			if y >= chunkHeight-2 || col.top != blockGrass && col.top != blockSand || blocks.Get(x, y, z) != blockAir || y < seaLevel {
 				continue
 			}
 			wx, wz := cx*chunkWidth+x, cz*chunkWidth+z
 			b := vegetationAt(seed, wx, wz, col)
 			if b != blockAir {
-				blocks[x][y][z] = b
+				blocks.Set(x, y, z, b)
 				heightMap[x][z] = max(heightMap[x][z], int16(y+1))
-				if b == blockCactus && hash2(seed+5, wx, wz) > 0.5 && blocks[x][y+1][z] == blockAir {
-					blocks[x][y+1][z] = b
+				if b == blockCactus && hash2(seed+5, wx, wz) > 0.5 && blocks.Get(x, y+1, z) == blockAir {
+					blocks.Set(x, y+1, z, b)
 					heightMap[x][z] = max(heightMap[x][z], int16(y+2))
 				}
 			}

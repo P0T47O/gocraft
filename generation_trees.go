@@ -107,11 +107,11 @@ func placeGeneratedTreesSampled(seed uint32, cx, cz int, chunk *Chunk, column fu
 				if lx < 0 || lx >= chunkWidth || lz < 0 || lz >= chunkWidth || y < 1 || y >= chunkHeight {
 					return
 				}
-				old := chunk.blocks[lx][y][lz]
+				old := chunk.blocks.Get(lx, y, lz)
 				if old != blockAir && !(generationIsLog(b) && generationIsLeaf(old)) {
 					return
 				}
-				chunk.blocks[lx][y][lz] = b
+				chunk.blocks.Set(lx, y, lz, b)
 				chunk.heightMap[lx][lz] = max(chunk.heightMap[lx][lz], int16(y+1))
 			})
 		}

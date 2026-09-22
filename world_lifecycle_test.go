@@ -19,10 +19,10 @@ func TestMeshSnapshotSurvivesChunkReuse(t *testing.T) {
 	w := NewClientWorld()
 	defer w.Close()
 	c := lifecycleChunk(w, chunkKey{0, 0})
-	c.blocks[15][15][15] = blockStone
+	c.blocks.Set(15, 15, 15, blockStone)
 	c.rebuildTorchCount()
 	n := lifecycleChunk(w, chunkKey{1, 1})
-	n.blocks[0][16][0] = blockGlass
+	n.blocks.Set(0, 16, 0, blockGlass)
 	a := &RenderAssets{}
 	if !w.submitMesh(0, 0, 0, a) {
 		t.Fatal("mesh not submitted")
@@ -35,7 +35,7 @@ func TestMeshSnapshotSurvivesChunkReuse(t *testing.T) {
 	w.UnloadChunks(100, 100, 1, nil)
 	for i := 0; i < 4; i++ {
 		replacement := lifecycleChunk(w, chunkKey{100 + i, 100})
-		replacement.blocks[15][15][15] = blockWater
+		replacement.blocks.Set(15, 15, 15, blockWater)
 	}
 	if job.snapshot.blockAt(15, 15, 15) != blockStone || job.snapshot.blockAt(16, 16, 16) != blockGlass {
 		t.Fatal("snapshot changed after reuse")
@@ -50,7 +50,7 @@ func TestMeshDedupAndStaleResultOwnership(t *testing.T) {
 	w := NewClientWorld()
 	defer w.Close()
 	c := lifecycleChunk(w, chunkKey{})
-	c.blocks[1][1][1] = blockStone
+	c.blocks.Set(1, 1, 1, blockStone)
 	c.rebuildTorchCount()
 	a := &RenderAssets{}
 	if !w.submitMesh(0, 0, 0, a) || w.submitMesh(0, 0, 0, a) {
@@ -77,7 +77,7 @@ func TestFullMeshQueueDoesNotLatchPending(t *testing.T) {
 	defer w.Close()
 	w.meshJobs = make(chan meshJob, 1)
 	c := lifecycleChunk(w, chunkKey{})
-	c.blocks[0][0][0] = blockStone
+	c.blocks.Set(0, 0, 0, blockStone)
 	c.rebuildTorchCount()
 	w.meshJobs <- meshJob{snapshot: &meshSnapshot{}}
 	if w.submitMesh(0, 0, 0, &RenderAssets{}) || c.pendingOpaque[0] {
@@ -129,7 +129,7 @@ func TestGenerationRejectsOldInstanceAndAppliesDeferredEdit(t *testing.T) {
 	w.UnloadChunks(100, 100, 1, nil)
 	c := w.requestChunk(0, 0)
 	stale := &Chunk{generated: true}
-	stale.blocks[0][1][0] = blockWater
+	stale.blocks.Set(0, 1, 0, blockWater)
 	w.genResults <- chunkGenResult{key: chunkKey{}, chunk: stale, instance: old}
 	w.ProcessGenResults()
 	if c.generated {
@@ -151,8 +151,8 @@ func TestChunkRetryIsNoOpAndMetadataRoundTrips(t *testing.T) {
 	w := NewClientWorld()
 	defer w.Close()
 	c := &Chunk{}
-	c.blocks[3][20][4] = blockTorch
-	c.meta[3][20][4] = 3
+	c.blocks.Set(3, 20, 4, blockTorch)
+	c.meta.Set(3, 20, 4, 3)
 	initializeChunkLighting(c)
 	p := chunkPacket(chunkKey{}, c)
 	var wire bytes.Buffer
@@ -174,7 +174,7 @@ func TestChunkRetryIsNoOpAndMetadataRoundTrips(t *testing.T) {
 			t.Fatal("duplicate invalidated mesh")
 		}
 	}
-	if loaded.meta[3][20][4] != 3 || len(loaded.torches) != 1 {
+	if loaded.meta.Get(3, 20, 4) != 3 || len(loaded.torches) != 1 {
 		t.Fatal("metadata/index lost")
 	}
 	if w.applyChunkPacket(&PacketChunkData{Data: []byte{0}}) {

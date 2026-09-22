@@ -56,7 +56,7 @@ func TestGroundMergeAndDeathKeepDamage(t *testing.T) {
 	w := NewClientWorld()
 	defer w.Close()
 	c := lifecycleChunk(w, chunkKey{0, 0})
-	c.blocks[2][69][2] = blockStone
+	c.blocks.Set(2, 69, 2, blockStone)
 	a := &ItemEntity{BaseEntity: BaseEntity{UUID: "a", Type: EntityItem, X: 2, Y: 70, Z: 2}, ItemStack: Item{ID: int32(itemWoodPickaxe), Count: 1, Damage: 10}}
 	b := &ItemEntity{BaseEntity: BaseEntity{UUID: "b", Type: EntityItem, X: 2, Y: 70, Z: 2}, ItemStack: Item{ID: int32(itemWoodPickaxe), Count: 1, Damage: 10}}
 	w.entities = []Entity{a, b}
@@ -201,7 +201,7 @@ func TestSelectedToolDropPickupAndWear(t *testing.T) {
 	w := NewClientWorld()
 	defer w.Close()
 	c := lifecycleChunk(w, chunkKey{0, 0})
-	c.blocks[2][70][2] = blockStone
+	c.blocks.Set(2, 70, 2, blockStone)
 	p := &PlayerEntity{BaseEntity: BaseEntity{UUID: "miner", Type: EntityPlayer, X: 2, Y: 71, Z: 2}, GameMode: ModeSurvival, SelectedSlot: 1}
 	p.Inventory.Slots[0] = Item{ID: int32(itemWoodPickaxe), Count: 1, Damage: 10}
 	p.Inventory.Slots[1] = Item{ID: int32(itemWoodPickaxe), Count: 1, Damage: 57}
@@ -230,7 +230,7 @@ func TestSelectedToolDropPickupAndWear(t *testing.T) {
 	if p.Inventory.Slots[1].Damage != 58 {
 		t.Fatal("pickup reset damage")
 	}
-	c.blocks[2][70][2] = blockStone
+	c.blocks.Set(2, 70, 2, blockStone)
 	s.HandlePacket(PacketWrapper{From: p.UUID, Packet: &PacketBlockChange{X: 2, Y: 70, Z: 2, BlockID: blockAir}})
 	if p.Inventory.Slots[1] != (Item{}) {
 		t.Fatal("tool did not break")

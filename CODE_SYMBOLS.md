@@ -26,11 +26,21 @@
 
 函数/方法：`*meshBuilder.addFace`、`*meshBuilder.addFaceSmooth`、`*MeshBuildData.Reset`、`*RenderAssets.isTransparent`、`*RenderAssets.getBiomeBaseColor`、`*RenderAssets.getClimateColor`、`*RenderAssets.shouldDrawFace`、`*RenderAssets.applyAO`、`*RenderAssets.buildAllMeshData`、`allocFloat32`、`allocUint8`、`allocUint16`
 
+## [chunk_storage.go](chunk_storage.go)
+
+类型：`chunkPlane`、`voxelSection`
+
+函数/方法：`*chunkPlane.CopyColumn`、`*chunkPlane.Fill`、`*chunkPlane.Get`、`*chunkPlane.Set`、`*chunkPlane.Compact`、`*chunkPlane.Clone`、`*chunkPlane.Equal`、`*chunkPlane.Dense`、`*chunkPlane.FromDense`、`*chunkPlane.FromWire`
+
 ## [client.go](client.go)
 
 类型：`Client`
 
 函数/方法：`ConnectTCP`、`*Client.Close`、`*Client.Send`、`*Client.Update`
+
+## [client_packet_budget.go](client_packet_budget.go)
+
+函数/方法：`clientPacketBudget`
 
 ## [container_input.go](container_input.go)
 
@@ -406,7 +416,7 @@
 
 ## [save_chunks.go](save_chunks.go)
 
-函数/方法：`SaveWorldChunks`、`SaveChunk`、`TryLoadChunk`、`saveChunkFile`、`loadChunkFile`、`loadAllChunks`
+函数/方法：`SaveWorldChunks`、`SaveChunk`、`TryLoadChunk`、`saveChunkFile`、`loadChunkFile`、`loadDenseChunkFile`、`loadAllChunks`
 
 ## [save_codec.go](save_codec.go)
 
@@ -433,6 +443,12 @@
 ## [save_player.go](save_player.go)
 
 函数/方法：`SavePlayerState`、`loadPlayerFile`
+
+## [save_sparse_codec.go](save_sparse_codec.go)
+
+类型：`chunkRunEncoder`
+
+函数/方法：`*chunkRunEncoder.add`、`*chunkRunEncoder.flush`、`encodeSparseChunk`
 
 ## [server.go](server.go)
 
@@ -694,5 +710,5 @@
 
 类型：`worldRenderCache`、`visibleSection`、`translucentDraw`
 
-函数/方法：`worldFogRange`、`*worldRenderCache.radiusOffsets`、`compareVisibleSections`、`compareSectionCoordinates`、`compareTranslucentDraws`、`*worldRenderCache.appendVisibleSections`、`*worldRenderCache.collectTranslucent`
+函数/方法：`worldFarPlane`、`worldFogRange`、`*worldRenderCache.radiusOffsets`、`compareVisibleSections`、`compareSectionCoordinates`、`compareTranslucentDraws`、`*worldRenderCache.appendVisibleSections`、`*worldRenderCache.collectTranslucent`
 

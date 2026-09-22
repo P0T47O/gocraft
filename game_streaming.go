@@ -19,6 +19,10 @@ type chunkRequestPlan struct {
 
 var chunkRequests chunkRequestPlan
 
+// Bound outstanding requests, not just packets waiting in the socket queue.
+// Receipt frees a slot; retries reuse their existing slot.
+const maxPendingChunkRequests = 512
+
 func (p *chunkRequestPlan) prepare(center chunkKey, radius int, now time.Time) {
 	if !p.valid || p.center != center || p.radius != radius {
 		// Translation preserves distance order. Walking across a chunk boundary
@@ -96,6 +100,12 @@ func requestMissingChunksAt(pos gameVec3, now time.Time) {
 		if last, ok := pendingChunkRequests[key]; ok && now.Sub(last) < 3*time.Second {
 			chunkRequests.next++
 			continue
+		}
+		if _, retry := pendingChunkRequests[key]; !retry && len(pendingChunkRequests) >= maxPendingChunkRequests {
+			// Revisit pending entries so a dropped/rejected request can still be
+			// retried when the window is full. Do not strand the cursor here.
+			chunkRequests.next = 0
+			return
 		}
 		if len(client.Outgoing) >= max(1, cap(client.Outgoing)/2) {
 			return

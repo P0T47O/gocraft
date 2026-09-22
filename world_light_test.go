@@ -43,7 +43,7 @@ func referenceLighting(w *World) map[chunkKey]*Chunk {
 				for z := 0; z < chunkWidth; z++ {
 					open := true
 					for y := chunkHeight - 1; y >= 0; y-- {
-						b := GetBlock(c.blocks[x][y][z])
+						b := GetBlock(c.blocks.Get(x, y, z))
 						if b.IsOpaque {
 							open = false
 						}
@@ -53,9 +53,9 @@ func referenceLighting(w *World) map[chunkKey]*Chunk {
 							if open {
 								level = 15
 							}
-							c.skyLight[x][y][z] = level
+							c.skyLight.Set(x, y, z, level)
 						} else {
-							c.blockLight[x][y][z] = level
+							c.blockLight.Set(x, y, z, level)
 						}
 						if level > 0 {
 							queue = append(queue, point{key.X*chunkWidth + x, y, key.Z*chunkWidth + z})
@@ -67,9 +67,9 @@ func referenceLighting(w *World) map[chunkKey]*Chunk {
 		for head := 0; head < len(queue); head++ {
 			p := queue[head]
 			c := result[chunkKey{divFloor(p.x, chunkWidth), divFloor(p.z, chunkWidth)}]
-			level := c.blockLight[modFloor(p.x, chunkWidth)][p.y][modFloor(p.z, chunkWidth)]
+			level := c.blockLight.Get(modFloor(p.x, chunkWidth), p.y, modFloor(p.z, chunkWidth))
 			if sky {
-				level = c.skyLight[modFloor(p.x, chunkWidth)][p.y][modFloor(p.z, chunkWidth)]
+				level = c.skyLight.Get(modFloor(p.x, chunkWidth), p.y, modFloor(p.z, chunkWidth))
 			}
 			if level <= 1 {
 				continue
@@ -84,15 +84,15 @@ func referenceLighting(w *World) map[chunkKey]*Chunk {
 					continue
 				}
 				x, z := modFloor(n.x, chunkWidth), modFloor(n.z, chunkWidth)
-				if GetBlock(nc.blocks[x][n.y][z]).IsOpaque {
+				if GetBlock(nc.blocks.Get(x, n.y, z)).IsOpaque {
 					continue
 				}
-				target := &nc.blockLight[x][n.y][z]
+				target := &nc.blockLight
 				if sky {
-					target = &nc.skyLight[x][n.y][z]
+					target = &nc.skyLight
 				}
-				if *target < level-1 {
-					*target = level - 1
+				if target.Get(x, n.y, z) < level-1 {
+					target.Set(x, n.y, z, level - 1)
 					queue = append(queue, n)
 				}
 			}
@@ -109,8 +109,8 @@ func assertLightingRebuilt(t *testing.T, w *World) {
 			for y := 0; y < chunkHeight; y++ {
 				for z := 0; z < chunkWidth; z++ {
 					r := want[key]
-					if c.skyLight[x][y][z] != r.skyLight[x][y][z] || c.blockLight[x][y][z] != r.blockLight[x][y][z] {
-						t.Fatalf("chunk %v local (%d,%d,%d): sky/block %d/%d, rebuilt %d/%d", key, x, y, z, c.skyLight[x][y][z], c.blockLight[x][y][z], r.skyLight[x][y][z], r.blockLight[x][y][z])
+					if c.skyLight.Get(x, y, z) != r.skyLight.Get(x, y, z) || c.blockLight.Get(x, y, z) != r.blockLight.Get(x, y, z) {
+						t.Fatalf("chunk %v local (%d,%d,%d): sky/block %d/%d, rebuilt %d/%d", key, x, y, z, c.skyLight.Get(x, y, z), c.blockLight.Get(x, y, z), r.skyLight.Get(x, y, z), r.blockLight.Get(x, y, z))
 					}
 				}
 			}
@@ -121,8 +121,8 @@ func assertLightingRebuilt(t *testing.T, w *World) {
 func editLighting(w *World, x, y, z int, block byte) {
 	c := w.chunks[chunkKey{divFloor(x, chunkWidth), divFloor(z, chunkWidth)}]
 	lx, lz := modFloor(x, chunkWidth), modFloor(z, chunkWidth)
-	old := c.blocks[lx][y][lz]
-	c.blocks[lx][y][lz] = block
+	old := c.blocks.Get(lx, y, lz)
+	c.blocks.Set(lx, y, lz, block)
 	w.updateBlockLight(x, y, z, old, block)
 	w.updateSkyLight(x, y, z)
 }
@@ -134,7 +134,7 @@ func TestLightingLocalDirectSkyAndRoof(t *testing.T) {
 	for x := 0; x < chunkWidth; x++ {
 		for y := 0; y < chunkHeight; y++ {
 			for z := 0; z < chunkWidth; z++ {
-				if c.skyLight[x][y][z] != 15 || c.blockLight[x][y][z] != 0 {
+				if c.skyLight.Get(x, y, z) != 15 || c.blockLight.Get(x, y, z) != 0 {
 					t.Fatal("empty chunk must have direct sky everywhere")
 				}
 			}
@@ -145,26 +145,26 @@ func TestLightingLocalDirectSkyAndRoof(t *testing.T) {
 	}
 	for x := 4; x <= 10; x++ {
 		for z := 4; z <= 10; z++ {
-			c.blocks[x][20][z] = blockStone
+			c.blocks.Set(x, 20, z, blockStone)
 		}
 	}
-	c.blocks[0][8][0] = blockTorch
+	c.blocks.Set(0, 8, 0, blockTorch)
 	initializeChunkLighting(c)
-	if c.skyLight[7][20][7] != 0 || c.skyLight[7][21][7] != 15 {
+	if c.skyLight.Get(7, 20, 7) != 0 || c.skyLight.Get(7, 21, 7) != 15 {
 		t.Fatal("roof must be opaque with direct sky above")
 	}
-	if c.skyLight[4][19][7] != 14 || c.skyLight[7][19][7] != 11 {
+	if c.skyLight.Get(4, 19, 7) != 14 || c.skyLight.Get(7, 19, 7) != 11 {
 		t.Fatal("lateral skylight under roof must attenuate")
 	}
 	assertLightingRebuilt(t, &World{chunks: map[chunkKey]*Chunk{{0, 0}: c}})
 	// Full roof: missing chunks must never act as artificial sky sources.
 	for x := 0; x < chunkWidth; x++ {
 		for z := 0; z < chunkWidth; z++ {
-			c.blocks[x][20][z] = blockStone
+			c.blocks.Set(x, 20, z, blockStone)
 		}
 	}
 	initializeChunkLighting(c)
-	if c.skyLight[0][19][0] != 0 {
+	if c.skyLight.Get(0, 19, 0) != 0 {
 		t.Fatal("missing neighbors leaked skylight")
 	}
 }
@@ -173,7 +173,7 @@ func TestLightingTorchChunkArrivalAndReplacement(t *testing.T) {
 	lightingTestRegistry(t)
 	for _, reverse := range []bool{false, true} {
 		a, b := &Chunk{}, &Chunk{}
-		a.blocks[chunkWidth-1][16][7] = blockTorch
+		a.blocks.Set(chunkWidth-1, 16, 7, blockTorch)
 		keys := []chunkKey{{-1, 0}, {0, 0}}
 		chunks := []*Chunk{a, b}
 		if reverse {
@@ -186,7 +186,7 @@ func TestLightingTorchChunkArrivalAndReplacement(t *testing.T) {
 		w.chunks[keys[1]] = chunks[1]
 		w.lightChanged = make(map[chunkKey]bool)
 		w.stitchChunkLighting(keys[1].X, keys[1].Z)
-		if b.blockLight[0][16][7] != 13 {
+		if b.blockLight.Get(0, 16, 7) != 13 {
 			t.Fatal("torch light did not cross arriving chunk border")
 		}
 		if !w.lightChanged[chunkKey{0, 0}] {
@@ -199,7 +199,7 @@ func TestLightingTorchChunkArrivalAndReplacement(t *testing.T) {
 		w.chunks[chunkKey{-1, 0}] = replacement
 		w.lightChanged = make(map[chunkKey]bool)
 		w.stitchChunkLighting(-1, 0)
-		if b.blockLight[0][16][7] != 0 || !w.lightChanged[chunkKey{0, 0}] {
+		if b.blockLight.Get(0, 16, 7) != 0 || !w.lightChanged[chunkKey{0, 0}] {
 			t.Fatal("replacement left stale neighbor lighting")
 		}
 		assertLightingRebuilt(t, w)
@@ -211,7 +211,7 @@ func TestLightingSkyChunkArrival(t *testing.T) {
 	c := &Chunk{}
 	for x := 0; x < chunkWidth; x++ {
 		for z := 0; z < chunkWidth; z++ {
-			c.blocks[x][20][z] = blockStone
+			c.blocks.Set(x, 20, z, blockStone)
 		}
 	}
 	w := lightingTestWorld(map[chunkKey]*Chunk{{0, 0}: c})
@@ -219,14 +219,14 @@ func TestLightingSkyChunkArrival(t *testing.T) {
 	initializeChunkLighting(neighbor)
 	w.chunks[chunkKey{1, 0}] = neighbor
 	w.stitchChunkLighting(1, 0)
-	if c.skyLight[chunkWidth-1][19][8] != 14 || !w.lightChanged[chunkKey{0, 0}] {
+	if c.skyLight.Get(chunkWidth-1, 19, 8) != 14 || !w.lightChanged[chunkKey{0, 0}] {
 		t.Fatal("arrival did not relight existing roof border")
 	}
 	assertLightingRebuilt(t, w)
 	// The same publish API must reconcile a replacement that removes that sky.
 	for x := 0; x < chunkWidth; x++ {
 		for z := 0; z < chunkWidth; z++ {
-			neighbor.blocks[x][20][z] = blockStone
+			neighbor.blocks.Set(x, 20, z, blockStone)
 		}
 	}
 	w.rebuildLightingForChunk(1, 0)
@@ -262,7 +262,7 @@ func TestLightingRandomEditsUnderRoof(t *testing.T) {
 	for _, c := range w.chunks {
 		for x := 0; x < chunkWidth; x++ {
 			for z := 0; z < chunkWidth; z++ {
-				c.blocks[x][24][z] = blockStone
+				c.blocks.Set(x, 24, z, blockStone)
 			}
 		}
 		initializeChunkLighting(c)
@@ -281,7 +281,7 @@ func TestLightingRandomEditsUnderRoof(t *testing.T) {
 		for x := 0; x < chunkWidth; x++ {
 			for y := 20; y <= 24; y++ {
 				for z := 0; z < chunkWidth; z++ {
-					if emitsLight(c.blocks[x][y][z]) {
+					if emitsLight(c.blocks.Get(x, y, z)) {
 						editLighting(w, key.X*chunkWidth+x, y, key.Z*chunkWidth+z, blockAir)
 					}
 				}
@@ -330,7 +330,7 @@ func TestLightingZeroQueueGuard(t *testing.T) {
 	lightingTestRegistry(t)
 	c := &Chunk{}
 	spreadLocalLight(c, &c.blockLight, []lightPos{{1, 1, 1}})
-	if c.blockLight[2][1][1] != 0 {
+	if c.blockLight.Get(2, 1, 1) != 0 {
 		t.Fatal("zero light underflowed")
 	}
 }

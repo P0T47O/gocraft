@@ -12,7 +12,7 @@ func containerTestServer(t *testing.T) (*Server, *PlayerEntity, BlockPos) {
 	w := NewClientWorld()
 	t.Cleanup(w.Close)
 	c := lifecycleChunk(w, chunkKey{0, 0})
-	c.blocks[2][70][2] = blockChest
+	c.blocks.Set(2, 70, 2, blockChest)
 	p := &PlayerEntity{BaseEntity: BaseEntity{UUID: "builder", Type: EntityPlayer, X: 2, Y: 71, Z: 2}, GameMode: ModeSurvival}
 	w.entities = []Entity{p}
 	s := &Server{World: w, SavePath: t.TempDir(), Clients: map[string]*ClientConnection{}}

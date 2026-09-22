@@ -48,11 +48,11 @@ func (c *Chunk) Reset() {
 	c.meshRetries = [sectionCount]byte{}
 	// Re-initialize arrays to zero
 	// Note: Go arrays are value types, so assigning a zero-value array clears them
-	c.blocks = [chunkWidth][chunkHeight][chunkWidth]byte{}
-	c.meta = [chunkWidth][chunkHeight][chunkWidth]byte{}
+	c.blocks = chunkPlane{}
+	c.meta = chunkPlane{}
 	c.heightMap = [chunkWidth][chunkWidth]int16{}
-	c.skyLight = [chunkWidth][chunkHeight][chunkWidth]byte{}
-	c.blockLight = [chunkWidth][chunkHeight][chunkWidth]byte{}
+	c.skyLight = chunkPlane{}
+	c.blockLight = chunkPlane{}
 
 	// Unload and clear meshes
 	// We must unload meshes properly to free GPU resources

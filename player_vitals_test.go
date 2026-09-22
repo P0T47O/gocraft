@@ -14,7 +14,7 @@ func lifeTestWorld(t *testing.T) *World {
 	c := lifecycleChunk(w, chunkKey{0, 0})
 	for x := 0; x < 16; x++ {
 		for z := 0; z < 16; z++ {
-			c.blocks[x][70][z] = blockStone
+			c.blocks.Set(x, 70, z, blockStone)
 		}
 	}
 	return w
@@ -43,10 +43,10 @@ func TestMovementWalkSprintAndSneakEdge(t *testing.T) {
 	c := w.getChunkIfGenerated(0, 0)
 	for x := 0; x < 16; x++ {
 		for z := 0; z < 16; z++ {
-			c.blocks[x][70][z] = blockAir
+			c.blocks.Set(x, 70, z, blockAir)
 		}
 	}
-	c.blocks[8][70][8] = blockStone
+	c.blocks.Set(8, 70, 8, blockStone)
 	p = newGameVec3(8, 72.125, 8)
 	var sneak InputState
 	for i := 0; i < 180; i++ {
@@ -62,7 +62,7 @@ func TestWaterMovementAndSweptCollision(t *testing.T) {
 	for x := 0; x < 16; x++ {
 		for z := 0; z < 16; z++ {
 			for y := 71; y <= 74; y++ {
-				c.blocks[x][y][z] = blockWater
+				c.blocks.Set(x, y, z, blockWater)
 			}
 		}
 	}
@@ -94,7 +94,7 @@ func TestFallDamageWaterAndCreativeImmunity(t *testing.T) {
 	p.Vitals = nil
 	p.Y = 90
 	p.initVitals()
-	w.getChunkIfGenerated(0, 0).blocks[8][71][8] = blockWater
+	w.getChunkIfGenerated(0, 0).blocks.Set(8, 71, 8, blockWater)
 	p.Y = 72.125
 	s.tickPlayerVitals(p)
 	if p.Vitals.Health != 20 || p.Vitals.FallDistance != 0 {
@@ -111,31 +111,31 @@ func TestDrowningLavaAndSuffocation(t *testing.T) {
 	w := lifeTestWorld(t)
 	s, p := lifeTestPlayer(w)
 	c := w.getChunkIfGenerated(0, 0)
-	c.blocks[8][72][8] = blockWater
+	c.blocks.Set(8, 72, 8, blockWater)
 	for i := 0; i < maxAir+1; i++ {
 		s.tickPlayerVitals(p)
 	}
 	if p.Vitals.Air != 0 || p.Vitals.Health >= 20 {
 		t.Fatal("drowning missing")
 	}
-	c.blocks[8][72][8] = blockAir
+	c.blocks.Set(8, 72, 8, blockAir)
 	s.tickPlayerVitals(p)
 	if p.Vitals.Air == 0 {
 		t.Fatal("air not replenished")
 	}
 	p.Vitals.cooldown = 0
-	c.blocks[8][71][8] = blockLava
+	c.blocks.Set(8, 71, 8, blockLava)
 	s.tickPlayerVitals(p)
 	if p.Vitals.FireTicks == 0 {
 		t.Fatal("lava did not ignite")
 	}
-	c.blocks[8][71][8] = blockWater
+	c.blocks.Set(8, 71, 8, blockWater)
 	s.tickPlayerVitals(p)
 	if p.Vitals.FireTicks != 0 {
 		t.Fatal("water did not extinguish")
 	}
 	p.Vitals.cooldown = 0
-	c.blocks[8][72][8] = blockStone
+	c.blocks.Set(8, 72, 8, blockStone)
 	before := p.Vitals.Health
 	s.tickPlayerVitals(p)
 	if p.Vitals.Health >= before {
@@ -222,7 +222,7 @@ func TestDestroyedSpawnGetsSafeLanding(t *testing.T) {
 	for cx := -1; cx <= 1; cx++ {
 		for cz := -1; cz <= 1; cz++ {
 			c := lifecycleChunk(w, chunkKey{cx, cz})
-			c.blocks = [chunkWidth][chunkHeight][chunkWidth]byte{}
+			c.blocks = chunkPlane{}
 		}
 	}
 	p.Vitals.Health = 0
@@ -239,7 +239,7 @@ func TestDistantRespawnSearchSurvivesChunkGC(t *testing.T) {
 	s.SavePath = t.TempDir()
 	s.PendingChunks = make(map[chunkKey][]string)
 	c := w.getChunkIfGenerated(0, 0)
-	c.blocks = [chunkWidth][chunkHeight][chunkWidth]byte{}
+	c.blocks = chunkPlane{}
 	p.X, p.Z = 1600, 1600
 	p.Vitals.Health = 0
 	client := &ClientConnection{LastChunkX: 100, LastChunkZ: 100, Send: make(chan Packet, 128), done: make(chan struct{}), KnownChunks: make(map[chunkKey]bool)}
@@ -322,9 +322,9 @@ func TestSwimmingCanExitOntoBank(t *testing.T) {
 		for z := 0; z < 16; z++ {
 			for y := 71; y <= 75; y++ {
 				if z >= 10 {
-					c.blocks[x][y][z] = blockStone
+					c.blocks.Set(x, y, z, blockStone)
 				} else if y <= 74 {
-					c.blocks[x][y][z] = blockWater
+					c.blocks.Set(x, y, z, blockWater)
 				}
 			}
 		}

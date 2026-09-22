@@ -25,7 +25,7 @@ func (w *World) LightSkyAt(x, y, z int) byte {
 	if c == nil {
 		return 15
 	} // Rendering fallback only; propagation never uses it.
-	return c.skyLight[modFloor(x, chunkWidth)][y][modFloor(z, chunkWidth)]
+	return c.skyLight.Get(modFloor(x, chunkWidth), y, modFloor(z, chunkWidth))
 }
 func (w *World) LightBlockAt(x, y, z int) byte {
 	if y < 0 || y >= chunkHeight {
@@ -35,29 +35,29 @@ func (w *World) LightBlockAt(x, y, z int) byte {
 	if c == nil {
 		return 0
 	}
-	return c.blockLight[modFloor(x, chunkWidth)][y][modFloor(z, chunkWidth)]
+	return c.blockLight.Get(modFloor(x, chunkWidth), y, modFloor(z, chunkWidth))
 }
 
 // initializeChunkLighting operates only on c. The generation worker calls it
 // after filling blocks and before publishing c, while exclusively owning c.
 // Missing neighbors supply no light. No World, locks, or mesh state is needed.
 func initializeChunkLighting(c *Chunk) {
-	c.skyLight = [chunkWidth][chunkHeight][chunkWidth]byte{}
-	c.blockLight = [chunkWidth][chunkHeight][chunkWidth]byte{}
+	c.skyLight.Fill(15)
+	c.blockLight = chunkPlane{}
 	blockQueue := make([]lightPos, 0, 64)
 	for x := 0; x < chunkWidth; x++ {
 		for z := 0; z < chunkWidth; z++ {
 			open := true
 			for y := chunkHeight - 1; y >= 0; y-- {
-				block := c.blocks[x][y][z]
+				block := c.blocks.Get(x, y, z)
 				if isOpaqueBlock(block) {
 					open = false
 				}
-				if open {
-					c.skyLight[x][y][z] = 15
+				if !open {
+					c.skyLight.Set(x, y, z, 0)
 				}
 				if emit := lightEmission(block); emit > 0 {
-					c.blockLight[x][y][z] = emit
+					c.blockLight.Set(x, y, z, emit)
 					blockQueue = append(blockQueue, lightPos{x, y, z})
 				}
 			}
@@ -68,14 +68,14 @@ func initializeChunkLighting(c *Chunk) {
 	for x := 0; x < chunkWidth; x++ {
 		for y := 0; y < chunkHeight; y++ {
 			for z := 0; z < chunkWidth; z++ {
-				if c.skyLight[x][y][z] != 0 || isOpaqueBlock(c.blocks[x][y][z]) {
+				if c.skyLight.Get(x, y, z) != 0 || isOpaqueBlock(c.blocks.Get(x, y, z)) {
 					continue
 				}
 				p := lightPos{x, y, z}
 				for _, d := range lightDirections {
 					n := p.add(d)
-					if localLightPos(n) && c.skyLight[n.x][n.y][n.z] == 15 {
-						c.skyLight[x][y][z] = 14
+					if localLightPos(n) && c.skyLight.Get(n.x, n.y, n.z) == 15 {
+						c.skyLight.Set(x, y, z, 14)
 						skyQueue = append(skyQueue, p)
 						break
 					}
@@ -85,24 +85,26 @@ func initializeChunkLighting(c *Chunk) {
 	}
 	spreadLocalLight(c, &c.skyLight, skyQueue)
 	spreadLocalLight(c, &c.blockLight, blockQueue)
+	c.skyLight.Compact()
+	c.blockLight.Compact()
 }
 func localLightPos(p lightPos) bool {
 	return p.x >= 0 && p.x < chunkWidth && p.y >= 0 && p.y < chunkHeight && p.z >= 0 && p.z < chunkWidth
 }
-func spreadLocalLight(c *Chunk, light *[chunkWidth][chunkHeight][chunkWidth]byte, queue []lightPos) {
+func spreadLocalLight(c *Chunk, light *chunkPlane, queue []lightPos) {
 	for head := 0; head < len(queue); head++ {
 		p := queue[head]
-		level := light[p.x][p.y][p.z]
+		level := light.Get(p.x, p.y, p.z)
 		if level <= 1 {
 			continue
 		} // Guard before unsigned subtraction.
 		for _, d := range lightDirections {
 			n := p.add(d)
-			if !localLightPos(n) || isOpaqueBlock(c.blocks[n.x][n.y][n.z]) {
+			if !localLightPos(n) || isOpaqueBlock(c.blocks.Get(n.x, n.y, n.z)) {
 				continue
 			}
-			if light[n.x][n.y][n.z] < level-1 {
-				light[n.x][n.y][n.z] = level - 1
+			if light.Get(n.x, n.y, n.z) < level-1 {
+				light.Set(n.x, n.y, n.z, level-1)
 				queue = append(queue, n)
 			}
 		}
@@ -149,16 +151,16 @@ func (u *lightUpdate) level(p lightPos, sky bool) byte {
 		return 0
 	}
 	if sky {
-		return c.c.skyLight[x][p.y][z]
+		return c.c.skyLight.Get(x, p.y, z)
 	}
-	return c.c.blockLight[x][p.y][z]
+	return c.c.blockLight.Get(x, p.y, z)
 }
 func (c *lightChunkCache) directSky(x, y, z int) bool {
 	if !c.known[x][z] {
 		c.known[x][z] = true
 		c.top[x][z] = -1
 		for cy := chunkHeight - 1; cy >= 0; cy-- {
-			if isOpaqueBlock(c.c.blocks[x][cy][z]) {
+			if isOpaqueBlock(c.c.blocks.Get(x, cy, z)) {
 				c.top[x][z] = cy
 				break
 			}
@@ -197,14 +199,14 @@ func (u *lightUpdate) set(p lightPos, sky bool, value byte) bool {
 	if c == nil {
 		return false
 	}
-	light := &c.c.blockLight[x][p.y][z]
+	light := &c.c.blockLight
 	if sky {
-		light = &c.c.skyLight[x][p.y][z]
+		light = &c.c.skyLight
 	}
-	if *light == value {
+	if light.Get(x, p.y, z) == value {
 		return false
 	}
-	*light = value
+	light.Set(x, p.y, z, value)
 	c.c.lightDirtySections |= 1 << (p.y / sectionHeight)
 	if u.w.lightChanged == nil {
 		u.w.lightChanged = make(map[chunkKey]bool)
@@ -233,7 +235,7 @@ func (u *lightUpdate) desired(p lightPos, sky bool) byte {
 	if c == nil {
 		return 0
 	}
-	block := c.c.blocks[x][p.y][z]
+	block := c.c.blocks.Get(x, p.y, z)
 	value := lightEmission(block)
 	if sky {
 		value = 0
@@ -311,10 +313,10 @@ func (u *lightUpdate) stitch(cx, cz int) {
 		if ac == nil || bc == nil {
 			return
 		}
-		as, bs := int(ac.c.skyLight[ax][a.y][az]), int(bc.c.skyLight[bx][b.y][bz])
-		al, bl := int(ac.c.blockLight[ax][a.y][az]), int(bc.c.blockLight[bx][b.y][bz])
-		toA := !isOpaqueBlock(ac.c.blocks[ax][a.y][az]) && (bs > as+1 || bl > al+1)
-		toB := !isOpaqueBlock(bc.c.blocks[bx][b.y][bz]) && (as > bs+1 || al > bl+1)
+		as, bs := int(ac.c.skyLight.Get(ax, a.y, az)), int(bc.c.skyLight.Get(bx, b.y, bz))
+		al, bl := int(ac.c.blockLight.Get(ax, a.y, az)), int(bc.c.blockLight.Get(bx, b.y, bz))
+		toA := !isOpaqueBlock(ac.c.blocks.Get(ax, a.y, az)) && (bs > as+1 || bl > al+1)
+		toB := !isOpaqueBlock(bc.c.blocks.Get(bx, b.y, bz)) && (as > bs+1 || al > bl+1)
 		if toA || toB {
 			seeds = append(seeds, a, b)
 		}
@@ -350,7 +352,7 @@ func (w *World) rebuildLightingForChunk(cx, cz int) {
 	for x := 0; x < chunkWidth; x++ {
 		for y := 0; y < chunkHeight; y++ {
 			for z := 0; z < chunkWidth; z++ {
-				if oldSky[x][y][z] != c.skyLight[x][y][z] || oldBlock[x][y][z] != c.blockLight[x][y][z] {
+				if oldSky.Get(x, y, z) != c.skyLight.Get(x, y, z) || oldBlock.Get(x, y, z) != c.blockLight.Get(x, y, z) {
 					if w.lightChanged == nil {
 						w.lightChanged = make(map[chunkKey]bool)
 					}

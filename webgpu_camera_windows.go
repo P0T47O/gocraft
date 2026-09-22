@@ -13,7 +13,7 @@ import (
 
 func webGPUCameraMatrices(camera webGPUCamera, width, height uint32) (mgl32.Mat4, mgl32.Mat4, mgl32.Vec3) {
 	aspect := float32(max(uint32(1), width)) / float32(max(uint32(1), height))
-	projection := mgl32.Perspective(mgl32.DegToRad(camera.Fovy), aspect, 0.01, 1000.0)
+	projection := mgl32.Perspective(mgl32.DegToRad(camera.Fovy), aspect, 0.01, worldFarPlane(renderDistance()))
 	eye := mgl32.Vec3{camera.Position.X, camera.Position.Y, camera.Position.Z}
 	view := mgl32.LookAtV(
 		eye,

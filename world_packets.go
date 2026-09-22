@@ -14,6 +14,16 @@ func (w *World) applyChunkPacket(p *PacketChunkData) bool {
 	cx, cz := int(p.CX), int(p.CZ)
 	c := w.requestChunk(cx, cz)
 	fresh := !c.generated
+	if fresh {
+		c.heightMap = [chunkWidth][chunkWidth]int16{}
+		c.sectionBlocks = [sectionCount]uint16{}
+		c.torches = c.torches[:0]
+		c.torchCount = 0
+		c.blocks.FromWire(p.Data, 0, 255)
+		c.meta.FromWire(p.MetaData, 0, 255)
+		c.skyLight.FromWire(p.LightData, 4, 15)
+		c.blockLight.FromWire(p.LightData, 0, 15)
+	}
 	var changed [sectionCount]bool
 	var meshChanges chunkMeshChanges
 	geometryChanged := fresh
@@ -26,8 +36,18 @@ func (w *World) applyChunkPacket(p *PacketChunkData) bool {
 					meta = p.MetaData[idx]
 				}
 				light := p.LightData[idx]
-				geometry := c.blocks[x][y][z] != p.Data[idx] || c.meta[x][y][z] != meta
-				if fresh || geometry || c.skyLight[x][y][z] != light>>4 || c.blockLight[x][y][z] != light&15 {
+				// Derive metadata directly from the packet already being scanned,
+				// avoiding two extra passes through sparse storage on first receipt.
+				if fresh && p.Data[idx] != blockAir {
+					c.heightMap[x][z] = int16(y + 1)
+					c.sectionBlocks[y/sectionHeight]++
+					if p.Data[idx] == blockTorch {
+						c.torches = append(c.torches, blockPos{x, y, z})
+						c.torchCount++
+					}
+				}
+				geometry := fresh || c.blocks.Get(x, y, z) != p.Data[idx] || c.meta.Get(x, y, z) != meta
+				if fresh || geometry || c.skyLight.Get(x, y, z) != light>>4 || c.blockLight.Get(x, y, z) != light&15 {
 					changed[y/sectionHeight] = true
 					// Missing neighbors were sampled as air with full sky light.
 					// An empty, sunlit new voxel does not invalidate their meshes.
@@ -36,19 +56,27 @@ func (w *World) applyChunkPacket(p *PacketChunkData) bool {
 					}
 				}
 				geometryChanged = geometryChanged || geometry
-				c.blocks[x][y][z] = p.Data[idx]
-				c.meta[x][y][z] = meta
-				c.skyLight[x][y][z] = light >> 4
-				c.blockLight[x][y][z] = light & 15
+				if !fresh {
+					c.blocks.Set(x, y, z, p.Data[idx])
+					c.meta.Set(x, y, z, meta)
+					c.skyLight.Set(x, y, z, light>>4)
+					c.blockLight.Set(x, y, z, light&15)
+				}
 				idx++
 			}
 		}
 	}
-	if geometryChanged {
+	if geometryChanged && !fresh {
 		c.rebuildHeightMap()
 		c.rebuildTorchCount()
 	}
 	c.generated = true
+	if !fresh {
+		c.blocks.Compact()
+		c.meta.Compact()
+		c.skyLight.Compact()
+		c.blockLight.Compact()
+	}
 	ensureChunkSections(c)
 	if fresh {
 		meshChanges[1][1] = 0xffff

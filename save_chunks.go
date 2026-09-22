@@ -68,8 +68,8 @@ func TryLoadChunk(savePath string, chunk *Chunk, chunkX, chunkZ int) bool {
 	return true
 }
 
-func saveChunkFile(root string, x, y, z int, blocks *[chunkWidth][chunkHeight][chunkWidth]byte, meta *[chunkWidth][chunkHeight][chunkWidth]byte) error {
-	palette, rleBlocks, rleMeta := encodeChunk(blocks, meta)
+func saveChunkFile(root string, x, y, z int, blocks, meta *chunkPlane) error {
+	palette, rleBlocks, rleMeta := encodeSparseChunk(blocks, meta)
 	payload := make([]byte, 0, 2+len(palette)+4+len(rleBlocks)+4+len(rleMeta))
 	payload = appendUint16(payload, uint16(len(palette)))
 	payload = append(payload, palette...)
@@ -96,7 +96,17 @@ func saveChunkFile(root string, x, y, z int, blocks *[chunkWidth][chunkHeight][c
 	return writeSaveFile(path, append(header.Bytes(), compressed...))
 }
 
-func loadChunkFile(root string, x, y, z int, blocks *[chunkWidth][chunkHeight][chunkWidth]byte, meta *[chunkWidth][chunkHeight][chunkWidth]byte) error {
+func loadChunkFile(root string, x, y, z int, blocks, meta *chunkPlane) error {
+	b, m := new([chunkWidth][chunkHeight][chunkWidth]byte), new([chunkWidth][chunkHeight][chunkWidth]byte)
+	if err := loadDenseChunkFile(root, x, y, z, b, m); err != nil {
+		return err
+	}
+	blocks.FromDense(b)
+	meta.FromDense(m)
+	return nil
+}
+
+func loadDenseChunkFile(root string, x, y, z int, blocks *[chunkWidth][chunkHeight][chunkWidth]byte, meta *[chunkWidth][chunkHeight][chunkWidth]byte) error {
 	path := filepath.Join(root, chunkDir, fmt.Sprintf("%d_%d_%d.bin", x, y, z))
 	data, err := os.ReadFile(path)
 	if err != nil {

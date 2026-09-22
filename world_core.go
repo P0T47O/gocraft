@@ -68,15 +68,15 @@ type Chunk struct {
 	tints                *meshTintCache
 	meshRequest          [sectionCount]uint64
 	meshSubmittedVersion [sectionCount]uint32
-	blocks               [chunkWidth][chunkHeight][chunkWidth]byte
-	meta                 [chunkWidth][chunkHeight][chunkWidth]byte
+	blocks               chunkPlane
+	meta                 chunkPlane
 	heightMap            [chunkWidth][chunkWidth]int16
 	opaqueMeshes         []map[string][]*ChunkMesh
 	waterMeshes          []map[string][]*ChunkMesh
 	cutoutMeshes         []map[string][]*ChunkMesh
 	glassMeshes          []map[string][]*ChunkMesh
-	skyLight             [chunkWidth][chunkHeight][chunkWidth]byte
-	blockLight           [chunkWidth][chunkHeight][chunkWidth]byte
+	skyLight             chunkPlane
+	blockLight           chunkPlane
 	meshRetries          [sectionCount]byte // Track failures to prevent infinite retry loops
 	dirty                bool
 	generated            bool
@@ -264,7 +264,7 @@ func (w *World) BlockAt(x, y, z int) byte {
 	// unloaded coordinates use the deterministic terrain baseline. Callers that
 	// need materialized chunk state must request/write it explicitly.
 	if chunk := w.getChunkIfGenerated(cx, cz); chunk != nil {
-		return chunk.blocks[lx][y][lz]
+		return chunk.blocks.Get(lx, y, lz)
 	}
 	return blockAtProcedural(w.seed, x, y, z)
 }
@@ -278,7 +278,7 @@ func (w *World) MetaAt(x, y, z int) byte {
 	lx := modFloor(x, chunkWidth)
 	lz := modFloor(z, chunkWidth)
 	if chunk := w.getChunkIfGenerated(cx, cz); chunk != nil {
-		return chunk.meta[lx][y][lz]
+		return chunk.meta.Get(lx, y, lz)
 	}
 	return 0
 }
@@ -297,11 +297,11 @@ func (w *World) SetMetaAt(x, y, z int, meta byte) {
 		return
 	}
 	chunk.mu.Lock()
-	if chunk.meta[lx][y][lz] == meta {
+	if chunk.meta.Get(lx, y, lz) == meta {
 		chunk.mu.Unlock()
 		return
 	}
-	chunk.meta[lx][y][lz] = meta
+	chunk.meta.Set(lx, y, lz, meta)
 	chunk.dirty = true
 	ensureChunkSections(chunk)
 	sec := sectionIndexForY(y)
@@ -325,12 +325,12 @@ func (w *World) SetBlockAt(x, y, z int, block byte) {
 		return
 	}
 	chunk.mu.Lock()
-	oldBlock := chunk.blocks[lx][y][lz]
+	oldBlock := chunk.blocks.Get(lx, y, lz)
 	if oldBlock == block {
 		chunk.mu.Unlock()
 		return
 	}
-	chunk.blocks[lx][y][lz] = block
+	chunk.blocks.Set(lx, y, lz, block)
 	if oldBlock == blockAir {
 		chunk.sectionBlocks[y/sectionHeight]++
 	}
@@ -353,7 +353,7 @@ func (w *World) SetBlockAt(x, y, z int, block byte) {
 		chunk.torchCount++
 		chunk.torches = append(chunk.torches, blockPos{lx, y, lz})
 	}
-	chunk.meta[lx][y][lz] = 0
+	chunk.meta.Set(lx, y, lz, 0)
 	chunk.updateHeightMap(lx, lz, y)
 	chunk.dirty = true
 	ensureChunkSections(chunk)
@@ -520,14 +520,14 @@ func sectionIndexForY(y int) int {
 func (c *Chunk) updateHeightMap(x, z, y int) {
 	current := int(c.heightMap[x][z])
 	if y >= current {
-		if c.blocks[x][y][z] != blockAir {
+		if c.blocks.Get(x, y, z) != blockAir {
 			c.heightMap[x][z] = int16(y + 1)
 		}
 		return
 	}
-	if y == current-1 && c.blocks[x][y][z] == blockAir {
+	if y == current-1 && c.blocks.Get(x, y, z) == blockAir {
 		for ny := y - 1; ny >= 0; ny-- {
-			if c.blocks[x][ny][z] != blockAir {
+			if c.blocks.Get(x, ny, z) != blockAir {
 				c.heightMap[x][z] = int16(ny + 1)
 				return
 			}
@@ -541,7 +541,7 @@ func (c *Chunk) rebuildHeightMap() {
 		for z := 0; z < chunkWidth; z++ {
 			h := 0
 			for y := chunkHeight - 1; y >= 0; y-- {
-				if c.blocks[x][y][z] != blockAir {
+				if c.blocks.Get(x, y, z) != blockAir {
 					h = y + 1
 					break
 				}
@@ -558,10 +558,10 @@ func (c *Chunk) rebuildTorchCount() {
 	for x := 0; x < chunkWidth; x++ {
 		for y := 0; y < chunkHeight; y++ {
 			for z := 0; z < chunkWidth; z++ {
-				if c.blocks[x][y][z] != blockAir {
+				if c.blocks.Get(x, y, z) != blockAir {
 					c.sectionBlocks[y/sectionHeight]++
 				}
-				if c.blocks[x][y][z] == blockTorch {
+				if c.blocks.Get(x, y, z) == blockTorch {
 					count++
 					c.torches = append(c.torches, blockPos{x, y, z})
 				}

@@ -73,7 +73,7 @@ func TestWebGPUSurfacePreview(t *testing.T) {
 		if chunk == nil {
 			return blockAir
 		}
-		return chunk.blocks[lx][wy][lz]
+		return chunk.blocks.Get(lx, wy, lz)
 	}
 	getLight := func(wx, wy, wz int) byte {
 		if wy < 0 || wy >= chunkHeight {
@@ -83,8 +83,8 @@ func TestWebGPUSurfacePreview(t *testing.T) {
 		if chunk == nil {
 			return 15
 		}
-		sky := chunk.skyLight[lx][wy][lz]
-		block := chunk.blockLight[lx][wy][lz]
+		sky := chunk.skyLight.Get(lx, wy, lz)
+		block := chunk.blockLight.Get(lx, wy, lz)
 		if block > sky {
 			return block
 		}
@@ -98,7 +98,7 @@ func TestWebGPUSurfacePreview(t *testing.T) {
 		if chunk == nil {
 			return 0
 		}
-		return chunk.meta[lx][wy][lz]
+		return chunk.meta.Get(lx, wy, lz)
 	}
 
 	// Keep enough subsurface geometry to prove depth/occlusion still work while

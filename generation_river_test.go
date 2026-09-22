@@ -32,7 +32,7 @@ func TestGenerationRiversAndFrozenWater(t *testing.T) {
 				var chunk Chunk
 				cx, cz := int(math.Floor(float64(x)/chunkWidth)), int(math.Floor(float64(z)/chunkWidth))
 				generateChunkData(42, cx, cz, &chunk)
-				if chunk.blocks[0][seaLevel-1][z-cz*chunkWidth] != want {
+				if chunk.blocks.Get(0, seaLevel-1, z-cz*chunkWidth) != want {
 					t.Fatal("chunk/fallback river mismatch")
 				}
 				boundary = true

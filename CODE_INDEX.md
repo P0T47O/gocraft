@@ -14,6 +14,7 @@
 | 后端中立玩家摄像机、朝向初始化与瞄准射线 | [game_camera.go](game_camera.go)、[game_camera_test.go](game_camera_test.go) |
 | 后端中立输入帧、文本队列、鼠标捕获边界 | [window_input.go](window_input.go)、[window_input_test.go](window_input_test.go)；原生采集 [window_win32_windows.go](window_win32_windows.go)，每帧采集一次 |
 | 客户端缺失区块请求：近处优先、跨帧游标、定期重试、发送反压 | [game_streaming.go](game_streaming.go)：`requestMissingChunks`；回归 [game_streaming_test.go](game_streaming_test.go) |
+| 512在途请求窗口、满窗口重试及收包自适应预算（0.25–6ms） | [game_streaming.go](game_streaming.go)、[game_streaming_boundary_test.go](game_streaming_boundary_test.go)、[client_packet_budget.go](client_packet_budget.go)、[client_packet_budget_test.go](client_packet_budget_test.go)、[game_update.go](game_update.go) |
 | 请求队列平移复用、重试/传送/断线/视距缩小与会话重置回归，16/32/64 调度微基准 | [game_streaming_boundary_test.go](game_streaming_boundary_test.go) |
 | 客户端收到消息后的状态更新 | [game_packets.go](game_packets.go)：`handlePacket` |
 | 远程实体插值 | [game_entities.go](game_entities.go) |
@@ -26,7 +27,7 @@
 | WebGPU Playing 单 pass 合成（world + entities/effects + HUD/text + inventory/container + 暂停/死亡菜单） | [webgpu_gameplay_windows.go](webgpu_gameplay_windows.go)：`DrawGameplay` |
 | 后端中立帧快照与窗口设置桥接 | [webgpu_frame.go](webgpu_frame.go)、[settings_window.go](settings_window.go)；配置读写本身在 Raylib-free 的 [settings.go](settings.go) |
 | 客户端连接与收发（网络层不依赖 Raylib；位置/朝向以标量传入） | [client.go](client.go) |
-| 配置、渲染距离 | [settings.go](settings.go)、[menu_screens.go](menu_screens.go) |
+| 配置、渲染距离（8–128 区块半径，默认24；超过32提示高内存占用） | [settings.go](settings.go)、[menu_screens.go](menu_screens.go)；远裁剪随半径扩展：[world_render.go](world_render.go)、[webgpu_camera_windows.go](webgpu_camera_windows.go) |
 
 ## 服务端与协议
 
@@ -56,6 +57,8 @@
 | 功能 | 文件 |
 | --- | --- |
 | World、区块查询与修改 | [world_core.go](world_core.go)、[types.go](types.go) |
+| 稀疏16³区块字段、统一值段、展开/压缩和密集存档适配 | [chunk_storage.go](chunk_storage.go)、[save_chunks.go](save_chunks.go)、[world_packets.go](world_packets.go)；正确性/内存/性能测试：[chunk_storage_test.go](chunk_storage_test.go)、[chunk_storage_equivalence_test.go](chunk_storage_equivalence_test.go)；收益与代价：[CHUNK_STORAGE.md](CHUNK_STORAGE.md) |
+| 稀疏列批量复制到网格快照、首次收包同步统计高度/火把/分段非空数 | [chunk_storage.go](chunk_storage.go)：`CopyColumn`；[world_mesh.go](world_mesh.go)、[world_packets.go](world_packets.go)；等价回归 [chunk_storage_batch_test.go](chunk_storage_batch_test.go) |
 | 线程与关闭、对象池 | [world_lifecycle.go](world_lifecycle.go)、[world_pool.go](world_pool.go) |
 | 生成任务、区块填充、矿脉 | [world_gen.go](world_gen.go) |
 | 群系权重、高度场、河道、地表与植被规则 | [generation_biomes.go](generation_biomes.go) |
@@ -92,6 +95,7 @@
 | 方块/掉落物绘制 | [webgpu_entities_windows.go](webgpu_entities_windows.go) |
 | 性能采样与日志（不依赖窗口库；主循环通过 `UpdateFrame` 传入帧耗时） | [performance_monitor.go](performance_monitor.go) |
 | 加载阶段耗时/积压/废弃网格统计、32 半径服务端冷加载实测 | [performance_loading.go](performance_loading.go)、[streaming_load_test.go](streaming_load_test.go)、[LOADING.md](LOADING.md) |
+| 128半径真实TCP/网格/WebGPU受限压力测试及瓶颈报告 | [streaming_stress_windows_test.go](streaming_stress_windows_test.go)、[STRESS128.md](STRESS128.md)；`GOCRAFT_STRESS128=1`，临时世界、45秒/内存保护，不是满范围验收 |
 | 请求到收包/网格就绪延迟、世界网格缓冲区占用与上传字节数 | [performance_streaming.go](performance_streaming.go)、[performance_loading.go](performance_loading.go)、[platform/mesh.go](platform/mesh.go)、[platform/webgpu_backend.go](platform/webgpu_backend.go)；计数释放回归 [platform/mesh_metrics_test.go](platform/mesh_metrics_test.go) |
 
 ## 玩法、界面与存档
@@ -112,6 +116,7 @@
 | 区块文件与批量存取 | [save_chunks.go](save_chunks.go) |
 | 实体、旧玩家文件、玩家背包状态 | [save_entities.go](save_entities.go)、[save_player.go](save_player.go)、[survival.go](survival.go)；中立摄像机存档往返及全部截断长度回归：[game_camera_test.go](game_camera_test.go) |
 | RLE、调色板、二进制基础编码 | [save_codec.go](save_codec.go) |
+| 稀疏分段直接生成兼容调色板/RLE，避免保存时密集展开 | [save_sparse_codec.go](save_sparse_codec.go)；逐字节兼容和编码性能对照 [save_sparse_codec_test.go](save_sparse_codec_test.go) |
 | 临时文件写入与替换 | [save_file.go](save_file.go) |
 
 ## 验证与维护规则
