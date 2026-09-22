@@ -116,7 +116,7 @@
 | 区块文件与批量存取 | [save_chunks.go](save_chunks.go) |
 | 实体、旧玩家文件、玩家背包状态 | [save_entities.go](save_entities.go)、[save_player.go](save_player.go)、[survival.go](survival.go)；中立摄像机存档往返及全部截断长度回归：[game_camera_test.go](game_camera_test.go) |
 | RLE、调色板、二进制基础编码 | [save_codec.go](save_codec.go) |
-| 稀疏分段直接生成兼容调色板/RLE，避免保存时密集展开 | [save_sparse_codec.go](save_sparse_codec.go)；逐字节兼容和编码性能对照 [save_sparse_codec_test.go](save_sparse_codec_test.go) |
+| 稀疏分段直接编解码兼容调色板/RLE，避免存取时密集展开 | [save_sparse_codec.go](save_sparse_codec.go)、[save_sparse_decode.go](save_sparse_decode.go)；逐字节兼容、往返、损坏输入原子性及编解码性能对照 [save_sparse_codec_test.go](save_sparse_codec_test.go) |
 | 临时文件写入与替换 | [save_file.go](save_file.go) |
 
 ## 验证与维护规则

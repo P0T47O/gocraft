@@ -97,16 +97,6 @@ func saveChunkFile(root string, x, y, z int, blocks, meta *chunkPlane) error {
 }
 
 func loadChunkFile(root string, x, y, z int, blocks, meta *chunkPlane) error {
-	b, m := new([chunkWidth][chunkHeight][chunkWidth]byte), new([chunkWidth][chunkHeight][chunkWidth]byte)
-	if err := loadDenseChunkFile(root, x, y, z, b, m); err != nil {
-		return err
-	}
-	blocks.FromDense(b)
-	meta.FromDense(m)
-	return nil
-}
-
-func loadDenseChunkFile(root string, x, y, z int, blocks *[chunkWidth][chunkHeight][chunkWidth]byte, meta *[chunkWidth][chunkHeight][chunkWidth]byte) error {
 	path := filepath.Join(root, chunkDir, fmt.Sprintf("%d_%d_%d.bin", x, y, z))
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -170,7 +160,7 @@ func loadDenseChunkFile(root string, x, y, z int, blocks *[chunkWidth][chunkHeig
 	rleBlocks := payload[pos : pos+rleLen]
 	pos += rleLen
 	if version == 6 {
-		return decodeChunk(palette, rleBlocks, blocks, meta, nil)
+		return decodeSparseChunk(palette, rleBlocks, blocks, meta, nil)
 	}
 	if len(payload) < pos+4 {
 		return errors.New("chunk meta header too small")
@@ -181,7 +171,7 @@ func loadDenseChunkFile(root string, x, y, z int, blocks *[chunkWidth][chunkHeig
 		return errors.New("chunk meta too small")
 	}
 	rleMeta := payload[pos : pos+metaLen]
-	return decodeChunk(palette, rleBlocks, blocks, meta, rleMeta)
+	return decodeSparseChunk(palette, rleBlocks, blocks, meta, rleMeta)
 }
 
 func loadAllChunks(root string, world *World) error {

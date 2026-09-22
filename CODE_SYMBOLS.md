@@ -416,7 +416,7 @@
 
 ## [save_chunks.go](save_chunks.go)
 
-函数/方法：`SaveWorldChunks`、`SaveChunk`、`TryLoadChunk`、`saveChunkFile`、`loadChunkFile`、`loadDenseChunkFile`、`loadAllChunks`
+函数/方法：`SaveWorldChunks`、`SaveChunk`、`TryLoadChunk`、`saveChunkFile`、`loadChunkFile`、`loadAllChunks`
 
 ## [save_codec.go](save_codec.go)
 
@@ -449,6 +449,10 @@
 类型：`chunkRunEncoder`
 
 函数/方法：`*chunkRunEncoder.add`、`*chunkRunEncoder.flush`、`encodeSparseChunk`
+
+## [save_sparse_decode.go](save_sparse_decode.go)
+
+函数/方法：`decodeSparseChunk`、`decodeSparsePlane`
 
 ## [server.go](server.go)
 
