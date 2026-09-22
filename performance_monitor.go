@@ -13,6 +13,7 @@ import (
 )
 
 type PerformanceMonitor struct {
+	receiveLatency, readyLatency                                   []float64 // client main-loop samples, milliseconds
 	loading                                                        [loadingPhaseCount]loadingPhaseCounter
 	genQueued, genReady, chunksPending, chunksPublished, meshStale atomic.Int64
 	file                                                           *os.File

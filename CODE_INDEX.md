@@ -9,10 +9,12 @@
 | --- | --- |
 | 程序入口、全局界面状态（默认原生 WebGPU） | [main.go](main.go)：`main` |
 | 游戏会话建立与退出 | [game_session.go](game_session.go)：`startGame`、`exitGame` |
+| 原生图形错误诊断与退出后系统提示（不依赖 GPU） | [graphics_failure.go](graphics_failure.go)、[graphics_failure_windows.go](graphics_failure_windows.go)、[graphics_failure_stub.go](graphics_failure_stub.go)；日志回归 [graphics_failure_test.go](graphics_failure_test.go) |
 | 每帧更新、暂停、输入与地形就绪 | [game_update.go](game_update.go)：`updateGame` |
 | 后端中立玩家摄像机、朝向初始化与瞄准射线 | [game_camera.go](game_camera.go)、[game_camera_test.go](game_camera_test.go) |
 | 后端中立输入帧、文本队列、鼠标捕获边界 | [window_input.go](window_input.go)、[window_input_test.go](window_input_test.go)；原生采集 [window_win32_windows.go](window_win32_windows.go)，每帧采集一次 |
-| 客户端缺失区块请求 | [game_streaming.go](game_streaming.go)：`requestMissingChunks` |
+| 客户端缺失区块请求：近处优先、跨帧游标、定期重试、发送反压 | [game_streaming.go](game_streaming.go)：`requestMissingChunks`；回归 [game_streaming_test.go](game_streaming_test.go) |
+| 请求队列平移复用、重试/传送/断线/视距缩小与会话重置回归，16/32/64 调度微基准 | [game_streaming_boundary_test.go](game_streaming_boundary_test.go) |
 | 客户端收到消息后的状态更新 | [game_packets.go](game_packets.go)：`handlePacket` |
 | 远程实体插值 | [game_entities.go](game_entities.go) |
 | 游戏场景绘制 | [webgpu_gameplay_windows.go](webgpu_gameplay_windows.go) |
@@ -40,6 +42,7 @@
 | 实体更新、生成、背包同步 | [server_entities.go](server_entities.go) |
 | 聊天命令 | [server_commands.go](server_commands.go) |
 | 服务端保存编排 | [server_save.go](server_save.go)：`Save` |
+| 保存错误汇总、退出等待完成与失败日志 | [server_save_result_test.go](server_save_result_test.go)、[session_shutdown.go](session_shutdown.go)、[session_shutdown_test.go](session_shutdown_test.go)、[save_failure.go](save_failure.go)；服务端关闭结果经 Done 同步后由 [game_session.go](game_session.go) 读取 |
 | 协议 ID、Packet 接口、读写分帧与分发 | [protocol.go](protocol.go) |
 | VarInt、字符串编码 | [protocol_codec.go](protocol_codec.go) |
 | 区块与方块消息 | [protocol_world.go](protocol_world.go) |
@@ -89,6 +92,7 @@
 | 方块/掉落物绘制 | [webgpu_entities_windows.go](webgpu_entities_windows.go) |
 | 性能采样与日志（不依赖窗口库；主循环通过 `UpdateFrame` 传入帧耗时） | [performance_monitor.go](performance_monitor.go) |
 | 加载阶段耗时/积压/废弃网格统计、32 半径服务端冷加载实测 | [performance_loading.go](performance_loading.go)、[streaming_load_test.go](streaming_load_test.go)、[LOADING.md](LOADING.md) |
+| 请求到收包/网格就绪延迟、世界网格缓冲区占用与上传字节数 | [performance_streaming.go](performance_streaming.go)、[performance_loading.go](performance_loading.go)、[platform/mesh.go](platform/mesh.go)、[platform/webgpu_backend.go](platform/webgpu_backend.go)；计数释放回归 [platform/mesh_metrics_test.go](platform/mesh_metrics_test.go) |
 
 ## 玩法、界面与存档
 

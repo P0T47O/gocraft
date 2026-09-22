@@ -84,7 +84,9 @@
 
 ## [game_streaming.go](game_streaming.go)
 
-函数/方法：`requestMissingChunks`
+类型：`chunkRequestPlan`
+
+函数/方法：`*chunkRequestPlan.prepare`、`*chunkRequestPlan.contains`、`requestMissingChunks`、`requestMissingChunksAt`
 
 ## [game_update.go](game_update.go)
 
@@ -113,6 +115,18 @@
 类型：`treeAnchor`
 
 函数/方法：`sampleTreeAnchor`、`treeAnchorFromColumn`、`treeAnchor.emit`、`generationIsLog`、`generationIsLeaf`、`placeGeneratedTrees`、`placeGeneratedTreesSampled`
+
+## [graphics_failure.go](graphics_failure.go)
+
+函数/方法：`graphicsFailureMessage`
+
+## [graphics_failure_stub.go](graphics_failure_stub.go)
+
+函数/方法：`reportNativeGraphicsFailure`
+
+## [graphics_failure_windows.go](graphics_failure_windows.go)
+
+函数/方法：`reportNativeGraphicsFailure`
 
 ## [input.go](input.go)
 
@@ -260,6 +274,10 @@
 
 函数/方法：`NewPerformanceMonitor`、`*PerformanceMonitor.Close`、`*PerformanceMonitor.IncrementMeshBuild`、`*PerformanceMonitor.IncrementChunkLoad`、`*PerformanceMonitor.IncrementChunkUnload`、`*PerformanceMonitor.RecordTick`、`framePercentiles`、`*PerformanceMonitor.UpdateFrame`、`*PerformanceMonitor.logMetrics`
 
+## [performance_streaming.go](performance_streaming.go)
+
+函数/方法：`recordChunkReady`、`resetChunkStreaming`
+
 ## [platform/compact_vertex.go](platform/compact_vertex.go)
 
 类型：`CompactVertex`
@@ -398,6 +416,10 @@
 
 函数/方法：`SaveEntities`、`LoadEntities`
 
+## [save_failure.go](save_failure.go)
+
+函数/方法：`saveFailureMessage`
+
 ## [save_file.go](save_file.go)
 
 函数/方法：`writeSaveFile`、`replaceSaveFile`
@@ -455,6 +477,10 @@
 ## [server_tick.go](server_tick.go)
 
 函数/方法：`*Server.Tick`
+
+## [session_shutdown.go](session_shutdown.go)
+
+函数/方法：`waitForServerSave`
 
 ## [settings.go](settings.go)
 

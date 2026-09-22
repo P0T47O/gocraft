@@ -468,6 +468,9 @@ func (w *World) ProcessMeshResults(assets *RenderAssets, maxPerFrame int) {
 			perfMon.recordLoading(phaseUpload, uploadStart)
 			c.meshRetries[sec] = 0
 			c.sectionDirty[sec] = false
+			if w == world {
+				recordChunkReady(res.key, c)
+			}
 			perfMon.IncrementMeshBuild()
 		default:
 			return

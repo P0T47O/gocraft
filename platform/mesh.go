@@ -1,6 +1,12 @@
 package platform
 
+import "sync/atomic"
+
 var ActiveMeshCount int64
+
+// World mesh buffers only, excluding textures, UI, driver allocations and staging.
+var MeshBufferBytes atomic.Int64
+var MeshUploadedBytes atomic.Uint64
 
 // Vertex is the CPU mesher's 36-byte layout. The production backend packs it
 // into 24-byte GPU vertices; diagnostic pipelines can retain the full layout.

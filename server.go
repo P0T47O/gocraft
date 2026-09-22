@@ -29,6 +29,7 @@ type Server struct {
 	PacketCh          chan PacketWrapper
 	Shutdown          chan bool
 	Done              chan bool
+	ShutdownSaveError error // Read only after Done closes (channel synchronization).
 	stopOnce          sync.Once
 	networkWG         sync.WaitGroup
 	connections       map[net.Conn]bool // Includes sockets still waiting for login; ClientsMu protects it.
@@ -144,7 +145,7 @@ func (s *Server) Start() {
 			}
 			s.ClientsMu.Unlock()
 			s.networkWG.Wait()
-			s.Save()
+			s.ShutdownSaveError = s.Save()
 			s.World.Close()
 			close(s.Done)
 			return

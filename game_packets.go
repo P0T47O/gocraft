@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"time"
 )
 
 func handlePacket(pkt Packet) {
@@ -65,7 +66,14 @@ func handlePacket(pkt Packet) {
 
 	case *PacketChunkData:
 		if world.applyChunkPacket(p) {
-			delete(pendingChunkRequests, chunkKey{int(p.CX), int(p.CZ)})
+			key := chunkKey{int(p.CX), int(p.CZ)}
+			if _, pending := pendingChunkRequests[key]; pending {
+				if start, ok := chunkLoadStarts[key]; ok && perfMon != nil {
+					perfMon.receiveLatency = append(perfMon.receiveLatency, float64(time.Since(start))/float64(time.Millisecond))
+				}
+			}
+			delete(pendingChunkRequests, key)
+			recordChunkReady(key, world.getChunkIfGenerated(key.X, key.Z))
 		}
 	case *PacketChunkLight:
 		world.applyChunkLight(p)

@@ -57,7 +57,7 @@ func startGame(savePath string, ip string, isMultiplayer bool) {
 	}
 
 	// Client World
-	clear(pendingChunkRequests)
+	resetChunkStreaming()
 	clear(remoteEntities)
 	world = NewClientWorld()
 	world.StartMeshWorkers(assets, 8)
@@ -79,11 +79,13 @@ func exitGame() {
 	}
 	if server != nil {
 		server.Stop()
-		// Wait for server to finish saving
-		select {
-		case <-server.Done:
-		case <-time.After(5 * time.Second): // Fail-safe
-			fmt.Println("Server shutdown timed out")
+		// A timeout must not let the process exit while disk writes are active.
+		waitForServerSave(server.Done, 5*time.Second, func() {
+			fmt.Println("Server: Still waiting for shutdown/save; do not force close.")
+		})
+		if server.ShutdownSaveError != nil {
+			menuError = "World save failed. Check the console and save-error.log."
+			fmt.Println(saveFailureMessage(server.ShutdownSaveError, "save-error.log"))
 		}
 		server = nil
 	}
@@ -100,7 +102,7 @@ func exitGame() {
 		assets.unload()
 		assets = nil
 	}
-	clear(pendingChunkRequests)
+	resetChunkStreaming()
 	clear(remoteEntities)
 	// Reset State
 	currentState = StateMenu

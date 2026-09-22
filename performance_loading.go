@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"gocraft/platform"
 	"sync/atomic"
 	"time"
 )
@@ -38,7 +39,7 @@ func loadingCSVHeader() string {
 	for _, name := range loadingPhaseNames {
 		s += "," + name + "WorkMS," + name + "Calls"
 	}
-	return s + ",GenerationQueued,GenerationReady,ChunksPending,ChunksPublished,MeshStale,ClientPacketsQueued"
+	return s + ",GenerationQueued,GenerationReady,ChunksPending,ChunksPublished,MeshStale,ClientPacketsQueued,RequestReceiveCount,RequestReceiveP95MS,RequestReceiveP99MS,RequestReadyCount,RequestReadyP95MS,RequestReadyP99MS,ClientRequestsPending,ClientReadyPending,WorldMeshBufferBytes,WorldMeshUploadedBytes"
 }
 
 // WorkMS is aggregate wall time across workers per logging interval, not frame
@@ -52,5 +53,11 @@ func (pm *PerformanceMonitor) loadingCSVValues() string {
 	if client != nil {
 		queued = len(client.Incoming)
 	}
-	return s + fmt.Sprintf(",%d,%d,%d,%d,%d,%d", pm.genQueued.Load(), pm.genReady.Load(), pm.chunksPending.Load(), pm.chunksPublished.Swap(0), pm.meshStale.Swap(0), queued)
+	r95, r99 := framePercentiles(pm.receiveLatency)
+	m95, m99 := framePercentiles(pm.readyLatency)
+	extra := fmt.Sprintf(",%d,%.3f,%.3f,%d,%.3f,%.3f,%d,%d", len(pm.receiveLatency), r95, r99, len(pm.readyLatency), m95, m99, len(pendingChunkRequests), len(chunkLoadStarts))
+	pm.receiveLatency = pm.receiveLatency[:0]
+	pm.readyLatency = pm.readyLatency[:0]
+	extra += fmt.Sprintf(",%d,%d", platform.MeshBufferBytes.Load(), platform.MeshUploadedBytes.Swap(0))
+	return s + fmt.Sprintf(",%d,%d,%d,%d,%d,%d", pm.genQueued.Load(), pm.genReady.Load(), pm.chunksPending.Load(), pm.chunksPublished.Swap(0), pm.meshStale.Swap(0), queued) + extra
 }

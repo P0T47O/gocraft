@@ -29,6 +29,10 @@ Menu/inventory/container/vitals screenshots use the production GPU UI batches, n
 
 ## Remaining limits
 
+Session exit now waits for server shutdown/save completion rather than abandoning it after five seconds; every five seconds it prints a waiting reminder. Save stages aggregate errors and only report success when all stages succeed. Shutdown save failures are exposed to the main menu and appended to `save-error.log`; log-write failures remain visible in the console. This is not a transaction across all save files, and waiting remains synchronous (slow disks can make the window unresponsive). A hung server requires external intervention rather than silently discarding pending writes. Automatic retry/backup recovery and a responsive asynchronous saving screen remain follow-up work.
+
+Fatal native-loop errors now produce an append-only `graphics-error.log` and a Windows system dialog after deferred session/window/GPU cleanup. The dialog does not require a functioning GPU and does not claim saving succeeded. Log write failures are included in the message. This is diagnostic handling, not automatic device-loss recovery; actual driver-loss injection and the modal dialog still require manual verification.
+
 The native client/window currently supports Windows only. The built-in font is ASCII-only; IME composition and real cross-monitor DPI interactions still need manual validation. Native regression tests do not constitute a long gameplay soak test. Terrain generation and save formats were not changed by this removal.
 
 The maintained feature map is [CODE_INDEX.md](CODE_INDEX.md); older implementations can be recovered from Git history.

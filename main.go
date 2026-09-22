@@ -107,6 +107,7 @@ func main() {
 	if *useWebGPU {
 		if err := runNativeWebGPU(settings); err != nil {
 			fmt.Printf("Native WebGPU failed: %v\n", err)
+			reportNativeGraphicsFailure(err)
 		}
 		return
 	}

@@ -2,6 +2,7 @@ package platform
 
 import (
 	"fmt"
+	"sync/atomic"
 	"unsafe"
 
 	"github.com/gogpu/gputypes"
@@ -95,7 +96,11 @@ func (b *WebGPUMeshBackend) UploadChecked(vertices []Vertex, indices []uint32) (
 		return nil, fmt.Errorf("upload WebGPU index buffer: %w", err)
 	}
 
+	atomic.AddInt64(&ActiveMeshCount, 1)
+	MeshBufferBytes.Add(int64(vertexBytes + indexBytes))
+	MeshUploadedBytes.Add(vertexBytes + indexBytes)
 	return &webGPUMesh{
+		counted:      true,
 		vertexBuffer: vertexBuffer,
 		indexBuffer:  indexBuffer,
 		vertexBytes:  vertexBytes,
@@ -133,6 +138,7 @@ func (b *WebGPUMeshBackend) DrawPass(pass *wgpu.RenderPassEncoder, mesh MeshHand
 }
 
 type webGPUMesh struct {
+	counted      bool
 	vertexBuffer *wgpu.Buffer
 	indexBuffer  *wgpu.Buffer
 	vertexBytes  uint64
@@ -151,6 +157,11 @@ func (m *webGPUMesh) IndexCount() int32 {
 func (m *webGPUMesh) Unload() {
 	if m == nil {
 		return
+	}
+	if m.counted {
+		atomic.AddInt64(&ActiveMeshCount, -1)
+		MeshBufferBytes.Add(-int64(m.vertexBytes + m.indexBytes))
+		m.counted = false
 	}
 	if m.indexBuffer != nil {
 		m.indexBuffer.Release()
