@@ -83,7 +83,7 @@
 | WebGPU 优化回归：CPU 数学等价、mip/动画留白、GPU 像素回读、1500 实体分批 | [webgpu_optimization_test.go](webgpu_optimization_test.go)、[webgpu_regression_windows_test.go](webgpu_regression_windows_test.go)；实机设置 `GOCRAFT_WEBGPU_REGRESSION=1` |
 | WebGPU 近景像素采样、mipmap 关闭时的单层视图、多帧移动/动画与 LOD 回读 | [webgpu_world_renderer_windows.go](webgpu_world_renderer_windows.go)：`sample_atlas`；[webgpu_filter_windows.go](webgpu_filter_windows.go)：`filteredAtlasView`；[webgpu_mip_regression_windows_test.go](webgpu_mip_regression_windows_test.go) |
 | WebGPU gameplay HUD / 文本（准星、热键栏、生命、像素字体、聊天、debug、暂停/死亡提示） | [webgpu_hud_windows.go](webgpu_hud_windows.go)、[webgpu_text_windows.go](webgpu_text_windows.go) |
-| WebGPU 背包/容器、创意页信息栏与悬停提示、凹槽式格子、物品数量布局 | [webgpu_inventory_windows.go](webgpu_inventory_windows.go)、[webgpu_container_windows.go](webgpu_container_windows.go)；共用点击坐标 [ui.go](ui.go) |
+| WebGPU 背包/容器、创意栏逐行滚动与滚动条、悬停提示、凹槽式格子、物品数量布局 | [webgpu_inventory_windows.go](webgpu_inventory_windows.go)、[webgpu_container_windows.go](webgpu_container_windows.go)；滚轮/点击 [input.go](input.go)，共用索引与坐标 [ui.go](ui.go)；回归 [inventory_scroll_test.go](inventory_scroll_test.go) |
 | WebGPU 原生窗口迁移验证/交互预览（不再依赖 Raylib 窗口） | [webgpu_chunk_preview_test.go](webgpu_chunk_preview_test.go)、[webgpu_region_preview_test.go](webgpu_region_preview_test.go)、[webgpu_surface_preview_test.go](webgpu_surface_preview_test.go)、[webgpu_textured_preview_test.go](webgpu_textured_preview_test.go)、[webgpu_transparency_preview_test.go](webgpu_transparency_preview_test.go)、[WEBGPU_MIGRATION.md](WEBGPU_MIGRATION.md) |
 | 地形颜色缓存 | [mesh_tint.go](mesh_tint.go) |
 | 只读 CPU 图集元数据（GPU 资源由 WebGPU renderer 持有） | [render_assets.go](render_assets.go) |

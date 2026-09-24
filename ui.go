@@ -35,23 +35,18 @@ type InventoryLayout struct {
 
 func inventoryLayoutFor(w, h float32) InventoryLayout {
 	scale := inventoryScaleFor(w, h)
-	// Creative Layout: 9 columns, 6 rows (54 items)
-	// Base size approx 9*18 = 162 + padding
+	// Creative layout: 9 columns, 6 visible rows.
 	texW := float32(176) * scale
-	texH := float32(196) * scale // Taller for more rows
+	texH := float32(196) * scale
 	originX := w/2 - texW/2
 	originY := h/2 - texH/2
 	slot := float32(18) * scale
 	stride := slot
-	// Center the grid in the window
 	gridW := float32(9) * stride
-	// gridH := float32(6) * stride
 
 	gridX := originX + (texW-gridW)/2
 	gridY := originY + float32(18)*scale // Top padding
 
-	// Hotbar is not shown in this creative view usually, or is at bottom.
-	// We'll just define it but maybe not draw it or draw it at bottom.
 	hotbarX := gridX
 	hotbarY := originY + texH - float32(24)*scale
 
@@ -61,12 +56,31 @@ func inventoryLayoutFor(w, h float32) InventoryLayout {
 		SlotSize: slot,
 		Stride:   stride,
 		Cols:     9,
-		Rows:     6, // Increased from 3
+		Rows:     6,
 		GridX:    gridX,
 		GridY:    gridY,
 		GridW:    gridW,
-		GridH:    float32(6) * stride, // Explicit height
+		GridH:    float32(6) * stride,
 		HotbarX:  hotbarX,
 		HotbarY:  hotbarY,
 	}
+}
+
+func (l InventoryLayout) creativeTotalRows(itemCount int) int {
+	if l.Cols <= 0 || itemCount <= 0 {
+		return 0
+	}
+	return (itemCount + l.Cols - 1) / l.Cols
+}
+
+func (l InventoryLayout) creativeMaxScroll(itemCount int) int {
+	return max(0, l.creativeTotalRows(itemCount)-l.Rows)
+}
+
+func (l InventoryLayout) creativeScroll(scroll, itemCount int) int {
+	return max(0, min(scroll, l.creativeMaxScroll(itemCount)))
+}
+
+func (l InventoryLayout) creativeIndex(scroll, row, col, itemCount int) int {
+	return (l.creativeScroll(scroll, itemCount)+row)*l.Cols + col
 }

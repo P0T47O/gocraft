@@ -142,7 +142,7 @@
 
 类型：`InputState`
 
-函数/方法：`NewInputState`、`*InputState.ToggleInventory`、`*InputState.UpdateCamera`、`*InputState.UpdateSelection`、`isSolidBlock`、`blockIndexFromCoord`、`HandleInput`、`*InputState.UpdateInventoryPage`、`*InputState.UpdateInventorySelection`、`collidesWithBlock`
+函数/方法：`NewInputState`、`*InputState.ToggleInventory`、`*InputState.UpdateCamera`、`*InputState.UpdateSelection`、`isSolidBlock`、`blockIndexFromCoord`、`HandleInput`、`*InputState.UpdateInventoryScroll`、`*InputState.UpdateInventorySelection`、`collidesWithBlock`
 
 ## [inventory.go](inventory.go)
 
@@ -538,7 +538,7 @@
 
 类型：`InventoryLayout`
 
-函数/方法：`uiScaleFor`、`inventoryScaleFor`、`inventoryLayoutFor`
+函数/方法：`uiScaleFor`、`inventoryScaleFor`、`inventoryLayoutFor`、`InventoryLayout.creativeTotalRows`、`InventoryLayout.creativeMaxScroll`、`InventoryLayout.creativeScroll`、`InventoryLayout.creativeIndex`
 
 ## [ui_menu.go](ui_menu.go)
 

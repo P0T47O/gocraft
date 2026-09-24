@@ -37,7 +37,8 @@ type InputState struct {
 	Sensitivity          float32
 	MoveSpeed            float32
 	CursorItem           Item // Held item on mouse cursor
-	InventoryPage        int
+	InventoryScroll      int  // First visible creative inventory row.
+	InventoryWheelRest   float32
 	ShowDebug            bool
 	CraftingStation      byte // 0: None, 1: Workbench
 
@@ -232,7 +233,7 @@ func HandleInput(world *World, camera *gameCamera, state *InputState, client *Cl
 		camera.Position = state.stepMovementCore(world, old, gameFrameTime(), MovementControls{}, currentGameMode == ModeCreative)
 		camera.Target = gameVec3Add(camera.Target, gameVec3Subtract(camera.Position, old))
 		state.UpdateSelection(false)
-		state.UpdateInventoryPage()
+		state.UpdateInventoryScroll()
 		state.UpdateInventorySelection(client)
 		return hitInfo{}
 	}
@@ -433,24 +434,23 @@ func HandleInput(world *World, camera *gameCamera, state *InputState, client *Cl
 	return hit
 }
 
-func (s *InputState) UpdateInventoryPage() {
+func (s *InputState) UpdateInventoryScroll() {
+	if s.Container != nil || currentGameMode != ModeCreative {
+		return
+	}
+	layout := inventoryLayoutFor(float32(windowWidth()), float32(windowHeight()))
+	s.InventoryScroll = layout.creativeScroll(s.InventoryScroll, len(allBlocks))
 	wheel := inputMouseWheel()
 	if wheel == 0 {
 		return
 	}
-	layout := inventoryLayoutFor(float32(windowWidth()), float32(windowHeight()))
-	itemsPerPage := layout.Cols * layout.Rows
-	totalPages := (len(allBlocks) + itemsPerPage - 1) / itemsPerPage
-	if wheel > 0 {
-		s.InventoryPage--
-	} else if wheel < 0 {
-		s.InventoryPage++
-	}
-	if s.InventoryPage < 0 {
-		s.InventoryPage = 0
-	}
-	if s.InventoryPage >= totalPages {
-		s.InventoryPage = totalPages - 1
+	s.InventoryWheelRest += wheel
+	rows := int(s.InventoryWheelRest)
+	s.InventoryWheelRest -= float32(rows)
+	s.InventoryScroll = layout.creativeScroll(s.InventoryScroll-rows, len(allBlocks))
+	if s.InventoryScroll == 0 && s.InventoryWheelRest > 0 ||
+		s.InventoryScroll == layout.creativeMaxScroll(len(allBlocks)) && s.InventoryWheelRest < 0 {
+		s.InventoryWheelRest = 0
 	}
 }
 
@@ -566,21 +566,19 @@ func (s *InputState) UpdateInventorySelection(client *Client) {
 	// ---- CREATIVE MODE ----
 	if currentGameMode == ModeCreative {
 		layout := inventoryLayoutFor(float32(windowWidth()), float32(windowHeight()))
-		itemsPerPage := layout.Cols * layout.Rows
-		start := s.InventoryPage * itemsPerPage
 		slotX := func(col int) float32 { return layout.GridX + float32(col)*layout.Stride }
 		slotY := func(row int) float32 { return layout.GridY + float32(row)*layout.Stride }
 
 		for row := 0; row < layout.Rows; row++ {
 			for col := 0; col < layout.Cols; col++ {
-				index := start + row*layout.Cols + col
+				index := layout.creativeIndex(s.InventoryScroll, row, col, len(allBlocks))
 				if index >= len(allBlocks) {
 					continue
 				}
 				x := slotX(col)
 				y := slotY(row)
-				if mouse.X >= x && mouse.X <= x+layout.SlotSize &&
-					mouse.Y >= y && mouse.Y <= y+layout.SlotSize {
+				if mouse.X >= x && mouse.X < x+layout.SlotSize &&
+					mouse.Y >= y && mouse.Y < y+layout.SlotSize {
 					handleSlotInteraction(index, true)
 				}
 			}

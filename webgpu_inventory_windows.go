@@ -11,12 +11,12 @@ import (
 )
 
 var (
-	webGPUUIPanel   = [4]float32{0.055, 0.075, 0.075, 0.97}
-	webGPUUISlot    = [4]float32{0.105, 0.13, 0.115, 0.98}
-	webGPUUILine    = [4]float32{0.29, 0.35, 0.31, 1}
-	webGPUUIAccent  = [4]float32{0.58, 0.78, 0.38, 1}
+	webGPUUIPanel   = [4]float32{0.075, 0.093, 0.10, 0.98}
+	webGPUUISlot    = [4]float32{0.14, 0.17, 0.18, 1}
+	webGPUUILine    = [4]float32{0.32, 0.38, 0.39, 1}
+	webGPUUIAccent  = [4]float32{0.68, 0.82, 0.49, 1}
 	webGPUUIText    = [4]float32{0.94, 0.96, 0.94, 1}
-	webGPUUIMuted   = [4]float32{0.62, 0.68, 0.64, 1}
+	webGPUUIMuted   = [4]float32{0.64, 0.70, 0.70, 1}
 	webGPUUIWarning = [4]float32{0.92, 0.42, 0.35, 1}
 	webGPUUIDim     = [4]float32{0.02, 0.035, 0.045, 0.73}
 )
@@ -26,8 +26,8 @@ var (
 func (b *webGPUHUDBuilder) inventorySlot(x, y, w, h, scale float32, fill [4]float32) {
 	b.rect(x, y, w, h, fill)
 	thickness := max(scale*0.35, 1)
-	shade := [4]float32{.035, .055, .05, 1}
-	highlight := [4]float32{.36, .43, .37, 1}
+	shade := [4]float32{.045, .06, .065, 1}
+	highlight := [4]float32{.33, .39, .40, 1}
 	b.rect(x, y, w, thickness, shade)
 	b.rect(x, y, thickness, h, shade)
 	b.rect(x, y+h-thickness, w, thickness, highlight)
@@ -177,21 +177,23 @@ func drawWebGPUCreativeInventory(pass *wgpu.RenderPassEncoder, hud *webGPUHUDRen
 	winW, winH := float32(176)*scale, float32(196)*scale
 	shapes.rect(layout.OriginX, layout.OriginY, winW, winH, webGPUUIPanel)
 	shapes.border(layout.OriginX, layout.OriginY, winW, winH, max(scale, 1), webGPUUILine)
-	shapes.rect(layout.OriginX, layout.OriginY, winW, 3*scale, webGPUUIAccent)
+	shapes.rect(layout.OriginX+scale, layout.OriginY+scale, winW-2*scale, 14*scale, [4]float32{.12, .16, .17, 1})
+	shapes.rect(layout.OriginX+scale, layout.OriginY+15*scale, winW-2*scale, scale, webGPUUIAccent)
+	shapes.rect(layout.GridX-scale, layout.GridY-scale, layout.GridW+2*scale, layout.GridH+2*scale, [4]float32{.035, .05, .055, 1})
 
-	itemsPerPage := layout.Cols * layout.Rows
-	start := state.InventoryPage * itemsPerPage
+	scroll := layout.creativeScroll(state.InventoryScroll, len(allBlocks))
+	totalRows := layout.creativeTotalRows(len(allBlocks))
 	mouse := webGPUMousePosition()
 	hovered := byte(0)
 	for row := 0; row < layout.Rows; row++ {
 		for col := 0; col < layout.Cols; col++ {
-			index := start + row*layout.Cols + col
+			index := layout.creativeIndex(scroll, row, col, len(allBlocks))
 			x := layout.GridX + float32(col)*layout.Stride
 			y := layout.GridY + float32(row)*layout.Stride
 			isHovered := mouse.X >= x && mouse.X < x+layout.SlotSize && mouse.Y >= y && mouse.Y < y+layout.SlotSize
 			fill := webGPUUISlot
 			if isHovered {
-				fill = [4]float32{.19, .25, .19, 1}
+				fill = [4]float32{.26, .32, .31, 1}
 			}
 			shapes.inventorySlot(x, y, layout.SlotSize, layout.SlotSize, scale, fill)
 			if index < len(allBlocks) {
@@ -201,6 +203,16 @@ func drawWebGPUCreativeInventory(pass *wgpu.RenderPassEncoder, hud *webGPUHUDRen
 				}
 			}
 		}
+	}
+	// The thumb represents the visible rows, rather than a discrete page.
+	trackX := layout.OriginX + 172*scale
+	shapes.rect(trackX, layout.GridY, 2*scale, layout.GridH, [4]float32{.035, .055, .06, 1})
+	if maxScroll := layout.creativeMaxScroll(len(allBlocks)); maxScroll > 0 {
+		thumbH := max(12*scale, layout.GridH*float32(layout.Rows)/float32(totalRows))
+		thumbY := layout.GridY + (layout.GridH-thumbH)*float32(scroll)/float32(maxScroll)
+		shapes.rect(trackX, thumbY, 2*scale, thumbH, webGPUUIAccent)
+	} else {
+		shapes.rect(trackX, layout.GridY, 2*scale, layout.GridH, webGPUUILine)
 	}
 	inv := inventoryFor(client)
 	for col := 0; col < layout.Cols; col++ {
@@ -214,15 +226,14 @@ func drawWebGPUCreativeInventory(pass *wgpu.RenderPassEncoder, hud *webGPUHUDRen
 		shapes.addItemStack(stack, x, y, layout.SlotSize)
 		webGPUAddStackText(labels, stack, x, y, layout.SlotSize, scale)
 	}
-	labels.shadowText(layout.OriginX+7*scale, layout.OriginY+4*scale, max(float32(8)*scale, 9), "CREATIVE INVENTORY", webGPUUIText)
-	totalPages := max(1, (len(allBlocks)+itemsPerPage-1)/itemsPerPage)
-	page := fmt.Sprintf("PAGE %d/%d", state.InventoryPage+1, totalPages)
-	pageFont := max(float32(7)*scale, 8)
-	labels.shadowText(layout.OriginX+winW-7*scale-webGPUTextWidth(pageFont, page), layout.OriginY+5*scale, pageFont, page, webGPUUIMuted)
+	labels.shadowText(layout.OriginX+7*scale, layout.OriginY+4*scale, max(float32(7)*scale, 9), "CREATIVE", webGPUUIText)
+	progress := fmt.Sprintf("%d-%d / %d", min(len(allBlocks), scroll*layout.Cols+1), min(len(allBlocks), (scroll+layout.Rows)*layout.Cols), len(allBlocks))
+	progressFont := max(float32(5.5)*scale, 8)
+	labels.shadowText(layout.OriginX+winW-7*scale-webGPUTextWidth(progressFont, progress), layout.OriginY+5*scale, progressFont, progress, webGPUUIMuted)
 	infoX, infoY := layout.OriginX+7*scale, layout.OriginY+135*scale
-	shapes.rect(infoX, infoY, winW-14*scale, 26*scale, [4]float32{.09, .12, .105, 1})
-	shapes.rect(infoX, infoY, 2*scale, 26*scale, webGPUUIAccent)
-	footer := "HOVER AN ITEM TO INSPECT"
+	shapes.rect(infoX, infoY, winW-14*scale, 25*scale, [4]float32{.11, .145, .15, 1})
+	shapes.rect(infoX, infoY, 2*scale, 25*scale, webGPUUIAccent)
+	footer := "SELECT A BLOCK OR ITEM"
 	footerColor := webGPUUIMuted
 	if hovered != 0 {
 		footer = GetItem(hovered).Name
@@ -233,7 +244,7 @@ func drawWebGPUCreativeInventory(pass *wgpu.RenderPassEncoder, hud *webGPUHUDRen
 		footer = footer[:len(footer)-1]
 	}
 	labels.shadowText(infoX+5*scale, infoY+3*scale, footerSize, footer, footerColor)
-	labels.shadowText(infoX+5*scale, infoY+15*scale, max(float32(5.1)*scale, 8), "WHEEL PAGE    E / ESC CLOSE", webGPUUIMuted)
+	labels.shadowText(infoX+5*scale, infoY+15*scale, max(float32(5.1)*scale, 8), "WHEEL  SCROLL    E  CLOSE", webGPUUIMuted)
 	labels.shadowText(infoX, layout.OriginY+164*scale, max(float32(4.5)*scale, 8), "HOTBAR", webGPUUIMuted)
 	if state.CursorItem.ID > 0 && state.CursorItem.ID <= 255 {
 		size := float32(18) * scale
