@@ -29,12 +29,13 @@ func worldFogRange(radius int) (start, end float32) {
 // World owns this cache through its render worldRenderCache field. All scratch
 // slices retain capacity, but release chunk references at the end of each frame.
 type worldRenderCache struct {
-	drawCalls, triangles int
-	offsets              []chunkItem
-	radius               int
-	visible              []visibleSection
-	translucent          []translucentDraw
-	paths                []string
+	drawCalls, triangles           int
+	visibleSections, readySections int
+	offsets                        []chunkItem
+	radius                         int
+	visible                        []visibleSection
+	translucent                    []translucentDraw
+	paths                          []string
 }
 
 type visibleSection struct {
@@ -46,6 +47,17 @@ type visibleSection struct {
 type translucentDraw struct {
 	section visibleSection
 	glass   bool
+}
+
+// Distant underground interiors cost mesh work and draw calls even though
+// terrain completely hides them from an exterior camera. Keep one full
+// section of safety below the lowest column; nearby caves remain intact.
+func distantBuriedSection(lowest int16, sec int, horizontalDistanceSq float32) bool {
+	const caveDetailRadius = 24 * chunkWidth
+	if horizontalDistanceSq <= caveDetailRadius*caveDetailRadius {
+		return false
+	}
+	return (sec+1)*sectionHeight < int(lowest)-sectionHeight
 }
 
 func (r *worldRenderCache) radiusOffsets(radius int) []chunkItem {
@@ -110,8 +122,25 @@ func compareTranslucentDraws(a, b translucentDraw) int {
 }
 
 func (r *worldRenderCache) appendVisibleSections(chunk *Chunk, chunkX, chunkZ int, frustum *Frustum, camPos mgl32.Vec3) {
+	centerX := float32(chunkX*chunkWidth) + (chunkWidth-1)*0.5
+	centerZ := float32(chunkZ*chunkWidth) + (chunkWidth-1)*0.5
+	dx, dz := camPos.X()-centerX, camPos.Z()-centerZ
+	horizontalDistanceSq := dx*dx + dz*dz
+	lowest := int16(chunkHeight)
+	if horizontalDistanceSq > (24*chunkWidth)*(24*chunkWidth) {
+		for x := range chunk.heightMap {
+			for _, h := range chunk.heightMap[x] {
+				if h < lowest {
+					lowest = h
+				}
+			}
+		}
+	}
 	for sec := 0; sec < sectionCount; sec++ {
 		if chunk.sectionBlocks[sec] == 0 {
+			continue
+		}
+		if distantBuriedSection(lowest, sec, horizontalDistanceSq) {
 			continue
 		}
 		// Blocks are centered at integer positions, so bounds extend half a block

@@ -180,6 +180,8 @@ func TestVitalsPersistAndPacketRoundTrip(t *testing.T) {
 	p.Vitals.Health = 7
 	p.Vitals.Air = 90
 	p.Vitals.FireTicks = 100
+	p.Vitals.Food = 11
+	p.Vitals.Saturation = 2.5
 	p.Vitals.FallDistance = 2
 	root := t.TempDir()
 	if err := saveSurvivalPlayers(root, w); err != nil {
@@ -191,11 +193,11 @@ func TestVitalsPersistAndPacketRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	loaded := other.entities[0].(*PlayerEntity)
-	if loaded.Vitals.Health != 7 || loaded.Vitals.Air != 90 || loaded.Vitals.SpawnX != p.Vitals.SpawnX || loaded.Vitals.FallDistance != 2 {
+	if loaded.Vitals.Health != 7 || loaded.Vitals.Air != 90 || loaded.Vitals.Food != 11 || loaded.Vitals.Saturation != 2.5 || loaded.Vitals.SpawnX != p.Vitals.SpawnX || loaded.Vitals.FallDistance != 2 {
 		t.Fatal("vitals lost")
 	}
 	var b bytes.Buffer
-	want := &PacketVitals{Health: 7, Air: 90, Fire: 100, Cause: "Lava"}
+	want := &PacketVitals{Health: 7, Air: 90, Fire: 100, Food: 11, Cause: "Lava"}
 	if err := WritePacket(&b, want); err != nil {
 		t.Fatal(err)
 	}

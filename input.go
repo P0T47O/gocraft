@@ -395,10 +395,13 @@ func HandleInput(world *World, camera *gameCamera, state *InputState, client *Cl
 		state.cancelMining(client)
 	}
 
-	if hit.hit && inputMousePressed(mouseRight) {
+	if inputMousePressed(mouseRight) {
 		// 1. Check for Block Interaction (Server Authoritative)
-		blockID := world.BlockAt(hit.x, hit.y, hit.z)
-		if (blockID == blockCraftingTable || containerSize(blockID) > 0) && !inputKeyDown(keyLeftShift) {
+		blockID := byte(0)
+		if hit.hit {
+			blockID = world.BlockAt(hit.x, hit.y, hit.z)
+		}
+		if hit.hit && (blockID == blockCraftingTable || containerSize(blockID) > 0) && !inputKeyDown(keyLeftShift) {
 			if client != nil {
 				client.Send(&PacketBlockInteract{
 					X:      int32(hit.x),
@@ -408,6 +411,17 @@ func HandleInput(world *World, camera *gameCamera, state *InputState, client *Cl
 				})
 			}
 			return hit // Consume interaction
+		}
+		if currentGameMode == ModeSurvival {
+			if food, _ := foodValue(int32(state.CurrentBlock)); food > 0 {
+				if client != nil {
+					client.Send(&PacketPlayerAction{ActionType: 2})
+				}
+				return hit
+			}
+		}
+		if !hit.hit {
+			return hit
 		}
 
 		if state.CurrentBlock == blockAir || state.CurrentBlock >= 100 {

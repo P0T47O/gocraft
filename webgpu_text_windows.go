@@ -384,8 +384,9 @@ func (b *webGPUTextBatch) addVitalsText(state *InputState, scale float32) {
 	muted := [4]float32{0.62, 0.72, 0.68, 1}
 	size := max(float32(11)*scale, 9)
 	b.shadowText(x+184*scale, y+1*scale, size, fmt.Sprintf("%d/20", state.Vitals.Health), white)
+	b.shadowText(b.width/2+17*scale, y+1*scale, size, fmt.Sprintf("FOOD %d", state.Vitals.Food), white)
 	if state.Vitals.Air < maxAir {
-		b.shadowText(b.width/2+20*scale, y+1*scale, size, "AIR", muted)
+		b.shadowText(b.width/2+20*scale, y-31*scale, size, "AIR", muted)
 	}
 	statusY := y - 24*scale
 	switch {

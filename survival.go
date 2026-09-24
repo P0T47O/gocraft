@@ -15,7 +15,7 @@ type survivalPlayerSave struct {
 }
 
 func saveSurvivalPlayers(root string, world *World) error {
-	data := survivalPlayerSave{Version: 2, Players: make(map[string]PlayerEntity)}
+	data := survivalPlayerSave{Version: 3, Players: make(map[string]PlayerEntity)}
 	world.entitiesMu.RLock()
 	for _, e := range world.entities {
 		if p, ok := e.(*PlayerEntity); ok {
@@ -46,7 +46,7 @@ func loadSurvivalPlayers(root string, world *World) error {
 	if err = json.Unmarshal(b, &data); err != nil {
 		return err
 	}
-	if data.Version != 1 && data.Version != 2 {
+	if data.Version != 1 && data.Version != 2 && data.Version != 3 {
 		return fmt.Errorf("unsupported player save version %d", data.Version)
 	}
 	for name, p := range data.Players {
@@ -54,7 +54,12 @@ func loadSurvivalPlayers(root string, world *World) error {
 			return fmt.Errorf("invalid player state for %q", name)
 		}
 		if v := p.Vitals; v != nil {
-			if v.Health < 0 || v.Health > maxHealth || v.Air < 0 || v.Air > maxAir || v.FireTicks < 0 || v.FireTicks > 160 || v.FallDistance < 0 {
+			if data.Version < 3 {
+				v.Food, v.Saturation = maxFood, 5
+			}
+			// Natural recovery adds 3 exhaustion after the tick's drain pass,
+			// so 4..7 is a valid transient save state.
+			if v.Health < 0 || v.Health > maxHealth || v.Air < 0 || v.Air > maxAir || v.FireTicks < 0 || v.FireTicks > 160 || v.FallDistance < 0 || v.Food < 0 || v.Food > maxFood || math.IsNaN(v.Saturation) || math.IsInf(v.Saturation, 0) || v.Saturation < 0 || v.Saturation > float64(v.Food) || math.IsNaN(v.Exhaustion) || math.IsInf(v.Exhaustion, 0) || v.Exhaustion < 0 || v.Exhaustion >= 7 {
 				return fmt.Errorf("invalid vitals for %q", name)
 			}
 		}

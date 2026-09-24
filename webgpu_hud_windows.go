@@ -415,6 +415,7 @@ func (b *webGPUHUDBuilder) addVitals(state *InputState, scale float32) {
 	line := [4]float32{0.30, 0.36, 0.33, 0.95}
 	heart := [4]float32{0.85, 0.44, 0.39, 1}
 	air := [4]float32{0.54, 0.76, 0.84, 1}
+	food := [4]float32{0.91, 0.61, 0.30, 1}
 	b.rect(x-8*scale, y-7*scale, 242*scale, 29*scale, background)
 	b.border(x-8*scale, y-7*scale, 242*scale, 29*scale, max(scale, 1), line)
 	mask := []string{"0110110", "1111111", "1111111", "0111110", "0011100", "0001000"}
@@ -433,16 +434,28 @@ func (b *webGPUHUDBuilder) addVitals(state *InputState, scale float32) {
 			}
 		}
 	}
+	fx := b.width/2 + 12*scale
+	b.rect(fx, y-7*scale, 226*scale, 29*scale, background)
+	b.border(fx, y-7*scale, 226*scale, 29*scale, max(scale, 1), line)
+	for i := 0; i < 10; i++ {
+		color := line
+		if state.Vitals.Food > int32(i*2) {
+			color = food
+		}
+		bx := fx + (30+float32(i)*18)*scale
+		b.rect(bx, y+1*scale, 9*scale, 11*scale, color)
+		b.rect(bx+9*scale, y+4*scale, 4*scale, 5*scale, color)
+	}
 	if state.Vitals.Air < maxAir {
-		bx := b.width/2 + 12*scale
-		b.rect(bx, y-7*scale, 226*scale, 29*scale, background)
-		b.border(bx, y-7*scale, 226*scale, 29*scale, max(scale, 1), line)
+		bx := fx
+		b.rect(bx, y-39*scale, 226*scale, 29*scale, background)
+		b.border(bx, y-39*scale, 226*scale, 29*scale, max(scale, 1), line)
 		for i := 0; i < 10; i++ {
 			color := line
 			if state.Vitals.Air > int32(i*30) {
 				color = air
 			}
-			b.rect(bx+(48+float32(i)*16)*scale-4*scale, y+2*scale, 8*scale, 8*scale, color)
+			b.rect(bx+(48+float32(i)*16)*scale-4*scale, y-30*scale, 8*scale, 8*scale, color)
 		}
 	}
 	if state.HurtFlash > 0 {

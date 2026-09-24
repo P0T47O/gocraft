@@ -518,6 +518,10 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 		}
 
 	case *PacketPlayerAction:
+		if p.ActionType == 2 {
+			s.eatSelectedFood(s.findPlayerEntity(wrap.From))
+			return
+		}
 		if p.ActionType != 0 {
 			return
 		}

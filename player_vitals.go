@@ -10,33 +10,39 @@ import (
 const (
 	maxHealth = 20
 	maxAir    = 300
+	maxFood   = 20
 )
 
 type PlayerVitals struct {
 	Health                 int
 	Air                    int
 	FireTicks              int
+	Food                   int
+	Saturation             float64
+	Exhaustion             float64
 	Cause                  string
 	SpawnX, SpawnY, SpawnZ float64
 	FallDistance           float64
 	cooldown               int
 	dryTicks               int
 	lastY                  float64
+	lastX, lastZ           float64
 	grace                  int
 	respawnRequested       bool // Server-owned: pin search chunks until respawn completes.
 }
 
 func (p *PlayerEntity) initVitals() {
 	if p.Vitals == nil {
-		p.Vitals = &PlayerVitals{Health: maxHealth, Air: maxAir, SpawnX: p.X, SpawnY: p.Y, SpawnZ: p.Z}
+		p.Vitals = &PlayerVitals{Health: maxHealth, Air: maxAir, Food: maxFood, Saturation: 5, SpawnX: p.X, SpawnY: p.Y, SpawnZ: p.Z}
 	}
 	p.Vitals.lastY = p.Y
+	p.Vitals.lastX, p.Vitals.lastZ = p.X, p.Z
 }
 func (p *PlayerEntity) dead() bool { return p.Vitals != nil && p.Vitals.Health <= 0 }
 
 type PacketVitals struct {
-	Health, Air, Fire int32
-	Cause             string
+	Health, Air, Fire, Food int32
+	Cause                   string
 }
 
 func (*PacketVitals) ID() int32 { return IDVitals }
@@ -44,6 +50,7 @@ func (p *PacketVitals) Encode(b *bytes.Buffer) error {
 	WriteVarInt(b, p.Health)
 	WriteVarInt(b, p.Air)
 	WriteVarInt(b, p.Fire)
+	WriteVarInt(b, p.Food)
 	return WriteString(b, p.Cause)
 }
 func (p *PacketVitals) Decode(b *bytes.Buffer) error {
@@ -55,6 +62,9 @@ func (p *PacketVitals) Decode(b *bytes.Buffer) error {
 		return err
 	}
 	if p.Fire, err = ReadVarInt(b); err != nil {
+		return err
+	}
+	if p.Food, err = ReadVarInt(b); err != nil {
 		return err
 	}
 	p.Cause, err = ReadString(b)
@@ -72,7 +82,43 @@ func (s *Server) sendVitals(p *PlayerEntity) {
 		return
 	}
 	v := p.Vitals
-	s.BroadcastTo(p.UUID, &PacketVitals{Health: int32(v.Health), Air: int32(v.Air), Fire: int32(v.FireTicks), Cause: v.Cause})
+	s.BroadcastTo(p.UUID, vitalsPacket(v))
+}
+
+func vitalsPacket(v *PlayerVitals) *PacketVitals {
+	return &PacketVitals{Health: int32(v.Health), Air: int32(v.Air), Fire: int32(v.FireTicks), Food: int32(v.Food), Cause: v.Cause}
+}
+
+// Food is always consumed on the server from the currently selected stack.
+// The client never supplies an item ID or nutrition value.
+func (s *Server) eatSelectedFood(p *PlayerEntity) bool {
+	if p == nil || p.GameMode != ModeSurvival || p.dead() || p.Vitals == nil || p.Vitals.Food >= maxFood || p.SelectedSlot < 0 || p.SelectedSlot >= 9 {
+		return false
+	}
+	slot := &p.Inventory.Slots[p.SelectedSlot]
+	food, saturation := foodValue(slot.ID)
+	if food == 0 || slot.Count <= 0 {
+		return false
+	}
+	p.Vitals.Food = min(maxFood, p.Vitals.Food+food)
+	p.Vitals.Saturation = min(float64(p.Vitals.Food), p.Vitals.Saturation+saturation)
+	slot.Count--
+	if slot.Count == 0 {
+		*slot = ItemStack{}
+	}
+	s.SendInventory(p)
+	s.sendVitals(p)
+	return true
+}
+
+func foodValue(id int32) (food int, saturation float64) {
+	switch id {
+	case int32(itemRawPork):
+		return 3, 0.6
+	case int32(itemCookedPork):
+		return 8, 12.8
+	}
+	return 0, 0
 }
 func (s *Server) hurtPlayer(p *PlayerEntity, amount int, cause string) {
 	v := p.Vitals
@@ -121,9 +167,10 @@ func (s *Server) tickPlayerVitals(p *PlayerEntity) {
 		v.FireTicks = 0
 		v.FallDistance = 0
 		v.lastY = p.Y
+		v.lastX, v.lastZ = p.X, p.Z
 		return
 	}
-	before := PacketVitals{Health: int32(v.Health), Air: int32(v.Air), Fire: int32(v.FireTicks), Cause: v.Cause}
+	before := *vitalsPacket(v)
 	head := blockAtPosition(s.World, p.X, p.Y, p.Z)
 	if head == blockWater {
 		v.Air = max(0, v.Air-1)
@@ -164,19 +211,50 @@ func (s *Server) tickPlayerVitals(p *PlayerEntity) {
 		}
 	}
 	v.lastY = p.Y
-	// Temporary slow recovery until the food/hunger loop is added.
-	if !p.dead() && head != blockWater && v.FireTicks == 0 && v.cooldown == 0 {
+	s.tickPlayerFood(p)
+	after := *vitalsPacket(v)
+	if before != after {
+		s.sendVitals(p)
+	}
+}
+
+func (s *Server) tickPlayerFood(p *PlayerEntity) {
+	if p.dead() {
+		return
+	}
+	v := p.Vitals
+	dx, dz := p.X-v.lastX, p.Z-v.lastZ
+	v.lastX, v.lastZ = p.X, p.Z
+	// Ignore teleports when accounting for movement exhaustion.
+	v.Exhaustion += 0.005
+	if dx*dx+dz*dz > 0.0001 && dx*dx+dz*dz < 1 {
+		v.Exhaustion += 0.02
+	}
+	for v.Exhaustion >= 4 {
+		v.Exhaustion -= 4
+		if v.Saturation > 0 {
+			v.Saturation = max(0, v.Saturation-1)
+		} else if v.Food > 0 {
+			v.Food--
+		}
+	}
+	if v.Food >= 18 && v.Health < maxHealth && v.cooldown == 0 && v.FireTicks == 0 {
 		v.dryTicks++
 		if v.dryTicks >= 200 {
-			v.Health = min(maxHealth, v.Health+1)
+			v.Health++
 			v.dryTicks = 0
+			v.Exhaustion += 3
+		}
+	} else if v.Food == 0 {
+		v.dryTicks++
+		if v.dryTicks >= 200 {
+			v.dryTicks = 0
+			if v.Health > 1 { // Normal difficulty: starvation cannot kill.
+				s.hurtPlayer(p, 1, "Starved")
+			}
 		}
 	} else {
 		v.dryTicks = 0
-	}
-	after := PacketVitals{Health: int32(v.Health), Air: int32(v.Air), Fire: int32(v.FireTicks), Cause: v.Cause}
-	if before != after {
-		s.sendVitals(p)
 	}
 }
 
@@ -279,7 +357,7 @@ func (s *Server) respawnPlayer(p *PlayerEntity) {
 		return
 	}
 	old := p.Vitals
-	p.Vitals = &PlayerVitals{Health: maxHealth, Air: maxAir, SpawnX: old.SpawnX, SpawnY: old.SpawnY, SpawnZ: old.SpawnZ, lastY: y, grace: 60}
+	p.Vitals = &PlayerVitals{Health: maxHealth, Air: maxAir, Food: maxFood, Saturation: 5, SpawnX: old.SpawnX, SpawnY: old.SpawnY, SpawnZ: old.SpawnZ, lastX: x, lastY: y, lastZ: z, grace: 60}
 	p.SetPosition(x, y, z)
 	s.BroadcastTo(p.UUID, &PacketSpawnPoint{X: x, Y: y, Z: z})
 	s.sendVitals(p)

@@ -5,6 +5,24 @@ import (
 	"time"
 )
 
+// A full loaded-chunk scan is unnecessary every frame at large view distances.
+// Crossing a chunk or changing radius still triggers immediate cleanup.
+type chunkUnloadSchedule struct {
+	world          *World
+	cx, cz, radius int
+	last           time.Time
+}
+
+var unloadSchedule chunkUnloadSchedule
+
+func (s *chunkUnloadSchedule) due(w *World, cx, cz, radius int, now time.Time) bool {
+	if s.world == w && s.cx == cx && s.cz == cz && s.radius == radius && now.Sub(s.last) < time.Second {
+		return false
+	}
+	s.world, s.cx, s.cz, s.radius, s.last = w, cx, cz, radius, now
+	return true
+}
+
 func updateGame() {
 	if isPaused && pauseSettings && inputKeyPressed(keyEscape) {
 		SaveSettings()
@@ -149,24 +167,21 @@ Loop:
 	updateEntities(dt)
 	updateInterpolation(dt)
 
-	// Clean up far chunks (Client-side Garbage Collection)
-	// Render radius is roughly 16. Keep a bit more (e.g. 20) to avoid thrashing.
-	// 5 seconds interval? Or every frame?
-	// Every frame is fine, UnloadChunks is efficient enough (iterates map).
-	// But let's do it every 60 frames to be safe on CPU.
+	// Keep a four-chunk margin, but avoid scanning a 64/128-radius world on
+	// every rendered frame. Movement and settings changes are handled at once.
 	if dt > 0 {
 		pPos := camera.Position
-		cx := int(math.Floor(float64(pPos.X) / 16.0))
-		cz := int(math.Floor(float64(pPos.Z) / 16.0))
-		// Use a static counter to throttle
-		// Accessing global or static var is ugly here, let's just run it. Map iteration of ~1000 items is fast.
-		// Radius 24 chunks (16 render + 8 buffer)
-		world.UnloadChunks(cx, cz, renderDistance()+4, func(chunkX, chunkZ int) {
-			// Notify server that we unloaded this chunk
-			// So it knows to resend if we return
-			if client != nil {
-				client.Send(&PacketUnloadChunk{CX: int32(chunkX), CZ: int32(chunkZ)})
-			}
-		})
+		cx := int(math.Floor(float64(pPos.X) / chunkWidth))
+		cz := int(math.Floor(float64(pPos.Z) / chunkWidth))
+		radius := renderDistance() + 4
+		if unloadSchedule.due(world, cx, cz, radius, time.Now()) {
+			world.UnloadChunks(cx, cz, radius, func(chunkX, chunkZ int) {
+				// Notify server that we unloaded this chunk
+				// So it knows to resend if we return
+				if client != nil {
+					client.Send(&PacketUnloadChunk{CX: int32(chunkX), CZ: int32(chunkZ)})
+				}
+			})
+		}
 	}
 }

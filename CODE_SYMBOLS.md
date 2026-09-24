@@ -68,6 +68,20 @@
 
 函数/方法：`setGameFrameTime`、`gameFrameTime`
 
+## [game_audio.go](game_audio.go)
+
+类型：`gameSound`
+
+函数/方法：`gameSoundWAV`
+
+## [game_audio_stub.go](game_audio_stub.go)
+
+函数/方法：`playGameSound`
+
+## [game_audio_windows.go](game_audio_windows.go)
+
+函数/方法：`playGameSound`
+
 ## [game_camera.go](game_camera.go)
 
 类型：`gameCamera`
@@ -100,7 +114,9 @@
 
 ## [game_update.go](game_update.go)
 
-函数/方法：`updateGame`
+类型：`chunkUnloadSchedule`
+
+函数/方法：`*chunkUnloadSchedule.due`、`updateGame`
 
 ## [generation_biomes.go](generation_biomes.go)
 
@@ -330,7 +346,7 @@
 
 类型：`PlayerVitals`、`PacketVitals`、`PacketRespawn`
 
-函数/方法：`*PlayerEntity.initVitals`、`*PlayerEntity.dead`、`*PacketVitals.ID`、`*PacketVitals.Encode`、`*PacketVitals.Decode`、`*PacketRespawn.ID`、`*PacketRespawn.Encode`、`*PacketRespawn.Decode`、`*Server.sendVitals`、`*Server.hurtPlayer`、`*Server.tickPlayerVitals`、`*Server.updatePlayerVitals`、`*Server.pendingRespawnChunks`、`*Server.safeRespawn`、`*Server.respawnPlayer`
+函数/方法：`*PlayerEntity.initVitals`、`*PlayerEntity.dead`、`*PacketVitals.ID`、`*PacketVitals.Encode`、`*PacketVitals.Decode`、`*PacketRespawn.ID`、`*PacketRespawn.Encode`、`*PacketRespawn.Decode`、`*Server.sendVitals`、`vitalsPacket`、`*Server.eatSelectedFood`、`foodValue`、`*Server.hurtPlayer`、`*Server.tickPlayerVitals`、`*Server.tickPlayerFood`、`*Server.updatePlayerVitals`、`*Server.pendingRespawnChunks`、`*Server.safeRespawn`、`*Server.respawnPlayer`
 
 ## [protocol.go](protocol.go)
 
@@ -720,5 +736,5 @@
 
 类型：`worldRenderCache`、`visibleSection`、`translucentDraw`
 
-函数/方法：`worldFarPlane`、`worldFogRange`、`*worldRenderCache.radiusOffsets`、`compareVisibleSections`、`compareSectionCoordinates`、`compareTranslucentDraws`、`*worldRenderCache.appendVisibleSections`、`*worldRenderCache.collectTranslucent`
+函数/方法：`worldFarPlane`、`worldFogRange`、`distantBuriedSection`、`*worldRenderCache.radiusOffsets`、`compareVisibleSections`、`compareSectionCoordinates`、`compareTranslucentDraws`、`*worldRenderCache.appendVisibleSections`、`*worldRenderCache.collectTranslucent`
 

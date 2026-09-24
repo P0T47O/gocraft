@@ -183,7 +183,7 @@ func (p *PacketInventoryUpdate) Decode(r *bytes.Buffer) error {
 }
 
 type PacketPlayerAction struct {
-	ActionType int32 // 0: DropOne, 1: DropStack
+	ActionType int32 // 0: DropOne, 2: Eat held food (server checks the stack)
 	Value      int32 // Reserved
 }
 

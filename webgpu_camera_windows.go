@@ -80,6 +80,12 @@ func (r *webGPUWorldRenderer) collectVisibleCamera(world *World, camera webGPUCa
 		cache.appendVisibleSections(chunk, chunkX, chunkZ, &frustum, camPos)
 	}
 	slices.SortFunc(cache.visible, compareVisibleSections)
+	cache.visibleSections, cache.readySections = len(cache.visible), 0
+	for _, section := range cache.visible {
+		if !section.chunk.sectionDirty[section.sec] {
+			cache.readySections++
+		}
+	}
 
 	deadline := time.Now().Add(time.Millisecond)
 	submissions := 0

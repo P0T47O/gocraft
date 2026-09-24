@@ -11,6 +11,7 @@
 | 游戏会话建立与退出 | [game_session.go](game_session.go)：`startGame`、`exitGame` |
 | 原生图形错误诊断与退出后系统提示（不依赖 GPU） | [graphics_failure.go](graphics_failure.go)、[graphics_failure_windows.go](graphics_failure_windows.go)、[graphics_failure_stub.go](graphics_failure_stub.go)；日志回归 [graphics_failure_test.go](graphics_failure_test.go) |
 | 每帧更新、暂停、输入与地形就绪 | [game_update.go](game_update.go)：`updateGame` |
+| 大视距客户端区块回收节流（跨区块/视距变化立即执行，否则每秒一次） | [game_update.go](game_update.go)：`chunkUnloadSchedule`；回归 [world_render_lod_test.go](world_render_lod_test.go) |
 | 后端中立玩家摄像机、朝向初始化与瞄准射线 | [game_camera.go](game_camera.go)、[game_camera_test.go](game_camera_test.go) |
 | 后端中立输入帧、文本队列、鼠标捕获边界 | [window_input.go](window_input.go)、[window_input_test.go](window_input_test.go)；原生采集 [window_win32_windows.go](window_win32_windows.go)，每帧采集一次 |
 | 客户端缺失区块请求：近处优先、跨帧游标、定期重试、发送反压 | [game_streaming.go](game_streaming.go)：`requestMissingChunks`；回归 [game_streaming_test.go](game_streaming_test.go) |
@@ -52,6 +53,7 @@
 | 实体消息 | [protocol_entities.go](protocol_entities.go) |
 | 背包、交互、聊天等操作消息 | [protocol_actions.go](protocol_actions.go) |
 | 容器/生物/生命消息；生物攻击距离/AABB 权威校验与玩家生命 tick 已不依赖 Raylib | [container_protocol.go](container_protocol.go)、[mob_protocol.go](mob_protocol.go)、[player_vitals.go](player_vitals.go) |
+| 服务端饥饿/饱和/消耗、手持食物校验、自然恢复/饥饿伤害；右键食物与协议动作（版本7） | [player_vitals.go](player_vitals.go)、[server_packets.go](server_packets.go)、[input.go](input.go)、[protocol_actions.go](protocol_actions.go)、[protocol.go](protocol.go)；回归 [player_food_test.go](player_food_test.go) |
 
 ## 世界、地形与渲染
 
@@ -76,14 +78,15 @@
 | Raylib-free 网格数学与颜色、GPU 上传适配 | [mesh_math.go](mesh_math.go)、[mesh_color.go](mesh_color.go)、[render_mesh_upload.go](render_mesh_upload.go)；共享句柄 [render_mesh.go](render_mesh.go) |
 | WebGPU 24 字节顶点打包（诊断预览可保持 36 字节） | [platform/compact_vertex.go](platform/compact_vertex.go)、[platform/compact_vertex_test.go](platform/compact_vertex_test.go) |
 | 后端中立网格上传接口、WebGPU GPU buffer | [render_mesh.go](render_mesh.go)、[platform/renderer.go](platform/renderer.go)、[platform/mesh.go](platform/mesh.go)、[platform/webgpu_backend.go](platform/webgpu_backend.go) |
-| 共享可见区块、透明排序、视距边界雾范围（32 区块时约 427–488 格）、测试 | [world_render.go](world_render.go)、[render_cull.go](render_cull.go)、[world_fog_test.go](world_fog_test.go) |
+| 共享可见区块、透明排序、远景地下分段裁剪（24 区块外，地表下保留一段安全余量）、视距边界雾范围 | [world_render.go](world_render.go)、[render_cull.go](render_cull.go)、[world_render_lod_test.go](world_render_lod_test.go)、[world_fog_test.go](world_fog_test.go) |
 | WebGPU 世界渲染（camera matrices、倒置浮点深度以保持远处水面精度、scene uniform、surface/depth、atlas、atlas 内水/岩浆逐帧更新、opaque/cutout、water/glass、水平距离边界雾与独立环境雾槽位、可见 section 提交） | [webgpu_camera_windows.go](webgpu_camera_windows.go)、[webgpu_world_renderer_windows.go](webgpu_world_renderer_windows.go)、[webgpu_gameplay_windows.go](webgpu_gameplay_windows.go)、[webgpu_atlas.go](webgpu_atlas.go)、[webgpu_animation_windows.go](webgpu_animation_windows.go)；透明预览着色器 [webgpu_transparency_preview_test.go](webgpu_transparency_preview_test.go) |
 | WebGPU 实体/效果（远程玩家、掉落物、JSON bone 生物动画、挖掘裂纹） | [webgpu_entities_windows.go](webgpu_entities_windows.go) |
 | WebGPU 实体保守视锥/距离剔除、超容量分批与帧上传缓存 | [webgpu_entity_bounds_windows.go](webgpu_entity_bounds_windows.go)、[webgpu_entities_windows.go](webgpu_entities_windows.go)、[webgpu_upload_windows.go](webgpu_upload_windows.go)；同帧不同批次不能重写同一个目标缓冲区 |
 | WebGPU mipmap/AF 设置联动、动画完整留白和 mip 更新、独立 UI 最近邻采样 | [texture_policy.go](texture_policy.go)、[webgpu_mipmap.go](webgpu_mipmap.go)、[webgpu_filter_windows.go](webgpu_filter_windows.go)、[webgpu_animation_windows.go](webgpu_animation_windows.go) |
 | WebGPU 优化回归：CPU 数学等价、mip/动画留白、GPU 像素回读、1500 实体分批 | [webgpu_optimization_test.go](webgpu_optimization_test.go)、[webgpu_regression_windows_test.go](webgpu_regression_windows_test.go)；实机设置 `GOCRAFT_WEBGPU_REGRESSION=1` |
 | WebGPU 近景像素采样、mipmap 关闭时的单层视图、多帧移动/动画与 LOD 回读 | [webgpu_world_renderer_windows.go](webgpu_world_renderer_windows.go)：`sample_atlas`；[webgpu_filter_windows.go](webgpu_filter_windows.go)：`filteredAtlasView`；[webgpu_mip_regression_windows_test.go](webgpu_mip_regression_windows_test.go) |
-| WebGPU gameplay HUD / 文本（准星、热键栏、生命、像素字体、聊天、debug、暂停/死亡提示） | [webgpu_hud_windows.go](webgpu_hud_windows.go)、[webgpu_text_windows.go](webgpu_text_windows.go) |
+| WebGPU gameplay HUD / 文本（准星、热键栏、生命/饥饿/氧气、像素字体、聊天、debug、暂停/死亡提示） | [webgpu_hud_windows.go](webgpu_hud_windows.go)、[webgpu_text_windows.go](webgpu_text_windows.go) |
+| 客户端进食/受伤短音效（程序生成 PCM，Windows WinMM 后台播放；其他平台静默） | [game_audio.go](game_audio.go)、[game_audio_windows.go](game_audio_windows.go)、[game_audio_stub.go](game_audio_stub.go)、[game_packets.go](game_packets.go)；WAV 格式回归 [game_audio_test.go](game_audio_test.go) |
 | WebGPU 背包/容器、创意栏逐行滚动与滚动条、悬停提示、凹槽式格子、物品数量布局 | [webgpu_inventory_windows.go](webgpu_inventory_windows.go)、[webgpu_container_windows.go](webgpu_container_windows.go)；滚轮/点击 [input.go](input.go)，共用索引与坐标 [ui.go](ui.go)；回归 [inventory_scroll_test.go](inventory_scroll_test.go) |
 | WebGPU 原生窗口迁移验证/交互预览（不再依赖 Raylib 窗口） | [webgpu_chunk_preview_test.go](webgpu_chunk_preview_test.go)、[webgpu_region_preview_test.go](webgpu_region_preview_test.go)、[webgpu_surface_preview_test.go](webgpu_surface_preview_test.go)、[webgpu_textured_preview_test.go](webgpu_textured_preview_test.go)、[webgpu_transparency_preview_test.go](webgpu_transparency_preview_test.go)、[WEBGPU_MIGRATION.md](WEBGPU_MIGRATION.md) |
 | 地形颜色缓存 | [mesh_tint.go](mesh_tint.go) |
@@ -96,7 +99,7 @@
 | 方块/掉落物绘制 | [webgpu_entities_windows.go](webgpu_entities_windows.go) |
 | 性能采样与日志（不依赖窗口库；主循环通过 `UpdateFrame` 传入帧耗时） | [performance_monitor.go](performance_monitor.go) |
 | 加载阶段耗时/积压/废弃网格统计、32 半径服务端冷加载实测 | [performance_loading.go](performance_loading.go)、[streaming_load_test.go](streaming_load_test.go)、[LOADING.md](LOADING.md) |
-| 128半径真实TCP/网格/WebGPU受限压力测试及瓶颈报告 | [streaming_stress_windows_test.go](streaming_stress_windows_test.go)、[STRESS128.md](STRESS128.md)；`GOCRAFT_STRESS128=1`，临时世界、45秒/内存保护，不是满范围验收 |
+| 32/64 半径固定镜头真实 TCP/网格/WebGPU 加载测量、128 半径受限压力测试 | [streaming_stress_windows_test.go](streaming_stress_windows_test.go)、[LOADING.md](LOADING.md)、[STRESS128.md](STRESS128.md)；`GOCRAFT_STREAM_PROFILE=1` 或 `GOCRAFT_STRESS128=1`，均使用临时世界 |
 | 请求到收包/网格就绪延迟、世界网格缓冲区占用与上传字节数 | [performance_streaming.go](performance_streaming.go)、[performance_loading.go](performance_loading.go)、[platform/mesh.go](platform/mesh.go)、[platform/webgpu_backend.go](platform/webgpu_backend.go)；计数释放回归 [platform/mesh_metrics_test.go](platform/mesh_metrics_test.go) |
 
 ## 玩法、界面与存档
@@ -105,7 +108,7 @@
 | --- | --- |
 | 输入、交互、挖掘入口（读取中立输入帧，无 Raylib import）与玩家眼高碰撞 | [input.go](input.go)、[player_collision.go](player_collision.go)；旧 Raylib 物理适配已删除，生命/生物测试直接使用中立向量 |
 | 后端中立 gameplay 向量、玩家运动与通用碰撞 | [game_math.go](game_math.go)、[player_movement.go](player_movement.go)、[actor_physics.go](actor_physics.go) |
-| 生命、伤害、死亡、重生与区块保护（服务端生命 tick 已使用后端中立向量） | [player_vitals.go](player_vitals.go)、[player_respawn.go](player_respawn.go) |
+| 生命、饥饿、伤害、死亡、重生与区块保护（服务端生命 tick 已使用后端中立向量） | [player_vitals.go](player_vitals.go)、[player_respawn.go](player_respawn.go)、[survival.go](survival.go) |
 | 方块/物品定义、硬度和工具 | [block_registry.go](block_registry.go)、[item_registry.go](item_registry.go)、[mining_data.go](mining_data.go)、[tool_system.go](tool_system.go) |
 | 背包、操作、合成 | [inventory.go](inventory.go)、[inventory_actions.go](inventory_actions.go)、[recipes.go](recipes.go) |
 | 箱子/熔炉逻辑与保存 | [containers.go](containers.go) |
@@ -126,7 +129,7 @@
 - 地形：`generation*_test.go`；独立无图形环境验证：`go run ./tests/generation`。
 - 生命周期/网格/光照：`world*_test.go`、`render_mesh_test.go`、`platform/mesh_test.go`。
 - 存档与协议：`save_file_test.go`、`protocol_varint_test.go`，各玩法测试也覆盖消息往返。
-- 重生与生命：`player_vitals_test.go`；视距：`settings_distance_test.go`、`world_fog_test.go`。
+- 重生与生命/饥饿：`player_vitals_test.go`、`player_food_test.go`；视距：`settings_distance_test.go`、`world_fog_test.go`、`world_render_lod_test.go`。
 - 界面预览：`*_preview_test.go`；性能：`engine_bench_test.go`。
 - WebGPU 实机路径：Windows 下 `go run . -webgpu` 使用独立 Win32 窗口（含原始鼠标输入、焦点、缩放/尺寸事件），主菜单/世界列表/创建/联机/设置、Playing、暂停/死亡菜单全由 WebGPU 显示。退出世界保留窗口与图集；最终退出先关 World 再释放 GPU，最后销毁窗口。客户端仅支持原生 WebGPU；旧 `-webgpu=false` 不再启动旧后端。
 - 纹理过滤：`render_filter_test.go` 检查设置往返与图集留白；设置 `GOCRAFT_FILTER_GPU_TEST=1` 后运行 `go test . -run TestTextureFilterGPU`，验证 WebGPU mipmap 开关像素回读、采样倍率及 UI 上传隔离。

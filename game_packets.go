@@ -9,6 +9,13 @@ func handlePacket(pkt Packet) {
 	switch p := pkt.(type) {
 	case *PacketVitals:
 		wasDead := input.isDead()
+		if input.VitalsReady {
+			if p.Food > input.Vitals.Food {
+				playGameSound(soundEat)
+			} else if p.Health < input.Vitals.Health {
+				playGameSound(soundHurt)
+			}
+		}
 		if input.VitalsReady && p.Health < input.Vitals.Health {
 			input.HurtFlash = 0.45
 		}
