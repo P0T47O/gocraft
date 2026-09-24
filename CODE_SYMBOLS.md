@@ -600,13 +600,13 @@
 
 ## [webgpu_hud_windows.go](webgpu_hud_windows.go)
 
-类型：`webGPUHUDVertex`、`webGPUHUDRenderer`、`webGPUHUDBuilder`
+类型：`webGPUHUDVertex`、`webGPUHUDRenderer`、`webGPUHUDBuilder`、`webGPUHUDIconTints`
 
-函数/方法：`ensureWebGPUHUDRenderer`、`closeWebGPUHUDRenderer`、`*webGPUHUDRenderer.Close`、`newWebGPUHUDBuilder`、`*webGPUHUDBuilder.point`、`*webGPUHUDBuilder.rect`、`*webGPUHUDBuilder.texturedRect`、`*webGPUHUDBuilder.border`、`webGPUHUDScale`、`*webGPUHUDBuilder.addCrosshair`、`webGPUHUDHotbarBlock`、`*webGPUHUDBuilder.addBlockIcon`、`*webGPUHUDBuilder.addHotbar`、`*webGPUHUDBuilder.addVitals`、`*webGPUHUDRenderer.Draw`
+函数/方法：`ensureWebGPUHUDRenderer`、`closeWebGPUHUDRenderer`、`*webGPUHUDRenderer.Close`、`newWebGPUHUDBuilder`、`webGPUColorTint`、`webGPUItemTints`、`*webGPUHUDBuilder.point`、`*webGPUHUDBuilder.rect`、`*webGPUHUDBuilder.texturedRect`、`*webGPUHUDBuilder.texturedQuad`、`*webGPUHUDBuilder.border`、`webGPUHUDScale`、`*webGPUHUDBuilder.addCrosshair`、`webGPUHUDHotbarBlock`、`*webGPUHUDBuilder.addBlockIcon`、`*webGPUHUDBuilder.addCubeIcon`、`*webGPUHUDBuilder.addHotbar`、`*webGPUHUDBuilder.addVitals`、`*webGPUHUDRenderer.Draw`
 
 ## [webgpu_inventory_windows.go](webgpu_inventory_windows.go)
 
-函数/方法：`*webGPUHUDRenderer.drawPrepared`、`*webGPUTextRenderer.drawPrepared`、`webGPUItemUV`、`*webGPUHUDBuilder.addItemIcon`、`*webGPUHUDBuilder.addItemStack`、`webGPUAddStackText`、`drawWebGPUInventoryOverlay`、`drawWebGPUCreativeInventory`、`drawWebGPUSurvivalInventory`
+函数/方法：`*webGPUHUDBuilder.inventorySlot`、`*webGPUHUDRenderer.drawPrepared`、`*webGPUTextRenderer.drawPrepared`、`webGPUItemUV`、`*webGPUHUDBuilder.addItemIcon`、`*webGPUHUDBuilder.addItemStack`、`webGPUAddStackText`、`drawWebGPUInventoryOverlay`、`drawWebGPUCreativeInventory`、`drawWebGPUSurvivalInventory`
 
 ## [webgpu_mipmap.go](webgpu_mipmap.go)
 

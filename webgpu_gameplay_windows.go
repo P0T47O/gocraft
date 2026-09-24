@@ -75,7 +75,7 @@ func (r *webGPUWorldRenderer) DrawGameplay(world *World, frame webGPUFrameContex
 		}},
 		DepthStencilAttachment: &wgpu.RenderPassDepthStencilAttachment{
 			View: r.depthView, DepthLoadOp: gputypes.LoadOpClear, DepthStoreOp: gputypes.StoreOpStore,
-			DepthClearValue: 1, DepthReadOnly: false,
+			DepthClearValue: 0, DepthReadOnly: false,
 		},
 	})
 	if err != nil {

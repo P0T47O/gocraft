@@ -19,7 +19,11 @@ func worldFarPlane(radius int) float32 {
 // boundary. The margin covers chunk-grid rounding and camera motion in a chunk.
 func worldFogRange(radius int) (start, end float32) {
 	distance := float32(max(radius, 2) * chunkWidth)
-	return distance * 0.70, distance - min(1.5*float32(chunkWidth), distance*0.15)
+	end = distance - min(1.5*float32(chunkWidth), distance*0.15)
+	// Clear weather: reserve only the outer fringe for hiding missing terrain.
+	// This follows Minecraft's separation of boundary and environment fog,
+	// not a byte-for-byte copy of any particular version's constants.
+	return end - min(distance*0.12, 4*float32(chunkWidth)), end
 }
 
 // World owns this cache through its render worldRenderCache field. All scratch

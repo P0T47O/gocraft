@@ -75,15 +75,15 @@
 | Raylib-free 网格数学与颜色、GPU 上传适配 | [mesh_math.go](mesh_math.go)、[mesh_color.go](mesh_color.go)、[render_mesh_upload.go](render_mesh_upload.go)；共享句柄 [render_mesh.go](render_mesh.go) |
 | WebGPU 24 字节顶点打包（诊断预览可保持 36 字节） | [platform/compact_vertex.go](platform/compact_vertex.go)、[platform/compact_vertex_test.go](platform/compact_vertex_test.go) |
 | 后端中立网格上传接口、WebGPU GPU buffer | [render_mesh.go](render_mesh.go)、[platform/renderer.go](platform/renderer.go)、[platform/mesh.go](platform/mesh.go)、[platform/webgpu_backend.go](platform/webgpu_backend.go) |
-| 共享可见区块、透明排序、雾距 | [world_render.go](world_render.go)、[render_cull.go](render_cull.go) |
-| WebGPU 世界渲染（camera matrices、scene uniform、surface/depth、atlas、atlas 内水/岩浆逐帧更新、opaque/cutout、water/glass、fog、可见 section 提交） | [webgpu_camera_windows.go](webgpu_camera_windows.go)、[webgpu_world_renderer_windows.go](webgpu_world_renderer_windows.go)、[webgpu_atlas.go](webgpu_atlas.go)、[webgpu_animation_windows.go](webgpu_animation_windows.go) |
+| 共享可见区块、透明排序、视距边界雾范围（32 区块时约 427–488 格）、测试 | [world_render.go](world_render.go)、[render_cull.go](render_cull.go)、[world_fog_test.go](world_fog_test.go) |
+| WebGPU 世界渲染（camera matrices、倒置浮点深度以保持远处水面精度、scene uniform、surface/depth、atlas、atlas 内水/岩浆逐帧更新、opaque/cutout、water/glass、水平距离边界雾与独立环境雾槽位、可见 section 提交） | [webgpu_camera_windows.go](webgpu_camera_windows.go)、[webgpu_world_renderer_windows.go](webgpu_world_renderer_windows.go)、[webgpu_gameplay_windows.go](webgpu_gameplay_windows.go)、[webgpu_atlas.go](webgpu_atlas.go)、[webgpu_animation_windows.go](webgpu_animation_windows.go)；透明预览着色器 [webgpu_transparency_preview_test.go](webgpu_transparency_preview_test.go) |
 | WebGPU 实体/效果（远程玩家、掉落物、JSON bone 生物动画、挖掘裂纹） | [webgpu_entities_windows.go](webgpu_entities_windows.go) |
 | WebGPU 实体保守视锥/距离剔除、超容量分批与帧上传缓存 | [webgpu_entity_bounds_windows.go](webgpu_entity_bounds_windows.go)、[webgpu_entities_windows.go](webgpu_entities_windows.go)、[webgpu_upload_windows.go](webgpu_upload_windows.go)；同帧不同批次不能重写同一个目标缓冲区 |
 | WebGPU mipmap/AF 设置联动、动画完整留白和 mip 更新、独立 UI 最近邻采样 | [texture_policy.go](texture_policy.go)、[webgpu_mipmap.go](webgpu_mipmap.go)、[webgpu_filter_windows.go](webgpu_filter_windows.go)、[webgpu_animation_windows.go](webgpu_animation_windows.go) |
 | WebGPU 优化回归：CPU 数学等价、mip/动画留白、GPU 像素回读、1500 实体分批 | [webgpu_optimization_test.go](webgpu_optimization_test.go)、[webgpu_regression_windows_test.go](webgpu_regression_windows_test.go)；实机设置 `GOCRAFT_WEBGPU_REGRESSION=1` |
 | WebGPU 近景像素采样、mipmap 关闭时的单层视图、多帧移动/动画与 LOD 回读 | [webgpu_world_renderer_windows.go](webgpu_world_renderer_windows.go)：`sample_atlas`；[webgpu_filter_windows.go](webgpu_filter_windows.go)：`filteredAtlasView`；[webgpu_mip_regression_windows_test.go](webgpu_mip_regression_windows_test.go) |
 | WebGPU gameplay HUD / 文本（准星、热键栏、生命、像素字体、聊天、debug、暂停/死亡提示） | [webgpu_hud_windows.go](webgpu_hud_windows.go)、[webgpu_text_windows.go](webgpu_text_windows.go) |
-| WebGPU 背包/容器与物品工具图标 | [webgpu_inventory_windows.go](webgpu_inventory_windows.go)、[webgpu_container_windows.go](webgpu_container_windows.go) |
+| WebGPU 背包/容器、创意页信息栏与悬停提示、凹槽式格子、物品数量布局 | [webgpu_inventory_windows.go](webgpu_inventory_windows.go)、[webgpu_container_windows.go](webgpu_container_windows.go)；共用点击坐标 [ui.go](ui.go) |
 | WebGPU 原生窗口迁移验证/交互预览（不再依赖 Raylib 窗口） | [webgpu_chunk_preview_test.go](webgpu_chunk_preview_test.go)、[webgpu_region_preview_test.go](webgpu_region_preview_test.go)、[webgpu_surface_preview_test.go](webgpu_surface_preview_test.go)、[webgpu_textured_preview_test.go](webgpu_textured_preview_test.go)、[webgpu_transparency_preview_test.go](webgpu_transparency_preview_test.go)、[WEBGPU_MIGRATION.md](WEBGPU_MIGRATION.md) |
 | 地形颜色缓存 | [mesh_tint.go](mesh_tint.go) |
 | 只读 CPU 图集元数据（GPU 资源由 WebGPU renderer 持有） | [render_assets.go](render_assets.go) |
@@ -91,7 +91,7 @@
 | 世界纹理 mipmap/各向异性过滤、图集留白与安全层级限制 | [render_filter.go](render_filter.go)、[render_filter_test.go](render_filter_test.go)、[webgpu_atlas.go](webgpu_atlas.go)；采样器：[webgpu_filter_windows.go](webgpu_filter_windows.go)；即时设置和保存：[settings.go](settings.go)、[menu_screens.go](menu_screens.go) |
 | 动画纹理及模型纹理切换 | [webgpu_animation_windows.go](webgpu_animation_windows.go) |
 | 面模型、面网格模板 | [chunk_mesher.go](chunk_mesher.go) |
-| 物品图标、图集、着色器 | [webgpu_hud_windows.go](webgpu_hud_windows.go)、[webgpu_atlas.go](webgpu_atlas.go)、[webgpu_world_renderer_windows.go](webgpu_world_renderer_windows.go) |
+| 正六边形投影的三面方块图标、当前位置草/树叶/水着色、草侧覆盖层与独立物品精灵 | [webgpu_hud_windows.go](webgpu_hud_windows.go)、[webgpu_inventory_windows.go](webgpu_inventory_windows.go)、[mesh_tint.go](mesh_tint.go)、[webgpu_atlas.go](webgpu_atlas.go)、[webgpu_world_renderer_windows.go](webgpu_world_renderer_windows.go) |
 | 方块/掉落物绘制 | [webgpu_entities_windows.go](webgpu_entities_windows.go) |
 | 性能采样与日志（不依赖窗口库；主循环通过 `UpdateFrame` 传入帧耗时） | [performance_monitor.go](performance_monitor.go) |
 | 加载阶段耗时/积压/废弃网格统计、32 半径服务端冷加载实测 | [performance_loading.go](performance_loading.go)、[streaming_load_test.go](streaming_load_test.go)、[LOADING.md](LOADING.md) |

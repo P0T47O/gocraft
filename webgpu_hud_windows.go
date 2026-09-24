@@ -4,6 +4,8 @@ package main
 
 import (
 	"fmt"
+	"image/color"
+	"math"
 	"unsafe"
 
 	"github.com/gogpu/gputypes"
@@ -193,10 +195,38 @@ func (h *webGPUHUDRenderer) Close() {
 type webGPUHUDBuilder struct {
 	vertices      []webGPUHUDVertex
 	width, height float32
+	iconTints     webGPUHUDIconTints
 }
 
 func newWebGPUHUDBuilder(width, height uint32) *webGPUHUDBuilder {
-	return &webGPUHUDBuilder{vertices: make([]webGPUHUDVertex, 0, 2048), width: float32(width), height: float32(height)}
+	return &webGPUHUDBuilder{vertices: make([]webGPUHUDVertex, 0, 2048), width: float32(width), height: float32(height), iconTints: webGPUItemTints()}
+}
+
+type webGPUHUDIconTints struct {
+	grass, foliage, water [4]float32
+}
+
+func webGPUColorTint(c color.RGBA) [4]float32 {
+	return [4]float32{float32(c.R) / 255, float32(c.G) / 255, float32(c.B) / 255, 1}
+}
+
+func webGPUItemTints() webGPUHUDIconTints {
+	// Neutral plains colors are also used by menu/preview renderers without a world.
+	t := webGPUHUDIconTints{
+		grass:   [4]float32{121.0 / 255, 192.0 / 255, 90.0 / 255, 1},
+		foliage: [4]float32{121.0 / 255, 192.0 / 255, 90.0 / 255, 1},
+		water:   [4]float32{64.0 / 255, 120.0 / 255, 1, 200.0 / 255},
+	}
+	if world == nil || assets == nil {
+		return t
+	}
+	x, z := int(math.Floor(float64(camera.Position.X))), int(math.Floor(float64(camera.Position.Z)))
+	e := sampleEnvironment(world.seed, x, z)
+	t.grass = webGPUColorTint(assets.getClimateColor(world.seed, x, z))
+	t.foliage = webGPUColorTint(assets.environmentColor(e, false))
+	t.water = webGPUColorTint(assets.environmentColor(e, true))
+	t.water[3] = 200.0 / 255
+	return t
 }
 
 func (b *webGPUHUDBuilder) point(x, y float32) [2]float32 {
@@ -218,6 +248,16 @@ func (b *webGPUHUDBuilder) texturedRect(x, y, w, h, u0, v0, u1, v1 float32, colo
 		{Position: [2]float32{p0[0], p1[1]}, UV: [2]float32{u0, v1}, Color: color},
 	}
 	b.vertices = append(b.vertices, verts[:]...)
+}
+
+// HUD-space quad keeps block previews in the same atlas batch as the UI.
+func (b *webGPUHUDBuilder) texturedQuad(points [4][2]float32, uv AtlasRect, color [4]float32) {
+	u0, v0, u1, v1 := uv.X, uv.Y, uv.X+uv.Width, uv.Y+uv.Height
+	uvs := [4][2]float32{{u0, v0}, {u1, v0}, {u1, v1}, {u0, v1}}
+	for _, corner := range [...]int{0, 1, 2, 0, 2, 3} {
+		p := points[corner]
+		b.vertices = append(b.vertices, webGPUHUDVertex{Position: b.point(p[0], p[1]), UV: uvs[corner], Color: color})
+	}
 }
 
 func (b *webGPUHUDBuilder) border(x, y, w, h, thickness float32, color [4]float32) {
@@ -266,12 +306,78 @@ func (b *webGPUHUDBuilder) addBlockIcon(block byte, x, y, size float32) {
 	if def == nil || def.ID == blockAir || def.Textures.Top == "" {
 		return
 	}
+	if (def.RenderType == RenderTypeCube || def.RenderType == RenderTypeCutout || def.RenderType == RenderTypeGlass || def.RenderType == RenderTypeLiquid) &&
+		b.addCubeIcon(def, x, y, size) {
+		return
+	}
 	uv, ok := assets.atlas.UVs[def.Textures.Top]
 	if !ok {
 		return
 	}
 	pad := size * 0.13
-	b.texturedRect(x+pad, y+pad, size-pad*2, size-pad*2, uv.X, uv.Y, uv.X+uv.Width, uv.Y+uv.Height, [4]float32{1, 1, 1, 1})
+	tint := [4]float32{1, 1, 1, 1}
+	if block == blockTallGrass {
+		tint = b.iconTints.foliage
+	}
+	b.texturedRect(x+pad, y+pad, size-pad*2, size-pad*2, uv.X, uv.Y, uv.X+uv.Width, uv.Y+uv.Height, tint)
+}
+
+func (b *webGPUHUDBuilder) addCubeIcon(def *BlockDef, x, y, size float32) bool {
+	atlas := assets.atlas.UVs
+	top, okTop := atlas[def.Textures.Top]
+	left, okLeft := atlas[def.Textures.North]
+	right, okRight := atlas[def.Textures.East]
+	if !okTop || !okLeft || !okRight {
+		return false
+	}
+	p := func(rx, ry float32) [2]float32 { return [2]float32{x + rx*size, y + ry*size} }
+	// A regular point-up hexagon: six equal outer edges, with the front cube
+	// corner at its center. This keeps top and sides symmetric at every UI scale.
+	const radius = float32(.43)
+	const halfWidth = radius * 0.8660254 // sqrt(3)/2
+	upper := p(.5, .5-radius)
+	leftTop, rightTop := p(.5-halfWidth, .5-radius/2), p(.5+halfWidth, .5-radius/2)
+	front := p(.5, .5)
+	leftBottom, rightBottom := p(.5-halfWidth, .5+radius/2), p(.5+halfWidth, .5+radius/2)
+	bottom := p(.5, .5+radius)
+	leftFace := [4][2]float32{leftTop, front, bottom, leftBottom}
+	rightFace := [4][2]float32{front, rightTop, rightBottom, bottom}
+	leftTint, rightTint := [4]float32{.70, .70, .70, 1}, [4]float32{.84, .84, .84, 1}
+	topTint := [4]float32{1, 1, 1, 1}
+	switch def.ID {
+	case blockGrass:
+		topTint = b.iconTints.grass
+	case blockLeaves:
+		topTint = b.iconTints.foliage
+	case blockLeavesBirch:
+		topTint = [4]float32{128.0 / 255, 167.0 / 255, 85.0 / 255, 1}
+	case blockLeavesSpruce:
+		topTint = [4]float32{97.0 / 255, 153.0 / 255, 97.0 / 255, 1}
+	case blockWater:
+		topTint = b.iconTints.water
+	}
+	if def.ID == blockLeaves || def.ID == blockLeavesBirch || def.ID == blockLeavesSpruce || def.ID == blockWater {
+		for i := 0; i < 3; i++ {
+			leftTint[i] *= topTint[i]
+			rightTint[i] *= topTint[i]
+		}
+		leftTint[3], rightTint[3] = topTint[3], topTint[3]
+	}
+	b.texturedQuad(leftFace, left, leftTint)
+	b.texturedQuad(rightFace, right, rightTint)
+	if def.ID == blockGrass {
+		if overlay, ok := atlas["textures/block/grass_block_side_overlay.png"]; ok {
+			leftOverlay, rightOverlay := b.iconTints.foliage, b.iconTints.foliage
+			for i := 0; i < 3; i++ {
+				leftOverlay[i] *= .70
+				rightOverlay[i] *= .84
+			}
+			b.texturedQuad(leftFace, overlay, leftOverlay)
+			b.texturedQuad(rightFace, overlay, rightOverlay)
+		}
+	}
+	b.texturedQuad([4][2]float32{upper, rightTop, front, leftTop}, top, topTint)
+	return true
 }
 
 func (b *webGPUHUDBuilder) addHotbar(state *InputState, scale float32) {
@@ -291,12 +397,11 @@ func (b *webGPUHUDBuilder) addHotbar(state *InputState, scale float32) {
 	for i := 0; i < 9; i++ {
 		rx := x + 8*scale + float32(i)*stride
 		ry := y + 6*scale
-		b.rect(rx, ry, slot, slot, slotColor)
-		b.border(rx, ry, slot, slot, max(scale, 1), line)
+		b.inventorySlot(rx, ry, slot, slot, scale, slotColor)
 		if i == state.SelectedSlot {
 			b.border(rx-2*scale, ry-2*scale, slot+4*scale, slot+4*scale, max(2*scale, 2), accent)
 		}
-		b.addBlockIcon(webGPUHUDHotbarBlock(state, i), rx, ry, slot)
+		b.addItemIcon(webGPUHUDHotbarBlock(state, i), rx, ry, slot)
 	}
 }
 

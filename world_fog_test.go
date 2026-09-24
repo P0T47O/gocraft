@@ -11,7 +11,11 @@ func TestWorldFogRange(t *testing.T) {
 		}
 	}
 	start, end := worldFogRange(worldRenderRadius)
-	if start < 260 || end != 360 {
+	if start < 310 || end != 360 {
 		t.Fatalf("default fog should leave middle distance clear: [%f, %f]", start, end)
+	}
+	start, end = worldFogRange(32)
+	if start < 420 || end != 488 {
+		t.Fatalf("32 chunks should fade only near the boundary: [%f, %f]", start, end)
 	}
 }

@@ -60,8 +60,13 @@ fn vs_main(in: VertexInput) -> VertexOutput {
 }
 
 fn fogged(rgb: vec3f, world_pos: vec3f) -> vec3f {
-    let d = distance(world_pos, scene.eye_pos.xyz);
-    let amount = smoothstep(scene.fog_range.x, scene.fog_range.y, d);
+    let delta = world_pos - scene.eye_pos.xyz;
+    let boundary = smoothstep(scene.fog_range.x, scene.fog_range.y, length(delta.xz));
+    var environment = 0.0;
+    if scene.fog_range.w > scene.fog_range.z {
+        environment = smoothstep(scene.fog_range.z, scene.fog_range.w, length(delta));
+    }
+    let amount = max(boundary, environment);
     return mix(rgb, scene.fog_color.rgb, amount);
 }
 

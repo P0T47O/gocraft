@@ -63,8 +63,7 @@ func drawWebGPUContainerOverlay(pass *wgpu.RenderPassEncoder, worldRenderer *web
 			stack = inv.Slots[i-len(container.Slots)]
 		}
 		r := containerUISlot(layout, container.Kind, i)
-		shapes.rect(r.X, r.Y, r.Width, r.Height, webGPUUISlot)
-		shapes.border(r.X, r.Y, r.Width, r.Height, max(scale, 1), webGPUUILine)
+		shapes.inventorySlot(r.X, r.Y, r.Width, r.Height, scale, webGPUUISlot)
 		if mouse.X >= r.X && mouse.X <= r.X+r.Width && mouse.Y >= r.Y && mouse.Y <= r.Y+r.Height {
 			shapes.border(r.X-2*scale, r.Y-2*scale, r.Width+4*scale, r.Height+4*scale, max(2*scale, 2), webGPUUIAccent)
 			hovered = stack

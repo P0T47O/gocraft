@@ -29,9 +29,11 @@ func (r *webGPUWorldRenderer) updateSceneCamera(camera webGPUCamera) error {
 	clipCorrection := mgl32.Mat4{
 		1, 0, 0, 0,
 		0, 1, 0, 0,
-		0, 0, 0.5, 0,
+		0, 0, -0.5, 0,
 		0, 0, 0.5, 1,
 	}
+	// Reverse the [0,1] depth range. Together with a floating-point depth
+	// attachment this preserves separation between distant water and terrain.
 	vp := clipCorrection.Mul4(projection).Mul4(view)
 	fogStart, fogEnd := worldFogRange(renderDistance())
 	fogColor := [4]float32{180.0 / 255.0, 210.0 / 255.0, 1.0, 1.0}
@@ -49,6 +51,8 @@ func (r *webGPUWorldRenderer) updateSceneCamera(camera webGPUCamera) error {
 	put(76, 1)
 	put(80, fogStart)
 	put(84, fogEnd)
+	// Independent environmental fog disabled in clear air. Do not couple it
+	// to render distance; water/weather can supply their own range later.
 	put(88, 0)
 	put(92, 0)
 	for i, value := range fogColor {

@@ -13,7 +13,7 @@ import (
 )
 
 const webGPUWorldSceneBytes = 112
-const webGPUWorldDepthFormat = gputypes.TextureFormatDepth24Plus
+const webGPUWorldDepthFormat = gputypes.TextureFormatDepth32Float
 
 const webGPUWorldShader = `
 struct Scene {
@@ -51,8 +51,16 @@ fn vs_main(in: VertexInput) -> VertexOutput {
 }
 
 fn fogged(rgb: vec3f, world_pos: vec3f) -> vec3f {
-    let d = distance(world_pos, scene.eye_pos.xyz);
-    let amount = smoothstep(scene.fog_range.x, scene.fog_range.y, d);
+    let delta = world_pos - scene.eye_pos.xyz;
+    // Streaming is horizontal: altitude must not shorten terrain visibility.
+    let boundary = smoothstep(scene.fog_range.x, scene.fog_range.y, length(delta.xz));
+    // zw is an independent spherical environmental fog range. Equal endpoints
+    // disable it for clear weather, without evaluating undefined smoothstep.
+    var environment = 0.0;
+    if scene.fog_range.w > scene.fog_range.z {
+        environment = smoothstep(scene.fog_range.z, scene.fog_range.w, length(delta));
+    }
+    let amount = max(boundary, environment);
     return mix(rgb, scene.fog_color.rgb, amount);
 }
 
@@ -298,7 +306,7 @@ func (r *webGPUWorldRenderer) createPipelineResources(atlas *webGPUBlockAtlas) e
 		Vertex:    vertexState,
 		Primitive: primitive,
 		DepthStencil: &wgpu.DepthStencilState{
-			Format: webGPUWorldDepthFormat, DepthWriteEnabled: true, DepthCompare: gputypes.CompareFunctionLess,
+			Format: webGPUWorldDepthFormat, DepthWriteEnabled: true, DepthCompare: gputypes.CompareFunctionGreater,
 			StencilFront: ignoreStencil, StencilBack: ignoreStencil, StencilReadMask: 0, StencilWriteMask: 0,
 		},
 		Multisample: multisample,
@@ -325,7 +333,7 @@ func (r *webGPUWorldRenderer) createPipelineResources(atlas *webGPUBlockAtlas) e
 		Vertex:    vertexState,
 		Primitive: primitive,
 		DepthStencil: &wgpu.DepthStencilState{
-			Format: webGPUWorldDepthFormat, DepthWriteEnabled: false, DepthCompare: gputypes.CompareFunctionLess,
+			Format: webGPUWorldDepthFormat, DepthWriteEnabled: false, DepthCompare: gputypes.CompareFunctionGreater,
 			StencilFront: ignoreStencil, StencilBack: ignoreStencil, StencilReadMask: 0, StencilWriteMask: 0,
 		},
 		Multisample: multisample,
