@@ -12,10 +12,6 @@ func (w *World) rayCast(originX, originY, originZ, dirX, dirY, dirZ, maxDist flo
 	y := int(math.Floor(float64(originY + 0.5)))
 	z := int(math.Floor(float64(originZ + 0.5)))
 
-	if w.BlockAt(x, y, z) != blockAir && w.BlockAt(x, y, z) != blockWater {
-		return hitInfo{x: x, y: y, z: z, hit: true}
-	}
-
 	stepX := sign(dirX)
 	stepY := sign(dirY)
 	stepZ := sign(dirZ)
@@ -31,6 +27,25 @@ func (w *World) rayCast(originX, originY, originZ, dirX, dirY, dirZ, maxDist flo
 	var dist float32
 	var normal struct {
 		X, Y, Z float32
+	}
+	origin := meshVec3(originX, originY, originZ)
+	direction := meshVec3(dirX, dirY, dirZ)
+	checkVoxel := func(entry float32) hitInfo {
+		block := w.BlockAt(x, y, z)
+		if block == blockAir || block == blockWater {
+			return hitInfo{}
+		}
+		if block == blockTorch {
+			exit := min(maxDist, tMaxX, tMaxY, tMaxZ)
+			if hitDist, hitNormal, ok := torchRayHit(w.MetaAt(x, y, z), x, y, z, origin, direction, entry, exit); ok {
+				return hitInfo{x: x, y: y, z: z, normal: struct{ X, Y, Z float32 }{hitNormal.X, hitNormal.Y, hitNormal.Z}, distance: hitDist, hit: true}
+			}
+			return hitInfo{}
+		}
+		return hitInfo{x: x, y: y, z: z, normal: normal, distance: entry, hit: true}
+	}
+	if hit := checkVoxel(0); hit.hit {
+		return hit
 	}
 
 	for dist <= maxDist {
@@ -70,15 +85,8 @@ func (w *World) rayCast(originX, originY, originZ, dirX, dirY, dirZ, maxDist flo
 		if dist > maxDist {
 			break
 		}
-		if w.BlockAt(x, y, z) != blockAir && w.BlockAt(x, y, z) != blockWater {
-			return hitInfo{
-				x:        x,
-				y:        y,
-				z:        z,
-				normal:   normal,
-				distance: dist,
-				hit:      true,
-			}
+		if hit := checkVoxel(dist); hit.hit {
+			return hit
 		}
 	}
 	return hitInfo{}

@@ -71,10 +71,11 @@
 | 生成机制及限制 | [GENERATION.md](GENERATION.md) |
 | 光照传播 | [world_light.go](world_light.go) |
 | 六面逐顶点光照、AO、防拐角漏光、四边形对角线选择 | [mesh_lighting.go](mesh_lighting.go)、[mesh_lighting_test.go](mesh_lighting_test.go)、[mesh_lighting_preview_test.go](mesh_lighting_preview_test.go)；范围与实测：[LIGHTING.md](LIGHTING.md) |
-| 客户端区块消息应用、后端中立 DDA 射线查询与 gameplay-vector HitTest 外壳 | [world_packets.go](world_packets.go)、[world_ray.go](world_ray.go)、[world_ray_game.go](world_ray_game.go) |
+| 客户端区块消息应用、后端中立 DDA 射线查询与 gameplay-vector HitTest 外壳；火把精确双部件选取范围（可透过空隙挖后方方块） | [world_packets.go](world_packets.go)、[world_ray.go](world_ray.go)、[world_ray_game.go](world_ray_game.go)、[torch_hitbox.go](torch_hitbox.go)；回归 [world_ray_torch_test.go](world_ray_torch_test.go) |
 | 客户端光照增量、精确网格失效范围与更新合并 | [world_packet_light.go](world_packet_light.go)、[world_mesh_dirty.go](world_mesh_dirty.go)、[world_mesh_dirty_test.go](world_mesh_dirty_test.go) |
 | 网格任务与快照 | [world_mesh.go](world_mesh.go) |
 | 方块表面网格构建 | [chunk_mesher.go](chunk_mesher.go) |
+| 火把五个朝向的图集 UV、贴地/贴墙几何与面法线（与选取共享几何）；仙人掌四面纹理裁剪、内缩侧面/邻块照明及堆叠内面剔除 | [chunk_mesher.go](chunk_mesher.go)、[torch_geometry.go](torch_geometry.go)；逐朝向/逐邻接回归 [special_block_mesh_test.go](special_block_mesh_test.go) |
 | Raylib-free 网格数学与颜色、GPU 上传适配 | [mesh_math.go](mesh_math.go)、[mesh_color.go](mesh_color.go)、[render_mesh_upload.go](render_mesh_upload.go)；共享句柄 [render_mesh.go](render_mesh.go) |
 | WebGPU 24 字节顶点打包（诊断预览可保持 36 字节） | [platform/compact_vertex.go](platform/compact_vertex.go)、[platform/compact_vertex_test.go](platform/compact_vertex_test.go) |
 | 后端中立网格上传接口、WebGPU GPU buffer | [render_mesh.go](render_mesh.go)、[platform/renderer.go](platform/renderer.go)、[platform/mesh.go](platform/mesh.go)、[platform/webgpu_backend.go](platform/webgpu_backend.go) |

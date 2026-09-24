@@ -311,57 +311,40 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 				textures := def.Textures
 				px, py, pz := float32(wx), float32(y), float32(wz)
 
-				// Torch Rendering (History Version)
+				// Torch geometry is centered inside its block and submitted through
+				// the same atlas batch as the rest of the cutout world mesh.
 				if def.RenderType == RenderTypeTorch {
-					// Logic restored from render_block.go (DrawModelEx -> addFace)
 					light := getLight(wx, y, wz)
 					col := a.applyAO(block, white, 0.0, false, light, tintColor)
 
 					meta := getMeta(wx, y, wz)
+					geometry := geometryForTorch(meta)
+					offset, stemS, flameS, flameOffset := geometry.offset, geometry.stemSize, geometry.flameSize, geometry.flameOffset
+					rotation := meshRotation(geometry.axis, geometry.angle)
 
-					// Stem Dimensions (1x1 unit base = 1 pixel scale? No, base mesh is 1 unit)
-					// stemScale := meshVec3(0.125, 0.625, 0.125)
-					// This means 2x10x2 pixels
-
-					// Rotation Logic
-					// Default (Up)
-					var rotationAxis gameVec3 = meshVec3(0, 1, 0)
-					var rotationAngle float32 = 0
-
-					var offset gameVec3 = meshVec3(0, -0.04, 0) // Base Y offset
-
-					wallOffset := float32(0.4375)                // 7/16
-					tiltAngle := float32(22.5 * 3.14159 / 180.0) // Radians
-
-					switch meta {
-					case 1: // North (Z-)
-						dir := meshVec3(0, 0, -1)
-						offset.Z += wallOffset
-						rotationAxis = meshCross(meshVec3(0, 1, 0), dir)
-						rotationAngle = tiltAngle
-					case 2: // South (Z+)
-						dir := meshVec3(0, 0, 1)
-						offset.Z -= wallOffset
-						rotationAxis = meshCross(meshVec3(0, 1, 0), dir)
-						rotationAngle = tiltAngle
-					case 3: // West (X-)
-						dir := meshVec3(-1, 0, 0)
-						offset.X += wallOffset
-						rotationAxis = meshCross(meshVec3(0, 1, 0), dir)
-						rotationAngle = tiltAngle
-					case 4: // East (X+)
-						dir := meshVec3(1, 0, 0)
-						offset.X -= wallOffset
-						rotationAxis = meshCross(meshVec3(0, 1, 0), dir)
-						rotationAngle = tiltAngle
+					uvRect, inAtlas := a.getAtlasUV(textures.North)
+					path := textures.North
+					if inAtlas {
+						path = "atlas"
 					}
-
-					// We need a custom AddFace that transforms vertices
+					torchUV := func(uvs []float32) []float32 {
+						if inAtlas {
+							for i := 0; i < len(uvs); i += 2 {
+								uvs[i] = uvRect.X + uvs[i]*uvRect.Width
+								uvs[i+1] = uvRect.Y + uvs[i+1]*uvRect.Height
+							}
+						}
+						return uvs
+					}
+					torchNormal := func(vertices []float32) gameVec3 {
+						edgeA := meshVec3(vertices[3]-vertices[0], vertices[4]-vertices[1], vertices[5]-vertices[2])
+						edgeB := meshVec3(vertices[6]-vertices[0], vertices[7]-vertices[1], vertices[8]-vertices[2])
+						return gameVec3Normalize(meshCross(edgeA, edgeB))
+					}
 					addTransformedFace := func(builder *meshBuilder, v []float32, vScale gameVec3, uvs []float32) {
 						// v usually 12 floats (4 vertices * 3 coords)
 						transformedV := make([]float32, 12)
 						// Create rotation matrix
-						mat := meshRotation(rotationAxis, rotationAngle)
 
 						for i := 0; i < 4; i++ {
 							vx := v[i*3] * vScale.X
@@ -369,29 +352,18 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 							vz := v[i*3+2] * vScale.Z
 
 							vec := meshVec3(vx, vy, vz)
-							vec = meshTransform(vec, mat)
+							vec = meshTransform(vec, rotation)
 
 							transformedV[i*3] = px + offset.X + vec.X
 							transformedV[i*3+1] = py + offset.Y + vec.Y
 							transformedV[i*3+2] = pz + offset.Z + vec.Z
 						}
 
-						// Calculate Normal (approximate or rotated)
-						// For now simple Up/Side but rotated
-						n := meshVec3(0, 1, 0) // Placeholder
-						n = meshTransform(n, mat)
-
-						builder.addFace(transformedV, n, uvs, col)
+						builder.addFace(transformedV, torchNormal(transformedV), torchUV(uvs), col)
 					}
 
-					// Textures from RenderAssets meshes
-					// We can't access faceMeshes directly here easily unless we export them or copy logic.
-					// I'll copy the UV logic from render_assets.go initFaceMeshes.
-
 					// STEM
-					stemS := meshVec3(0.125, 0.625, 0.125)
-
-					builder := getBuilder("cutout", textures.North) // Use same texture for all
+					builder := getBuilder("cutout", path)
 
 					// Stem Faces
 					// North (Z-)
@@ -407,21 +379,9 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 					// Bottom
 					addTransformedFace(builder, []float32{-0.5, -0.5, -0.5, 0.5, -0.5, -0.5, 0.5, -0.5, 0.5, -0.5, -0.5, 0.5}, stemS, []float32{0.4375, 0.5, 0.5625, 0.5, 0.5625, 0.625, 0.4375, 0.625})
 
-					// FLAME
-					// flamePos.Y += stemScale.Y*0.5 + 0.125
-					// In local space (relative to stemPos), flame is offset by (0, 0.625*0.5 + 0.125, 0)
-					// = 0.3125 + 0.125 = 0.4375
-
-					// But wait, our `offset` variable is the Stem Center.
-					// We need to shift the flame relative to that.
-					// flameCenterLocal = (0, 0.4375, 0)
-
-					flameOffset := meshVec3(0, 0.4375, 0)
-
-					// Modify addTransformedFace to accept local shift
+					// The flame begins where the stem ends and fits the block.
 					addTransformedFaceShifted := func(builder *meshBuilder, v []float32, vScale gameVec3, uvs []float32, shift gameVec3) {
 						transformedV := make([]float32, 12)
-						mat := meshRotation(rotationAxis, rotationAngle)
 
 						for i := 0; i < 4; i++ {
 							// Apply Scale
@@ -436,20 +396,15 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 
 							// Apply Rotation
 							vec := meshVec3(vx, vy, vz)
-							vec = meshTransform(vec, mat)
+							vec = meshTransform(vec, rotation)
 
 							// Translate to World
 							transformedV[i*3] = px + offset.X + vec.X
 							transformedV[i*3+1] = py + offset.Y + vec.Y
 							transformedV[i*3+2] = pz + offset.Z + vec.Z
 						}
-						// Normal
-						n := meshVec3(0, 1, 0)
-						n = meshTransform(n, mat)
-						builder.addFace(transformedV, n, uvs, col)
+						builder.addFace(transformedV, torchNormal(transformedV), torchUV(uvs), col)
 					}
-
-					flameS := meshVec3(0.5, 0.5, 0.5)
 
 					// Flame Faces
 					addTransformedFaceShifted(builder, []float32{-0.5, 0.5, -0.5, 0.5, 0.5, -0.5, 0.5, -0.5, -0.5, -0.5, -0.5, -0.5}, flameS, []float32{0.4375, 0.0, 0.5625, 0.0, 0.5625, 0.375, 0.4375, 0.375}, flameOffset)
@@ -559,9 +514,12 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 				// Cactus checks
 				if block == blockCactus {
 					cactusExt := float32(0.4375)
+					// Side planes lie inside this voxel. A solid neighbor must
+					// not force their lighting to that neighbor's dark interior.
+					cactusLight := getLight(wx, y, wz)
 
 					// TOP (Y+)
-					if a.shouldDrawFace(block, getBlock(wx, y+1, wz)) {
+					if above := getBlock(wx, y+1, wz); above != blockCactus && a.shouldDrawFace(block, above) {
 						sx0, sx1 := isOccluding(wx-1, y+1, wz), isOccluding(wx+1, y+1, wz)
 						sz0, sz1 := isOccluding(wx, y+1, wz-1), isOccluding(wx, y+1, wz+1)
 						c00, c01 := isOccluding(wx-1, y+1, wz-1), isOccluding(wx-1, y+1, wz+1)
@@ -590,7 +548,7 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 						)
 					}
 					// BOTTOM (Y-)
-					if a.shouldDrawFace(block, getBlock(wx, y-1, wz)) {
+					if below := getBlock(wx, y-1, wz); below != blockCactus && a.shouldDrawFace(block, below) {
 						sx0, sx1 := isOccluding(wx-1, y-1, wz), isOccluding(wx+1, y-1, wz)
 						sz0, sz1 := isOccluding(wx, y-1, wz-1), isOccluding(wx, y-1, wz+1)
 						c00, c01 := isOccluding(wx-1, y-1, wz-1), isOccluding(wx-1, y-1, wz+1)
@@ -618,16 +576,20 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 							uvs, col,
 						)
 					}
+					// The side planes are inset by 1/16. Even a full opaque
+					// neighbor cannot occlude them, so emit all four sides.
 					// NORTH (Z-)
-					if a.shouldDrawFace(block, getBlock(wx, y, wz-1)) {
+					{
 						sx0, sx1 := isOccluding(wx-1, y, wz-1), isOccluding(wx+1, y, wz-1)
 						sy0, sy1 := isOccluding(wx, y-1, wz-1), isOccluding(wx, y+1, wz-1)
 						c00, c01 := isOccluding(wx-1, y-1, wz-1), isOccluding(wx-1, y+1, wz-1)
 						c10, c11 := isOccluding(wx+1, y-1, wz-1), isOccluding(wx+1, y+1, wz-1)
 						ao := float32(cornerAO(sx0, sy0, c00)+cornerAO(sx0, sy1, c01)+cornerAO(sx1, sy0, c10)+cornerAO(sx1, sy1, c11)) / 12.0
 
-						col := a.applyAO(block, northTint, ao, false, getLight(wx, y, wz-1), tintColor)
-						uvs := []float32{0, 0, 1, 0, 1, 1, 0, 1}
+						col := a.applyAO(block, northTint, ao, false, max(cactusLight, getLight(wx, y, wz-1)), tintColor)
+						// Match the same 1..15 texel crop as the other sides.
+						uMin, uMax := float32(0.0625), float32(0.9375)
+						uvs := []float32{uMin, 0, uMax, 0, uMax, 1, uMin, 1}
 
 						usePath := textures.North
 						uvRect, inAtlas := a.getAtlasUV(textures.North)
@@ -646,14 +608,14 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 						)
 					}
 					// SOUTH (Z+)
-					if a.shouldDrawFace(block, getBlock(wx, y, wz+1)) {
+					{
 						sx0, sx1 := isOccluding(wx-1, y, wz+1), isOccluding(wx+1, y, wz+1)
 						sy0, sy1 := isOccluding(wx, y-1, wz+1), isOccluding(wx, y+1, wz+1)
 						c00, c01 := isOccluding(wx-1, y-1, wz+1), isOccluding(wx-1, y+1, wz+1)
 						c10, c11 := isOccluding(wx+1, y-1, wz+1), isOccluding(wx+1, y+1, wz+1)
 						ao := float32(cornerAO(sx0, sy0, c00)+cornerAO(sx0, sy1, c01)+cornerAO(sx1, sy0, c10)+cornerAO(sx1, sy1, c11)) / 12.0
 
-						col := a.applyAO(block, southTint, ao, false, getLight(wx, y, wz+1), tintColor)
+						col := a.applyAO(block, southTint, ao, false, max(cactusLight, getLight(wx, y, wz+1)), tintColor)
 						// Sides: Cropped Horizontally (1..15), Full Vertically (0..16)
 						uMin, uMax := float32(0.0625), float32(0.9375)
 						uvs := []float32{uMax, 0, uMin, 0, uMin, 1, uMax, 1}
@@ -675,14 +637,14 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 						)
 					}
 					// EAST (X+)
-					if a.shouldDrawFace(block, getBlock(wx+1, y, wz)) {
+					{
 						sz0, sz1 := isOccluding(wx+1, y, wz-1), isOccluding(wx+1, y, wz+1)
 						sy0, sy1 := isOccluding(wx+1, y-1, wz), isOccluding(wx+1, y+1, wz)
 						c00, c01 := isOccluding(wx+1, y-1, wz-1), isOccluding(wx+1, y+1, wz-1)
 						c10, c11 := isOccluding(wx+1, y-1, wz+1), isOccluding(wx+1, y+1, wz+1)
 						ao := float32(cornerAO(sz0, sy0, c00)+cornerAO(sz0, sy1, c01)+cornerAO(sz1, sy0, c10)+cornerAO(sz1, sy1, c11)) / 12.0
 
-						col := a.applyAO(block, eastTint, ao, false, getLight(wx+1, y, wz), tintColor)
+						col := a.applyAO(block, eastTint, ao, false, max(cactusLight, getLight(wx+1, y, wz)), tintColor)
 						// Sides: Cropped Horizontally (1..15), Full Vertically (0..16)
 						uMin, uMax := float32(0.0625), float32(0.9375)
 						uvs := []float32{uMin, 0, uMax, 0, uMax, 1, uMin, 1}
@@ -704,14 +666,14 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 						)
 					}
 					// WEST (X-)
-					if a.shouldDrawFace(block, getBlock(wx-1, y, wz)) {
+					{
 						sz0, sz1 := isOccluding(wx-1, y, wz-1), isOccluding(wx-1, y, wz+1)
 						sy0, sy1 := isOccluding(wx-1, y-1, wz), isOccluding(wx-1, y+1, wz)
 						c00, c01 := isOccluding(wx-1, y-1, wz-1), isOccluding(wx-1, y+1, wz-1)
 						c10, c11 := isOccluding(wx-1, y-1, wz+1), isOccluding(wx-1, y+1, wz+1)
 						ao := float32(cornerAO(sz0, sy0, c00)+cornerAO(sz0, sy1, c01)+cornerAO(sz1, sy0, c10)+cornerAO(sz1, sy1, c11)) / 12.0
 
-						col := a.applyAO(block, westTint, ao, false, getLight(wx-1, y, wz), tintColor)
+						col := a.applyAO(block, westTint, ao, false, max(cactusLight, getLight(wx-1, y, wz)), tintColor)
 						// Sides: Cropped Horizontally (1..15), Full Vertically (0..16)
 						uMin, uMax := float32(0.0625), float32(0.9375)
 						uvs := []float32{uMax, 0, uMin, 0, uMin, 1, uMax, 1}

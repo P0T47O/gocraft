@@ -550,6 +550,16 @@
 
 函数/方法：`GetMiningSpeedMultiplier`、`CanHarvest`、`MiningSeconds`
 
+## [torch_geometry.go](torch_geometry.go)
+
+类型：`torchGeometry`
+
+函数/方法：`geometryForTorch`
+
+## [torch_hitbox.go](torch_hitbox.go)
+
+函数/方法：`torchRayHit`、`rayCuboid`
+
 ## [types.go](types.go)
 
 类型：`hitInfo`、`blockFaces`
