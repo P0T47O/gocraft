@@ -40,7 +40,7 @@ func (p *PacketClickWindow) Decode(r *bytes.Buffer) error {
 
 type PacketBlockInteract struct {
 	X, Y, Z int32
-	Action  int32 // 0: Interact
+	Action  int32 // 0: Interact, 1: Begin mining, 2: Cancel mining
 }
 
 func (p *PacketBlockInteract) ID() int32 { return IDBlockInteract }

@@ -1,6 +1,19 @@
 package main
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
+
+func finishTestMining(s *Server, player *PlayerEntity, pos BlockPos) {
+	s.HandlePacket(PacketWrapper{From: player.UUID, Packet: &PacketBlockInteract{X: pos.X, Y: pos.Y, Z: pos.Z, Action: 1}})
+	if session, ok := s.miningSessions[player.UUID]; ok {
+		seconds := MiningSeconds(session.tool, session.block)
+		session.started = time.Now().Add(-time.Duration(float64(seconds+1) * float64(time.Second)))
+		s.miningSessions[player.UUID] = session
+	}
+	s.HandlePacket(PacketWrapper{From: player.UUID, Packet: &PacketBlockChange{X: pos.X, Y: pos.Y, Z: pos.Z, BlockID: blockAir}})
+}
 
 func TestMiningRules(t *testing.T) {
 	initBlockRegistry()
@@ -42,6 +55,35 @@ func TestMiningRules(t *testing.T) {
 	}
 }
 
+func TestClientMiningStartDoesNotCountUnspentFrame(t *testing.T) {
+	initBlockRegistry()
+	preserveWindowInput(t)
+	oldMode, oldDelta := currentGameMode, gameFrameDelta
+	t.Cleanup(func() { currentGameMode, gameFrameDelta = oldMode, oldDelta })
+	currentGameMode = ModeSurvival
+	setGameFrameTime(0.05)
+	windowFrame = windowInputFrame{Width: 1280, Height: 720}
+	windowFrame.MouseDown[mouseLeft] = true
+	w := NewClientWorld()
+	defer w.Close()
+	c := lifecycleChunk(w, chunkKey{0, 0})
+	c.blocks.Set(2, 70, 4, blockStone)
+	camera := gameCamera{Position: newGameVec3(2, 72, 2), Target: newGameVec3(2, 70, 4), Up: newGameVec3(0, 1, 0)}
+	state := &InputState{SelectedSlot: 0}
+	state.InitFromCamera(camera)
+	peer := &Client{Outgoing: make(chan Packet, 8), done: make(chan struct{})}
+	hit := HandleInput(w, &camera, state, peer)
+	if !hit.hit || hit.x != 2 || hit.y != 70 || hit.z != 4 {
+		t.Fatalf("test ray missed stone: %+v", hit)
+	}
+	if state.MiningProgress != 0 || len(peer.Outgoing) != 1 {
+		t.Fatalf("start frame credited mining: progress %.3f, packets %d", state.MiningProgress, len(peer.Outgoing))
+	}
+	if start, ok := (<-peer.Outgoing).(*PacketBlockInteract); !ok || start.Action != 1 {
+		t.Fatalf("first mining packet was not start: %#v", start)
+	}
+}
+
 func TestServerMiningDrops(t *testing.T) {
 	initBlockRegistry()
 	for _, tc := range []struct {
@@ -69,9 +111,7 @@ func TestServerMiningDrops(t *testing.T) {
 			}
 			w.entities = []Entity{p}
 			s := &Server{World: w, Clients: map[string]*ClientConnection{}}
-			packet := PacketWrapper{From: p.UUID, Packet: &PacketBlockChange{X: 2, Y: 70, Z: 2, BlockID: blockAir}}
-			s.HandlePacket(packet)
-			s.HandlePacket(packet)
+			finishTestMining(s, p, BlockPos{2, 70, 2})
 			if w.BlockAt(2, 70, 2) != blockAir {
 				t.Fatal("block not removed")
 			}

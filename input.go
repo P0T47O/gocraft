@@ -60,6 +60,7 @@ type InputState struct {
 	// Mining System
 	MiningTarget   *hitInfo // Block currently being mined (can be nil)
 	MiningTool     byte
+	MiningSlot     int
 	MiningBlock    byte
 	MiningProgress float32 // 0.0 to 1.0
 	LastMiningTime float64 // Time of last frame's mining logic
@@ -167,6 +168,7 @@ func (s *InputState) UpdateCamera(world *World, camera *gameCamera) {
 
 func (s *InputState) UpdateSelection(allowWheel bool) {
 	if allowWheel {
+		previous := s.SelectedSlot
 		wheel := inputMouseWheel()
 		if wheel > 0 {
 			s.SelectedSlot--
@@ -179,17 +181,17 @@ func (s *InputState) UpdateSelection(allowWheel bool) {
 		if s.SelectedSlot >= len(s.Hotbar) {
 			s.SelectedSlot = len(s.Hotbar) - 1
 		}
-		if client != nil {
+		if client != nil && s.SelectedSlot != previous {
 			client.Send(&PacketSlotChange{Slot: int32(s.SelectedSlot)})
 		}
 	}
 	for i := 0; i < 9; i++ {
 		if inputKeyPressed(int32(keyOne + int32(i))) {
 			if i < len(s.Hotbar) {
-				s.SelectedSlot = i
-				if client != nil {
+				if client != nil && s.SelectedSlot != i {
 					client.Send(&PacketSlotChange{Slot: int32(i)})
 				}
+				s.SelectedSlot = i
 			}
 			break
 		}
@@ -214,13 +216,14 @@ func HandleInput(world *World, camera *gameCamera, state *InputState, client *Cl
 		state.ShowDebug = !state.ShowDebug
 	}
 	if inputKeyPressed(keyF1) {
+		state.cancelMining(client)
+		nextMode := ModeCreative
 		if currentGameMode == ModeCreative {
-			currentGameMode = ModeSurvival
-		} else {
-			currentGameMode = ModeCreative
+			nextMode = ModeSurvival
 		}
 		if client != nil {
-			client.Send(&PacketGameMode{Mode: byte(currentGameMode)})
+			// Wait for the authoritative echo; a remote server may deny the request.
+			client.Send(&PacketGameMode{Mode: byte(nextMode)})
 		}
 	}
 	state.ToggleInventory()
@@ -229,6 +232,7 @@ func HandleInput(world *World, camera *gameCamera, state *InputState, client *Cl
 		state.SkipCamera = false
 	}
 	if state.InventoryOpen {
+		state.cancelMining(client)
 		old := camera.Position
 		camera.Position = state.stepMovementCore(world, old, gameFrameTime(), MovementControls{}, currentGameMode == ModeCreative)
 		camera.Target = gameVec3Add(camera.Target, gameVec3Subtract(camera.Position, old))
@@ -315,8 +319,7 @@ func HandleInput(world *World, camera *gameCamera, state *InputState, client *Cl
 		}
 	}
 	if mobTarget != "" && inputMouseDown(mouseLeft) {
-		state.MiningProgress = 0
-		state.MiningTarget = nil
+		state.cancelMining(client)
 		if inputMousePressed(mouseLeft) && client != nil {
 			client.Send(&PacketAttackMob{Target: mobTarget})
 		}
@@ -329,8 +332,7 @@ func HandleInput(world *World, camera *gameCamera, state *InputState, client *Cl
 		blockType := world.BlockAt(hit.x, hit.y, hit.z)
 		def := GetBlock(blockType)
 		if def.Hardness < 0 && currentGameMode == ModeSurvival {
-			state.MiningProgress = 0
-			state.MiningTarget = nil
+			state.cancelMining(client)
 			return hit
 		}
 		seconds := MiningSeconds(state.Hotbar[state.SelectedSlot], blockType)
@@ -346,18 +348,25 @@ func HandleInput(world *World, camera *gameCamera, state *InputState, client *Cl
 			state.MiningTarget.x != hit.x ||
 			state.MiningTarget.y != hit.y ||
 			state.MiningTarget.z != hit.z ||
+			state.MiningSlot != state.SelectedSlot ||
 			state.MiningTool != state.Hotbar[state.SelectedSlot] || state.MiningBlock != blockType
 
 		if isNewTarget {
 			state.MiningTarget = &hit
 			state.MiningTool = state.Hotbar[state.SelectedSlot]
+			state.MiningSlot = state.SelectedSlot
 			state.MiningBlock = blockType
 			state.MiningProgress = 0
+			if client != nil && currentGameMode == ModeSurvival {
+				client.Send(&PacketBlockInteract{X: int32(hit.x), Y: int32(hit.y), Z: int32(hit.z), Action: 1})
+			}
 		}
 
 		if seconds == 0 {
 			state.MiningProgress = 1
-		} else if seconds > 0 {
+		} else if seconds > 0 && !isNewTarget {
+			// The first frame only starts the server timer; it has not spent a
+			// full frame mining this target yet.
 			state.MiningProgress += gameFrameTime() / seconds
 		}
 
@@ -383,8 +392,7 @@ func HandleInput(world *World, camera *gameCamera, state *InputState, client *Cl
 		}
 	} else {
 		// Not holding button or not hitting block
-		state.MiningTarget = nil
-		state.MiningProgress = 0
+		state.cancelMining(client)
 	}
 
 	if hit.hit && inputMousePressed(mouseRight) {
@@ -432,6 +440,15 @@ func HandleInput(world *World, camera *gameCamera, state *InputState, client *Cl
 	}
 
 	return hit
+}
+
+func (s *InputState) cancelMining(client *Client) {
+	if s.MiningTarget != nil && client != nil {
+		hit := s.MiningTarget
+		client.Send(&PacketBlockInteract{X: int32(hit.x), Y: int32(hit.y), Z: int32(hit.z), Action: 2})
+	}
+	s.MiningTarget = nil
+	s.MiningProgress = 0
 }
 
 func (s *InputState) UpdateInventoryScroll() {

@@ -142,7 +142,7 @@
 
 类型：`InputState`
 
-函数/方法：`NewInputState`、`*InputState.ToggleInventory`、`*InputState.UpdateCamera`、`*InputState.UpdateSelection`、`isSolidBlock`、`blockIndexFromCoord`、`HandleInput`、`*InputState.UpdateInventoryScroll`、`*InputState.UpdateInventorySelection`、`collidesWithBlock`
+函数/方法：`NewInputState`、`*InputState.ToggleInventory`、`*InputState.UpdateCamera`、`*InputState.UpdateSelection`、`isSolidBlock`、`blockIndexFromCoord`、`HandleInput`、`*InputState.cancelMining`、`*InputState.UpdateInventoryScroll`、`*InputState.UpdateInventorySelection`、`collidesWithBlock`
 
 ## [inventory.go](inventory.go)
 
@@ -475,6 +475,12 @@
 ## [server_entities.go](server_entities.go)
 
 函数/方法：`*Server.SendInventory`、`*Server.UpdateEntities`、`*Server.SpawnEntity`、`*Server.findPlayerEntity`
+
+## [server_mining.go](server_mining.go)
+
+类型：`miningSession`
+
+函数/方法：`*Server.blockChangeReach`、`heldMiningTool`、`*Server.beginMining`、`*Server.mayFinishMining`
 
 ## [server_network.go](server_network.go)
 

@@ -6,7 +6,7 @@ import (
 	"io"
 )
 
-const protocolVersion = 5
+const protocolVersion = 6
 
 // PacketID definitions
 const (

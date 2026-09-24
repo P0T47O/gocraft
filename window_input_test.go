@@ -48,6 +48,24 @@ func TestWindowInputSnapshot(t *testing.T) {
 	}
 }
 
+func TestSelectionOnlySendsChanges(t *testing.T) {
+	preserveWindowInput(t)
+	previousClient := client
+	t.Cleanup(func() { client = previousClient })
+	client = &Client{Outgoing: make(chan Packet, 8), done: make(chan struct{})}
+	s := &InputState{SelectedSlot: 0}
+	windowFrame = windowInputFrame{}
+	s.UpdateSelection(true)
+	if got := len(client.Outgoing); got != 0 {
+		t.Fatalf("unchanged selection sent %d packets", got)
+	}
+	windowFrame.Wheel = -1
+	s.UpdateSelection(true)
+	if got := len(client.Outgoing); got != 1 || s.SelectedSlot != 1 {
+		t.Fatalf("changed selection sent %d packets, slot %d", got, s.SelectedSlot)
+	}
+}
+
 func TestCursorTransitionsDiscardWarpDelta(t *testing.T) {
 	preserveWindowInput(t)
 	c := &testCursor{}

@@ -207,7 +207,7 @@ func TestSelectedToolDropPickupAndWear(t *testing.T) {
 	p.Inventory.Slots[1] = Item{ID: int32(itemWoodPickaxe), Count: 1, Damage: 57}
 	w.entities = []Entity{p}
 	s := &Server{World: w, LastSentPos: make(map[string][3]float64), LastSentMeta: make(map[string]int32), Clients: map[string]*ClientConnection{}}
-	s.HandlePacket(PacketWrapper{From: p.UUID, Packet: &PacketBlockChange{X: 2, Y: 70, Z: 2, BlockID: blockAir}})
+	finishTestMining(s, p, BlockPos{2, 70, 2})
 	if p.Inventory.Slots[1].Damage != 58 {
 		t.Fatal("mining did not wear tool")
 	}
@@ -231,7 +231,7 @@ func TestSelectedToolDropPickupAndWear(t *testing.T) {
 		t.Fatal("pickup reset damage")
 	}
 	c.blocks.Set(2, 70, 2, blockStone)
-	s.HandlePacket(PacketWrapper{From: p.UUID, Packet: &PacketBlockChange{X: 2, Y: 70, Z: 2, BlockID: blockAir}})
+	finishTestMining(s, p, BlockPos{2, 70, 2})
 	if p.Inventory.Slots[1] != (Item{}) {
 		t.Fatal("tool did not break")
 	}

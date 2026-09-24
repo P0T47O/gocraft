@@ -17,6 +17,10 @@ var chunkDataBufPool = sync.Pool{
 }
 
 type Server struct {
+	// LocalCheats is enabled only for the in-process, loopback singleplayer server.
+	// Dedicated servers have no authenticated operator identity and deny cheats.
+	LocalCheats       bool
+	miningSessions    map[string]miningSession
 	pendingLights     map[chunkKey]map[string]uint16
 	MobSpawnTicks     int
 	Containers        map[BlockPos]*BlockContainer
@@ -89,20 +93,21 @@ func NewServer(savePath string) *Server {
 	InitRecipes()
 
 	s := &Server{
-		World:         world,
-		Clients:       make(map[string]*ClientConnection),
-		PacketCh:      make(chan PacketWrapper, 1024),
-		Shutdown:      make(chan bool),
-		Done:          make(chan bool),
-		InitialPosX:   px,
-		InitialPosY:   py,
-		InitialPosZ:   pz,
-		HasSavedPos:   hasPos,
-		LastSentPos:   make(map[string][3]float64),
-		LastSentMeta:  make(map[string]int32),
-		SavePath:      savePath,
-		PendingChunks: make(map[chunkKey][]string),
-		connections:   make(map[net.Conn]bool),
+		miningSessions: make(map[string]miningSession),
+		World:          world,
+		Clients:        make(map[string]*ClientConnection),
+		PacketCh:       make(chan PacketWrapper, 1024),
+		Shutdown:       make(chan bool),
+		Done:           make(chan bool),
+		InitialPosX:    px,
+		InitialPosY:    py,
+		InitialPosZ:    pz,
+		HasSavedPos:    hasPos,
+		LastSentPos:    make(map[string][3]float64),
+		LastSentMeta:   make(map[string]int32),
+		SavePath:       savePath,
+		PendingChunks:  make(map[chunkKey][]string),
+		connections:    make(map[net.Conn]bool),
 	}
 
 	if err := s.loadContainers(); err != nil {

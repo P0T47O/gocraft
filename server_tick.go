@@ -27,6 +27,11 @@ func (s *Server) Tick() {
 	for _, c := range s.Clients {
 		playerPositions = append(playerPositions, [2]int{c.LastChunkX, c.LastChunkZ})
 	}
+	for name := range s.miningSessions {
+		if _, connected := s.Clients[name]; !connected {
+			delete(s.miningSessions, name)
+		}
+	}
 	s.ClientsMu.RUnlock()
 
 	if len(playerPositions) > 0 {

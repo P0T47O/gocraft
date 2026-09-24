@@ -37,6 +37,10 @@ func (s *Server) handleCommand(player string, cmd string) {
 
 	switch parts[0] {
 	case "/tp":
+		if !s.LocalCheats {
+			s.SendTo(player, &PacketChat{Message: "Commands are disabled on this server."})
+			return
+		}
 		if len(parts) < 4 {
 			s.SendTo(player, &PacketChat{Message: "Usage: /tp x y z"})
 			return
@@ -50,6 +54,10 @@ func (s *Server) handleCommand(player string, cmd string) {
 		s.SendTo(player, &PacketChat{Message: fmt.Sprintf("Teleported to %.1f %.1f %.1f", x, y, z)})
 
 	case "/give":
+		if !s.LocalCheats {
+			s.SendTo(player, &PacketChat{Message: "Commands are disabled on this server."})
+			return
+		}
 		if len(parts) < 2 {
 			s.SendTo(player, &PacketChat{Message: "Usage: /give id [count]"})
 			return

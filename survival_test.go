@@ -123,7 +123,7 @@ func TestBasicMiningCraftingAndPlacement(t *testing.T) {
 	p := &PlayerEntity{BaseEntity: BaseEntity{UUID: "builder", Type: EntityPlayer, X: 2, Y: 71, Z: 2}, GameMode: ModeSurvival}
 	w.entities = []Entity{p}
 	s := &Server{World: w, Clients: map[string]*ClientConnection{}}
-	s.HandlePacket(PacketWrapper{From: p.UUID, Packet: &PacketBlockChange{X: 2, Y: 70, Z: 2, BlockID: blockAir}})
+	finishTestMining(s, p, BlockPos{2, 70, 2})
 	if w.BlockAt(2, 70, 2) != blockAir {
 		t.Fatal("log not mined")
 	}

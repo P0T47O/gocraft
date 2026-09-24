@@ -37,6 +37,7 @@
 | TCP 接入、连接关闭、队列与广播 | [server_network.go](server_network.go) |
 | 权威 tick、区块回收 | [server_tick.go](server_tick.go)：`Tick` |
 | 权威消息处理与玩家操作校验 | [server_packets.go](server_packets.go)：`HandlePacket` |
+| 单人本地作弊开关、专服默认拒绝切模式及 `/give`/`/tp`、服务端挖掘开始/取消/耗时/距离验证 | [game_session.go](game_session.go)、[server.go](server.go)、[server_commands.go](server_commands.go)、[server_packets.go](server_packets.go)、[server_mining.go](server_mining.go)；客户端挖掘动作 [input.go](input.go)，协议动作 [protocol_actions.go](protocol_actions.go)；回归 [server_authority_test.go](server_authority_test.go) |
 | 区块请求排队、快照、发送预算 | [server_chunks.go](server_chunks.go) |
 | 独立加载调度、近处优先排序缓存、客户端队列反压 | [server_streaming.go](server_streaming.go)、[client.go](client.go)、[server_streaming_test.go](server_streaming_test.go) |
 | 光照分段快照、合并与完整请求优先 | [server_chunk_light.go](server_chunk_light.go)、[protocol_light.go](protocol_light.go)、[protocol_light_test.go](protocol_light_test.go) |

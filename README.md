@@ -45,7 +45,7 @@
 - **Audio**: Sound effects and background music are yet to be integrated.
 - **Food & Hunger**: Health regenerates slowly over time out of danger; porkchops can be smelted/cooked, but full hunger bars and eating mechanics are in progress.
 - **Mob Expansion**: Pig actor model, movement physics, animations, and combat are complete; additional hostile/passive mobs, breeding, and advanced A* pathfinding are planned.
-- **Multiplayer Mining Authority**: Break timing is currently client-side with server harvest validation; fully server-authoritative mining sessions remain future work.
+- **Multiplayer Trust Limits**: The server now checks mining start, elapsed time, target, tool and reach. Dedicated servers deny client-requested mode changes and `/give`/`/tp`; the integrated loopback server retains singleplayer cheats. Player movement and identity are not yet fully authenticated for untrusted public servers.
 
 ---
 
@@ -105,7 +105,7 @@ go run . -name PlayerName
 | **1 – 9** | Select Hotbar Slot |
 | **E** | Open / Close Inventory & Recipe Book |
 | **Q** | Drop Selected Item (preserves durability) |
-| **F1** | Toggle Survival / Creative Mode |
+| **F1** | Request Survival / Creative toggle (singleplayer only) |
 | **F** | Toggle Flying Mode (Creative) |
 | **F3** | Toggle Debug Overlay |
 | **ESC** | Open / Close Pause Menu |

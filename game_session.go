@@ -29,6 +29,7 @@ func startGame(savePath string, ip string, isMultiplayer bool) {
 		// Singleplayer: Start Internal Server
 		fmt.Printf("Starting Internal Server at %s\n", savePath)
 		server = NewServer(savePath)
+		server.LocalCheats = true
 		if err = server.ListenTCP("127.0.0.1:0"); err != nil {
 			fmt.Printf("Cannot start local server: %v\n", err)
 			server.World.Close()

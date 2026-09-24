@@ -33,9 +33,11 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 		s.clickContainer(s.findPlayerEntity(wrap.From), p)
 	case *PacketRespawn:
 		if player := s.findPlayerEntity(wrap.From); player != nil {
+			delete(s.miningSessions, wrap.From)
 			s.respawnPlayer(player)
 		}
 	case *PacketLogin:
+		delete(s.miningSessions, wrap.From)
 		delete(s.ContainerSessions, wrap.From)
 		fmt.Printf("Client %s logged in on protocol %d (Seed: %d)\n", p.Username, p.ProtocolVersion, s.World.seed)
 		// Update packet with server seed so client can sync if desired
@@ -69,6 +71,9 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 		}
 
 		if saved := s.findPlayerEntity(p.Username); saved != nil {
+			if !s.LocalCheats {
+				saved.GameMode = ModeSurvival
+			}
 			spawnX, spawnY, spawnZ = saved.X, saved.Y, saved.Z
 		}
 		s.ClientsMu.RLock()
@@ -179,6 +184,12 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 		s.World.entitiesMu.RUnlock()
 
 		if player != nil {
+			if !s.LocalCheats {
+				s.SendTo(wrap.From, &PacketGameMode{Mode: player.GameMode})
+				s.SendTo(wrap.From, &PacketChat{Message: "Game mode switching is disabled on this server."})
+				return
+			}
+			delete(s.miningSessions, wrap.From)
 			player.GameMode = p.Mode
 			if player.Vitals != nil {
 				player.Vitals.Air = maxAir
@@ -226,7 +237,24 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 
 	case *PacketBlockInteract:
 		pos := BlockPos{p.X, p.Y, p.Z}
-		if !s.containerReach(s.findPlayerEntity(wrap.From), pos) {
+		player := s.findPlayerEntity(wrap.From)
+		if player == nil {
+			return
+		}
+		switch p.Action {
+		case 1: // Begin mining.
+			s.beginMining(player, pos, time.Now())
+			return
+		case 2: // Cancel mining.
+			if session, ok := s.miningSessions[wrap.From]; ok && session.pos == pos {
+				delete(s.miningSessions, wrap.From)
+			}
+			return
+		case 0: // Container / crafting interaction.
+		default:
+			return
+		}
+		if !s.containerReach(player, pos) {
 			return
 		}
 		if containerSize(s.World.BlockAt(int(p.X), int(p.Y), int(p.Z))) > 0 {
@@ -299,9 +327,17 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 		if player == nil {
 			return
 		}
+		pos := BlockPos{p.X, p.Y, p.Z}
+		if p.Y < 0 || p.Y >= chunkHeight {
+			return
+		}
+		if !s.blockChangeReach(player, pos) {
+			s.SendTo(wrap.From, &PacketBlockChange{X: p.X, Y: p.Y, Z: p.Z, BlockID: s.World.BlockAt(int(p.X), int(p.Y), int(p.Z)), Meta: s.World.MetaAt(int(p.X), int(p.Y), int(p.Z))})
+			return
+		}
 
 		old := s.World.BlockAt(int(p.X), int(p.Y), int(p.Z))
-		if p.Y < 0 || p.Y >= chunkHeight || (p.BlockID != blockAir && (p.BlockID >= 100 || GetBlock(p.BlockID).ID == blockAir || (old != blockAir && old != blockWater))) {
+		if p.BlockID != blockAir && (p.BlockID >= 100 || GetBlock(p.BlockID).ID == blockAir || (old != blockAir && old != blockWater)) {
 			s.BroadcastTo(wrap.From, &PacketBlockChange{X: p.X, Y: p.Y, Z: p.Z, BlockID: old, Meta: s.World.MetaAt(int(p.X), int(p.Y), int(p.Z))})
 			return
 		}
@@ -338,6 +374,10 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 			// Block Break Logic (Mining)
 			// Check drops BEFORE setting to Air
 			oldBlockID := s.World.BlockAt(int(p.X), int(p.Y), int(p.Z))
+			if player.GameMode == ModeSurvival && !s.mayFinishMining(player, pos, oldBlockID, time.Now()) {
+				s.BroadcastTo(wrap.From, &PacketBlockChange{X: p.X, Y: p.Y, Z: p.Z, BlockID: oldBlockID, Meta: s.World.MetaAt(int(p.X), int(p.Y), int(p.Z))})
+				return
+			}
 			if oldBlockID != blockAir {
 				blockDef := GetBlock(oldBlockID)
 				if player.GameMode == ModeSurvival && blockDef.Hardness < 0 {
@@ -430,6 +470,7 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 		s.World.entitiesMu.RUnlock()
 
 		if player != nil {
+			delete(s.miningSessions, wrap.From)
 			if player.GameMode != ModeCreative {
 				s.SendInventory(player)
 				return
@@ -458,6 +499,9 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 
 		if player != nil {
 			if p.Slot >= 0 && p.Slot < 9 {
+				if player.SelectedSlot != int(p.Slot) {
+					delete(s.miningSessions, wrap.From)
+				}
 				player.SelectedSlot = int(p.Slot)
 			}
 		}
@@ -467,6 +511,7 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 		player := s.findPlayerEntity(wrap.From)
 		s.World.entitiesMu.RUnlock()
 		if player != nil && !p.IsCreative {
+			delete(s.miningSessions, wrap.From)
 			player.Inventory.Click(int(p.SlotID), int(p.Button), &player.CursorItem)
 			s.SendInventory(player)
 			s.SendTo(wrap.From, &PacketInventoryUpdate{SlotID: -1, ItemID: player.CursorItem.ID, Count: player.CursorItem.Count, Damage: player.CursorItem.Damage})
