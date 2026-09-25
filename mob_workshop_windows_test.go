@@ -22,12 +22,15 @@ func TestNativeMobWorkshop(t *testing.T) {
 	remoteEntities = map[string]*RemoteEntity{"workshop-test": e}
 	frame := webGPUFrameContext{Width: 1280, Height: 720, HideHUD: true, Camera: webGPUCamera{Position: webGPUVec3{X: 2.4, Y: 1.8, Z: 3}, Target: webGPUVec3{Y: .5}, Up: webGPUVec3{Y: 1}, Fovy: 45}}
 	state := NewInputState()
-	for _, mode := range []string{"idle", "walk", "flee", "hurt", "dead"} {
-		advanceMobPreview(e, mobContent, mode, .1)
-		nativeMenuCanvas.reset(frame.Width, frame.Height)
-		nativeMenuCanvas.Text(mode, 28, 24, 28, invText)
-		if err := r.DrawGameplay(scene, frame, state); err != nil {
-			t.Fatal(mode, err)
+	for _, kind := range []string{"pig", "zombie", "skeleton", "spider", "creeper"} {
+		e.MobKind = kind
+		for _, mode := range []string{"idle", "walk", "flee", "hurt", "dead"} {
+			advanceMobPreview(e, mobContent, mode, .1)
+			nativeMenuCanvas.reset(frame.Width, frame.Height)
+			nativeMenuCanvas.Text(kind+" "+mode, 28, 24, 28, invText)
+			if err := r.DrawGameplay(scene, frame, state); err != nil {
+				t.Fatal(kind, mode, err)
+			}
 		}
 	}
 	batch := newWebGPUEntityBatch()

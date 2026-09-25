@@ -22,11 +22,20 @@ func (s *Server) updateMobs() {
 			kept = append(kept, e)
 			continue
 		}
+		if m.Health > 0 && mobContent.Definitions[m.Kind].Hostile && !s.mobNearOnlinePlayer(m, 128) {
+			removed = append(removed, m.UUID)
+			continue
+		}
 		if m.Health <= 0 && !m.Dropped {
 			d := mobContent.Definitions[m.Kind]
-			count := d.DropMin + int32(m.random()%uint32(d.DropMax-d.DropMin+1))
 			m.Dropped = true
-			drops = append(drops, &ItemEntity{BaseEntity: BaseEntity{UUID: fmt.Sprintf("mob-drop-%s-%d", m.UUID, time.Now().UnixNano()), Type: EntityItem, X: m.X, Y: m.Y + .3, Z: m.Z}, ItemStack: Item{ID: int32(itemRawPork), Count: count}, PickupDelay: .5, Vy: .1})
+			for i, entry := range d.Drops {
+				count := entry.Min + int32(m.random()%uint32(entry.Max-entry.Min+1))
+				if count == 0 {
+					continue
+				}
+				drops = append(drops, &ItemEntity{BaseEntity: BaseEntity{UUID: fmt.Sprintf("mob-drop-%s-%d-%d", m.UUID, i, time.Now().UnixNano()), Type: EntityItem, X: m.X, Y: m.Y + .3, Z: m.Z}, ItemStack: Item{ID: int32(mobDropItems[entry.Item]), Count: count}, PickupDelay: .5, Vy: .1})
+			}
 		}
 		if m.Death >= 12 {
 			removed = append(removed, m.UUID)
@@ -102,6 +111,9 @@ func (s *Server) spawnNearbyMobs() {
 			if !colliderLoaded(s.World, pos, shape) || colliderHitsCore(s.World, pos, shape) {
 				break
 			}
+			if !canSpawnMobAt(s.World, def, x, y+1, z) {
+				break
+			}
 			near := false
 			for _, other := range s.World.entities {
 				ox, oy, oz := other.GetPosition()
@@ -116,4 +128,32 @@ func (s *Server) spawnNearbyMobs() {
 			return
 		}
 	}
+}
+
+func canSpawnMobAt(w *World, def MobDefinition, x, y, z int) bool {
+	if !def.Hostile {
+		return true
+	}
+	light := max(float32(w.LightBlockAt(x, y, z)), float32(w.LightSkyAt(x, y, z))*worldDaylight(w.TimeTicks).Brightness)
+	return light <= 7
+}
+
+func (s *Server) mobNearOnlinePlayer(m *MobEntity, radius float64) bool {
+	for _, e := range s.World.entities {
+		p, ok := e.(*PlayerEntity)
+		if !ok || p.dead() {
+			continue
+		}
+		s.ClientsMu.RLock()
+		online := s.Clients[p.UUID] != nil
+		s.ClientsMu.RUnlock()
+		if !online {
+			continue
+		}
+		dx, dz := p.X-m.X, p.Z-m.Z
+		if dx*dx+dz*dz < radius*radius {
+			return true
+		}
+	}
+	return false
 }

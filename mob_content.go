@@ -13,25 +13,46 @@ import (
 var bundledMobs embed.FS
 
 type MobDefinition struct {
-	SpawnLimit  int      `json:"spawn_limit"`
-	SpawnRadius float64  `json:"spawn_radius"`
-	ID          string   `json:"id"`
-	Health      int      `json:"health"`
-	Speed       float32  `json:"speed"`
-	FleeSpeed   float32  `json:"flee_speed"`
-	Collider    Collider `json:"collider"`
-	Model       string   `json:"model"`
-	Animation   string   `json:"animation"`
-	Behaviors   []string `json:"behaviors"`
-	IdleTicks   int      `json:"idle_ticks"`
-	WalkTicks   int      `json:"walk_ticks"`
-	FleeTicks   int      `json:"flee_ticks"`
-	Drop        string   `json:"drop"`
-	DropMin     int32    `json:"drop_min"`
-	DropMax     int32    `json:"drop_max"`
+	SpawnLimit  int       `json:"spawn_limit"`
+	SpawnRadius float64   `json:"spawn_radius"`
+	ID          string    `json:"id"`
+	Health      int       `json:"health"`
+	Speed       float32   `json:"speed"`
+	FleeSpeed   float32   `json:"flee_speed"`
+	Collider    Collider  `json:"collider"`
+	Model       string    `json:"model"`
+	Animation   string    `json:"animation"`
+	Behaviors   []string  `json:"behaviors"`
+	IdleTicks   int       `json:"idle_ticks"`
+	WalkTicks   int       `json:"walk_ticks"`
+	FleeTicks   int       `json:"flee_ticks"`
+	Hostile     bool      `json:"hostile"`
+	Detection   float64   `json:"detection"`
+	AttackRange float64   `json:"attack_range"`
+	Damage      int       `json:"damage"`
+	AttackTicks int       `json:"attack_ticks"`
+	Drops       []MobDrop `json:"drops"`
 }
+
+type MobDrop struct {
+	Item string `json:"item"`
+	Min  int32  `json:"min"`
+	Max  int32  `json:"max"`
+}
+
+var mobDropItems = map[string]byte{
+	"raw_pork":     itemRawPork,
+	"rotten_flesh": itemRottenFlesh,
+	"bone":         itemBone,
+	"arrow":        itemArrow,
+	"string":       itemString,
+	"gunpowder":    itemGunpowder,
+}
+
 type MobBone struct {
-	UVAxis              string `json:"uv_axis"`
+	UVAxis              string  `json:"uv_axis"`
+	RotationY           float32 `json:"rotation_y"`
+	RotationZ           float32 `json:"rotation_z"`
 	Name, Parent        string
 	Pivot, Size, Offset [3]float32
 	UV                  [2]float32
@@ -89,14 +110,22 @@ func loadMobContent(source fs.FS) (*MobContent, error) {
 		if err = read(path, &d); err != nil {
 			return nil, err
 		}
-		if d.ID == "" || d.SpawnLimit < 0 || d.SpawnLimit > 32 || d.SpawnRadius < 8 || d.SpawnRadius > 64 || d.Health <= 0 || d.Health > 10000 || d.Speed <= 0 || d.Speed > 10 || d.FleeSpeed <= 0 || d.FleeSpeed > 15 || d.IdleTicks < 1 || d.WalkTicks < 1 || d.FleeTicks < 1 || d.Collider.Width <= 0 || d.Collider.Width > 4 || d.Collider.Depth <= 0 || d.Collider.Depth > 4 || d.Collider.Height <= 0 || d.Collider.Height > 4 || d.Collider.StepHeight < 0 || d.Collider.StepHeight > 1 || d.Drop != "raw_pork" || d.DropMin < 1 || d.DropMax < d.DropMin || d.DropMax > 64 {
+		if d.ID == "" || d.SpawnLimit < 0 || d.SpawnLimit > 32 || d.SpawnRadius < 8 || d.SpawnRadius > 64 || d.Health <= 0 || d.Health > 10000 || d.Speed <= 0 || d.Speed > 10 || d.FleeSpeed <= 0 || d.FleeSpeed > 15 || d.IdleTicks < 1 || d.WalkTicks < 1 || d.FleeTicks < 1 || d.Collider.Width <= 0 || d.Collider.Width > 4 || d.Collider.Depth <= 0 || d.Collider.Depth > 4 || d.Collider.Height <= 0 || d.Collider.Height > 4 || d.Collider.StepHeight < 0 || d.Collider.StepHeight > 1 || len(d.Drops) == 0 {
 			return nil, fmt.Errorf("%s: invalid attributes", path)
+		}
+		if d.Hostile && (d.Detection < 4 || d.Detection > 48 || d.AttackRange < 1 || d.AttackRange > d.Detection || d.Damage < 1 || d.Damage > 20 || d.AttackTicks < 5 || d.AttackTicks > 200) {
+			return nil, fmt.Errorf("%s: invalid hostile attributes", path)
+		}
+		for _, drop := range d.Drops {
+			if _, ok := mobDropItems[drop.Item]; !ok || drop.Min < 0 || drop.Max < drop.Min || drop.Max > 64 {
+				return nil, fmt.Errorf("%s: invalid drop %+v", path, drop)
+			}
 		}
 		if _, exists := c.Definitions[d.ID]; exists {
 			return nil, fmt.Errorf("duplicate mob %s", d.ID)
 		}
 		for _, behavior := range d.Behaviors {
-			if behavior != "wander" && behavior != "flee" {
+			if behavior != "wander" && behavior != "flee" && behavior != "chase" && behavior != "ranged" && behavior != "pounce" && behavior != "fuse" {
 				return nil, fmt.Errorf("%s: unknown behavior %s", path, behavior)
 			}
 		}
@@ -124,6 +153,9 @@ func loadMobContent(source fs.FS) (*MobContent, error) {
 			if b.UVAxis != "" && b.UVAxis != "z" {
 				return nil, fmt.Errorf("model %s: unknown UV axis", d.Model)
 			}
+			if math.IsNaN(float64(b.RotationY)) || math.IsInf(float64(b.RotationY), 0) || math.IsNaN(float64(b.RotationZ)) || math.IsInf(float64(b.RotationZ), 0) {
+				return nil, fmt.Errorf("model %s: invalid bone rotation", d.Model)
+			}
 			width, height, depth := b.Size[0]*16, b.Size[1]*16, b.Size[2]*16
 			if b.UVAxis == "z" {
 				height, depth = depth, height
@@ -146,7 +178,7 @@ func loadMobContent(source fs.FS) (*MobContent, error) {
 		c.Animations[d.Animation] = anim
 	}
 	if _, ok := c.Definitions["pig"]; !ok {
-		return nil, fmt.Errorf("pig definition required for legacy worlds")
+		return nil, fmt.Errorf("pig definition required")
 	}
 	return c, nil
 }

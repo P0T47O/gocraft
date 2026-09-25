@@ -1,0 +1,9 @@
+{
+  "id":"creeper", "health":20, "speed":1.15, "flee_speed":1.6,
+  "collider":{"Width":0.6,"Depth":0.6,"Height":1.7,"StepHeight":1},
+  "model":"creeper", "animation":"creeper", "behaviors":["wander","chase","fuse"],
+  "idle_ticks":50, "walk_ticks":60, "flee_ticks":20,
+  "hostile":true, "detection":16, "attack_range":3, "damage":10, "attack_ticks":30,
+  "drops":[{"item":"gunpowder","min":0,"max":2}],
+  "spawn_limit":6, "spawn_radius":24
+}

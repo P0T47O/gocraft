@@ -13,6 +13,7 @@ func (s *Server) Tick() {
 	defer func() { perfMon.RecordTick(time.Since(started)) }()
 	s.tickWorldTime()
 	s.updatePlayerVitals()
+	s.updateMobAI()
 	s.UpdateEntities()
 	s.updateMobs()
 	s.tickContainers()

@@ -236,9 +236,15 @@
 
 函数/方法：`configureBasicMining`
 
+## [mob_ai.go](mob_ai.go)
+
+类型：`mobAttack`、`mobShot`
+
+函数/方法：`*Server.updateMobAI`、`nearestMobTarget`、`mobSeesPlayer`
+
 ## [mob_content.go](mob_content.go)
 
-类型：`MobDefinition`、`MobBone`、`MobModel`、`MobAnimation`、`MobContent`
+类型：`MobDefinition`、`MobDrop`、`MobBone`、`MobModel`、`MobAnimation`、`MobContent`
 
 函数/方法：`mustMobContent`、`loadMobContent`、`reloadMobPreview`、`loadRuntimeMobs`
 
@@ -260,6 +266,12 @@
 
 函数/方法：`runMobPreview`
 
+## [mob_projectile.go](mob_projectile.go)
+
+类型：`ArrowEntity`
+
+函数/方法：`*ArrowEntity.Tick`
+
 ## [mob_protocol.go](mob_protocol.go)
 
 类型：`PacketMobState`、`PacketAttackMob`
@@ -268,7 +280,7 @@
 
 ## [mob_server.go](mob_server.go)
 
-函数/方法：`*Server.updateMobs`、`*Server.spawnNearbyMobs`
+函数/方法：`*Server.updateMobs`、`*Server.spawnNearbyMobs`、`canSpawnMobAt`、`*Server.mobNearOnlinePlayer`
 
 ## [mob_simulation.go](mob_simulation.go)
 
@@ -614,7 +626,7 @@
 
 类型：`webGPUEntityRenderer`、`webGPUEntityBatch`
 
-函数/方法：`ensureWebGPUEntityRenderer`、`closeWebGPUEntityRenderer`、`*webGPUEntityRenderer.Close`、`newWebGPUEntityBatch`、`webGPUEntityUV`、`webGPUEntitySubUV`、`webGPUEntityItemTexture`、`*webGPUEntityBatch.addQuad`、`rotateY`、`rotateZVec`、`*webGPUEntityBatch.addBox`、`*webGPUEntityBatch.addPlayer`、`*webGPUEntityBatch.addItem`、`webGPUMobFaceUVs`、`*webGPUEntityBatch.addMobBone`、`*webGPUEntityBatch.addMob`、`*webGPUEntityBatch.addMobPlaceholder`、`*webGPUEntityBatch.addMiningCrack`、`*webGPUEntityRenderer.Draw`
+函数/方法：`ensureWebGPUEntityRenderer`、`closeWebGPUEntityRenderer`、`*webGPUEntityRenderer.Close`、`newWebGPUEntityBatch`、`webGPUEntityUV`、`webGPUEntitySubUV`、`webGPUEntityItemTexture`、`*webGPUEntityBatch.addQuad`、`rotateY`、`rotateZVec`、`*webGPUEntityBatch.addBox`、`*webGPUEntityBatch.addPlayer`、`*webGPUEntityBatch.addItem`、`*webGPUEntityBatch.addArrow`、`webGPUMobFaceUVs`、`*webGPUEntityBatch.addMobBone`、`*webGPUEntityBatch.addMob`、`*webGPUEntityBatch.addMobPlaceholder`、`*webGPUEntityBatch.addMiningCrack`、`*webGPUEntityRenderer.Draw`
 
 ## [webgpu_entity_bounds_windows.go](webgpu_entity_bounds_windows.go)
 

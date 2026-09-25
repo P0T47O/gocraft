@@ -79,13 +79,18 @@ const (
 	itemDiamondAxe byte = 113
 	itemGoldAxe    byte = 114
 
-	itemCoal       byte = 115
-	itemIronIngot  byte = 116
-	itemGoldIngot  byte = 117
-	itemDiamond    byte = 118
-	itemStick      byte = 119
-	itemRawPork    byte = 120
-	itemCookedPork byte = 121
+	itemCoal        byte = 115
+	itemIronIngot   byte = 116
+	itemGoldIngot   byte = 117
+	itemDiamond     byte = 118
+	itemStick       byte = 119
+	itemRawPork     byte = 120
+	itemCookedPork  byte = 121
+	itemRottenFlesh byte = 122
+	itemBone        byte = 123
+	itemArrow       byte = 124
+	itemString      byte = 125
+	itemGunpowder   byte = 126
 )
 
 type hitInfo struct {

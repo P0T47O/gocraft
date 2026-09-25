@@ -25,8 +25,17 @@ func SaveEntities(savePath string, world *World) error {
 	world.entitiesMu.RLock()
 	defer world.entitiesMu.RUnlock()
 
-	writeUint32(&buf, uint32(len(world.entities)))
+	entityCount := uint32(0)
 	for _, e := range world.entities {
+		if _, transient := e.(*ArrowEntity); !transient {
+			entityCount++
+		}
+	}
+	writeUint32(&buf, entityCount)
+	for _, e := range world.entities {
+		if _, transient := e.(*ArrowEntity); transient {
+			continue
+		}
 		x, y, z := e.GetPosition()
 		yaw, pitch := e.GetRotation()
 

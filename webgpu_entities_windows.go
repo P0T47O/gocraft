@@ -193,6 +193,14 @@ func (b *webGPUEntityBatch) addItem(e *RemoteEntity, now float32) {
 	}
 }
 
+func (b *webGPUEntityBatch) addArrow(e *RemoteEntity) {
+	u0, v0, u1, v1, ok := webGPUEntityUV("textures/item/arrow.png")
+	if !ok {
+		return
+	}
+	b.addBox(float32(e.X), float32(e.Y), float32(e.Z), .06, .06, .46, e.Yaw, [4]float32{u0, v0, u1, v1}, [4]uint8{255, 255, 255, 255})
+}
+
 func webGPUMobFaceUVs(model MobModel, bone MobBone) ([6][4]float32, bool) {
 	w, h, d := bone.Size[0]*16, bone.Size[1]*16, bone.Size[2]*16
 	if bone.UVAxis == "z" {
@@ -218,10 +226,12 @@ func webGPUMobFaceUVs(model MobModel, bone MobBone) ([6][4]float32, bool) {
 	return out, true
 }
 
-func (b *webGPUEntityBatch) addMobBone(center, size [3]float32, angleX, yaw, deathAngle float32, root [3]float32, uvs [6][4]float32, color [4]uint8) {
+func (b *webGPUEntityBatch) addMobBone(center, size [3]float32, angleX, staticYaw, staticRoll, yaw, deathAngle float32, root [3]float32, uvs [6][4]float32, color [4]uint8) {
 	hx, hy, hz := size[0]/2, size[1]/2, size[2]/2
 	point := func(x, y, z float32) [3]float32 {
 		p := rotateXVec([3]float32{x, y, z}, angleX)
+		p[0], p[2] = rotateY(p[0], p[2], staticYaw)
+		p = rotateZVec(p, staticRoll)
 		p = addVec3(p, center)
 		rx, rz := rotateY(p[0], p[2], yaw)
 		p = [3]float32{rx, p[1], rz}
@@ -236,7 +246,7 @@ func (b *webGPUEntityBatch) addMobBone(center, size [3]float32, angleX, yaw, dea
 	b.addQuad(point(-hx, hy, -hz), point(-hx, hy, hz), point(-hx, -hy, hz), point(-hx, -hy, -hz), uvs[5], color, [3]float32{-1, 0, 0})
 }
 
-func (b *webGPUEntityBatch) addMob(e *RemoteEntity) {
+func (b *webGPUEntityBatch) addMob(e *RemoteEntity, now float32) {
 	definition, ok := mobContent.Definitions[e.MobKind]
 	if !ok {
 		return
@@ -259,13 +269,16 @@ func (b *webGPUEntityBatch) addMob(e *RemoteEntity) {
 	if e.MobHurt > 0 {
 		color = [4]uint8{255, 115, 115, 255}
 	}
+	if e.MobKind == "creeper" && e.MobState == "fuse" && int(now*8)%2 == 0 {
+		color = [4]uint8{255, 255, 185, 255}
+	}
 	for i, bone := range model.Bones {
 		pose := poses[i]
 		uvs, ok := webGPUMobFaceUVs(model, bone)
 		if !ok {
 			continue
 		}
-		b.addMobBone(pose.center, bone.Size, pose.angleX, e.Yaw, deathAngle, root, uvs, color)
+		b.addMobBone(pose.center, bone.Size, pose.angleX, bone.RotationY, bone.RotationZ, e.Yaw, deathAngle, root, uvs, color)
 	}
 }
 
@@ -360,8 +373,10 @@ func (r *webGPUEntityRenderer) Draw(pass *wgpu.RenderPassEncoder, worldRenderer 
 			batch.addPlayer(e)
 		case e.Type == EntityItem:
 			batch.addItem(e, now)
+		case e.Type == EntityArrow:
+			batch.addArrow(e)
 		case e.MobKind != "":
-			batch.addMob(e)
+			batch.addMob(e, now)
 		default:
 			batch.addMobPlaceholder(e)
 		}

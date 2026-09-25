@@ -1,0 +1,9 @@
+{
+  "id":"skeleton", "health":20, "speed":1.35, "flee_speed":1.7,
+  "collider":{"Width":0.6,"Depth":0.6,"Height":1.95,"StepHeight":1},
+  "model":"skeleton", "animation":"biped", "behaviors":["wander","ranged"],
+  "idle_ticks":35, "walk_ticks":65, "flee_ticks":20,
+  "hostile":true, "detection":18, "attack_range":12, "damage":2, "attack_ticks":30,
+  "drops":[{"item":"bone","min":0,"max":2},{"item":"arrow","min":0,"max":2}],
+  "spawn_limit":8, "spawn_radius":24
+}

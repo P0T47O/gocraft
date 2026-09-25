@@ -86,4 +86,9 @@ var allBlocks = []byte{
 	itemStick,
 	itemRawPork,
 	itemCookedPork,
+	itemRottenFlesh,
+	itemBone,
+	itemArrow,
+	itemString,
+	itemGunpowder,
 }

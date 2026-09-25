@@ -12,6 +12,7 @@ const (
 	EntityPlayer EntityType = 0
 	EntityPig    EntityType = 1
 	EntityItem   EntityType = 2
+	EntityArrow  EntityType = 3
 )
 
 type Entity interface {
@@ -38,7 +39,7 @@ func (e *BaseEntity) GetUUID() string                          { return e.UUID }
 func (e *BaseEntity) GetType() EntityType                      { return e.Type }
 func (e *BaseEntity) GetPosition() (float64, float64, float64) { return e.X, e.Y, e.Z }
 func (e *BaseEntity) SetPosition(x, y, z float64)              { e.X, e.Y, e.Z = x, y, z; e.Dirty = true }
-func (e *BaseEntity) GetRotation() (float32, float32)           { return e.Yaw, e.Pitch }
+func (e *BaseEntity) GetRotation() (float32, float32)          { return e.Yaw, e.Pitch }
 func (e *BaseEntity) SetRotation(yaw, pitch float32)           { e.Yaw, e.Pitch = yaw, pitch; e.Dirty = true }
 func (e *BaseEntity) IsDirty() bool                            { return e.Dirty }
 func (e *BaseEntity) ClearDirty()                              { e.Dirty = false }

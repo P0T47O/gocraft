@@ -234,6 +234,11 @@ func initItemRegistry() {
 	registerItem(itemStick, "Stick", "textures/item/stick.png")
 	registerItem(itemRawPork, "Raw Porkchop", "textures/item/porkchop.png")
 	registerItem(itemCookedPork, "Cooked Porkchop", "textures/item/cooked_porkchop.png")
+	registerItem(itemRottenFlesh, "Rotten Flesh", "textures/item/rotten_flesh.png")
+	registerItem(itemBone, "Bone", "textures/item/bone.png")
+	registerItem(itemArrow, "Arrow", "textures/item/arrow.png")
+	registerItem(itemString, "String", "textures/item/string.png")
+	registerItem(itemGunpowder, "Gunpowder", "textures/item/gunpowder.png")
 	configureTools()
 	for id, d := range Items {
 		if d != nil && d.PlaceBlock == 0 {

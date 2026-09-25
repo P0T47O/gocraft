@@ -1,0 +1,9 @@
+{
+  "stride": 3.0, "amplitude": 0.45, "blend_speed": 12, "death_seconds": 0.6,
+  "channels": [
+    {"bone":"leg_l1","phase":0}, {"bone":"leg_r1","phase":3.141593},
+    {"bone":"leg_l2","phase":3.141593}, {"bone":"leg_r2","phase":0},
+    {"bone":"leg_l3","phase":0}, {"bone":"leg_r3","phase":3.141593},
+    {"bone":"leg_l4","phase":3.141593}, {"bone":"leg_r4","phase":0}
+  ]
+}

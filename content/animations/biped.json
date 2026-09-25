@@ -1,0 +1,7 @@
+{
+  "stride": 2.0, "amplitude": 0.55, "blend_speed": 9, "death_seconds": 0.6,
+  "channels": [
+    {"bone":"arm_left","phase":0}, {"bone":"arm_right","phase":3.141593},
+    {"bone":"leg_left","phase":3.141593}, {"bone":"leg_right","phase":0}
+  ]
+}

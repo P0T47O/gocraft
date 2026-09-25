@@ -1,0 +1,12 @@
+{
+  "texture": "textures/entity/creeper/creeper.png",
+  "texture_size": [64, 32],
+  "bones": [
+    {"name":"body","pivot":[0,0.95,0],"size":[0.5,0.75,0.25],"offset":[0,0,0],"uv":[16,16]},
+    {"name":"head","pivot":[0,1.55,0],"size":[0.5,0.5,0.5],"offset":[0,0,0],"uv":[0,0]},
+    {"name":"leg_front_left","pivot":[-0.19,0.55,0.19],"size":[0.25,0.375,0.25],"offset":[0,-0.19,0],"uv":[0,16]},
+    {"name":"leg_front_right","pivot":[0.19,0.55,0.19],"size":[0.25,0.375,0.25],"offset":[0,-0.19,0],"uv":[0,16]},
+    {"name":"leg_back_left","pivot":[-0.19,0.55,-0.19],"size":[0.25,0.375,0.25],"offset":[0,-0.19,0],"uv":[0,16]},
+    {"name":"leg_back_right","pivot":[0.19,0.55,-0.19],"size":[0.25,0.375,0.25],"offset":[0,-0.19,0],"uv":[0,16]}
+  ]
+}

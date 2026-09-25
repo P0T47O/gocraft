@@ -21,6 +21,7 @@ func (s *Server) UpdateEntities() {
 	// Handle Item Pickup & Remove dead entities
 	s.World.entitiesMu.Lock()
 	var toRemove []string
+	var arrowHits []mobAttack
 	inventoryDirty := make(map[*PlayerEntity]bool)
 
 	// Collect Players for distance check
@@ -40,6 +41,15 @@ func (s *Server) UpdateEntities() {
 	}
 
 	for _, e := range s.World.entities {
+		if arrow, ok := e.(*ArrowEntity); ok {
+			if arrow.HitPlayer != nil {
+				arrowHits = append(arrowHits, mobAttack{arrow.HitPlayer, arrow.Damage, "Shot by skeleton"})
+			}
+			if arrow.Dead {
+				toRemove = append(toRemove, arrow.UUID)
+			}
+			continue
+		}
 		// Item Pickup Logic
 		if item, ok := e.(*ItemEntity); ok && !item.Dead && item.PickupDelay <= 0 {
 			for _, player := range players {
@@ -91,6 +101,9 @@ func (s *Server) UpdateEntities() {
 		delete(s.LastSentMeta, uuid)
 	}
 	s.World.entitiesMu.Unlock()
+	for _, hit := range arrowHits {
+		s.hurtPlayer(hit.player, hit.amount, hit.cause)
+	}
 
 	// A full inventory snapshot is 36 authoritative packets. Sending one for
 	// every item collected in the same tick can overflow the 128-packet gameplay

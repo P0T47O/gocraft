@@ -1,0 +1,9 @@
+{
+  "id":"zombie", "health":20, "speed":1.25, "flee_speed":1.6,
+  "collider":{"Width":0.6,"Depth":0.6,"Height":1.95,"StepHeight":1},
+  "model":"biped", "animation":"biped", "behaviors":["wander","chase"],
+  "idle_ticks":40, "walk_ticks":65, "flee_ticks":20,
+  "hostile":true, "detection":16, "attack_range":1.7, "damage":3, "attack_ticks":20,
+  "drops":[{"item":"rotten_flesh","min":0,"max":2}],
+  "spawn_limit":10, "spawn_radius":22
+}

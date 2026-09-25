@@ -4,13 +4,17 @@ import "math"
 
 type MobEntity struct {
 	BaseEntity
-	Kind                     string
-	Health                   int
-	Velocity                 gameVec3
-	State                    string
-	Timer, Flee, Hurt, Death int
-	RNG                      uint32
-	Dropped                  bool
+	Kind                                      string
+	Health                                    int
+	Velocity                                  gameVec3
+	State                                     string
+	Timer, Flee, Hurt, Death                  int
+	RNG                                       uint32
+	Dropped                                   bool
+	Target                                    string
+	LostTicks, AttackCooldown, Fuse, SunTicks int
+	AvoidTicks                                int
+	AvoidYaw                                  float32
 }
 
 func newMob(kind, id string, x, y, z float64) *MobEntity {
@@ -74,7 +78,7 @@ func (m *MobEntity) Tick(w *World) {
 	if m.Flee > 0 && m.hasBehavior("flee") {
 		m.Flee--
 		m.State = "flee"
-	} else {
+	} else if m.State != "chase" && m.State != "aim" && m.State != "fuse" {
 		m.Timer--
 		if m.Timer <= 0 {
 			if m.State == "idle" && m.hasBehavior("wander") {
@@ -93,6 +97,9 @@ func (m *MobEntity) Tick(w *World) {
 	}
 	if m.State == "flee" {
 		speed = d.FleeSpeed
+	}
+	if m.State == "chase" {
+		speed = d.Speed
 	}
 	delta := gameVec3{X: float32(math.Sin(float64(m.Yaw))) * speed * .05, Z: float32(math.Cos(float64(m.Yaw))) * speed * .05}
 	delta.X += m.Velocity.X * .05
@@ -117,7 +124,17 @@ func (m *MobEntity) Tick(w *World) {
 		blocked = true
 	}
 	if blocked {
-		m.Yaw += 1.5
+		if d.Hostile {
+			turn := float32(1.25)
+			if m.random()&1 == 0 {
+				turn = -turn
+			}
+			m.AvoidYaw = m.Yaw + turn
+			m.AvoidTicks = 16 + int(m.random()%20)
+			m.Yaw = m.AvoidYaw
+		} else {
+			m.Yaw += 1.5
+		}
 		m.Timer = 20
 	}
 	wet := blockAtPosition(w, float64(next.X), float64(next.Y+.4), float64(next.Z)) == blockWater
@@ -141,9 +158,15 @@ func (m *MobEntity) hit(damage int, awayX, awayZ float32) bool {
 	}
 	m.Health = max(0, m.Health-damage)
 	m.Hurt = 10
-	m.Flee = mobContent.Definitions[m.Kind].FleeTicks
+	if m.hasBehavior("flee") {
+		m.Flee = mobContent.Definitions[m.Kind].FleeTicks
+	}
 	m.Timer = 1
-	m.State = "flee"
+	if m.hasBehavior("flee") {
+		m.State = "flee"
+	} else {
+		m.State = "chase"
+	}
 	length := float32(math.Sqrt(float64(awayX*awayX + awayZ*awayZ)))
 	if length > 0 {
 		awayX /= length

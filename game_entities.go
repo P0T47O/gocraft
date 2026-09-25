@@ -25,7 +25,7 @@ func updateInterpolation(dt float32) {
 				e.AnimPhase += distance / anim.Stride * 2 * math.Pi
 			}
 			target := float32(0)
-			if e.MobState == "walk" || e.MobState == "flee" {
+			if e.MobState == "walk" || e.MobState == "flee" || e.MobState == "chase" {
 				target = 1
 			}
 			e.AnimBlend += (target - e.AnimBlend) * min(dt*anim.BlendSpeed, float32(1))

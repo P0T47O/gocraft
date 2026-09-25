@@ -122,6 +122,10 @@ func (s *Server) attackMob(p *PlayerEntity, target string) {
 		}
 	}
 	if victim.hit(damage, float32(victim.X-p.X), float32(victim.Z-p.Z)) {
+		if mobContent.Definitions[victim.Kind].Hostile {
+			victim.Target = p.UUID
+			victim.LostTicks = 0
+		}
 		p.AttackCooldown = 10
 		if p.GameMode == ModeSurvival {
 			slot.Wear(1)

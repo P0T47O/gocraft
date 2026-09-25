@@ -41,7 +41,7 @@ func runMobPreview() error {
 	camera = gameCamera{Position: gameVec3{2.4, 1.8, 3}, Target: gameVec3{0, .5, 0}, Up: gameVec3{0, 1, 0}, Fovy: 45}
 	state := NewInputState()
 	mode := "idle"
-	status := "1 Idle  2 Walk  3 Flee  4 Hurt  5 Death  R Reload  B Bounds  A/D Rotate"
+	status := "1-5 Pose  6 Zombie  7 Skeleton  8 Spider  9 Creeper  R Reload  B Bounds  A/D Rotate"
 	last := time.Now()
 	for !w.closed {
 		started := time.Now()
@@ -62,6 +62,12 @@ func runMobPreview() error {
 				if mode == "dead" {
 					e.DeathTime = 0
 				}
+			}
+		}
+		for i, kind := range []string{"zombie", "skeleton", "spider", "creeper"} {
+			if inputKeyPressed(keySix + int32(i)) {
+				e.MobKind, e.MobHealth, e.DeathTime = kind, mobContent.Definitions[kind].Health, 0
+				mode = "idle"
 			}
 		}
 		if inputKeyDown(keyA) {
@@ -89,7 +95,7 @@ func runMobPreview() error {
 		advanceMobPreview(e, mobContent, mode, dt)
 		nativeMenuCanvas.reset(uint32(w.width), uint32(w.height))
 		nativeMenuCanvas.Text("MOB WORKSHOP", 28, 24, 28, invAccent)
-		nativeMenuCanvas.Text(fmt.Sprintf("pig / %s", mode), 28, 65, 20, invText)
+		nativeMenuCanvas.Text(fmt.Sprintf("%s / %s", e.MobKind, mode), 28, 65, 20, invText)
 		nativeMenuCanvas.Text(status, 28, float32(w.height)-40, 14, invMuted)
 		frame := webGPUFrameFromWindow()
 		frame.HideHUD = true
