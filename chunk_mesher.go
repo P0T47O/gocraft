@@ -172,10 +172,20 @@ func (a *RenderAssets) shouldDrawFace(block byte, neighbor byte) bool {
 			}
 			return true
 		}
-		// Glass and Leaves: User requested NO culling, even between identical blocks
+		// Cutout materials can remain visible through each other's holes.
 		return true
 	}
 	return false
+}
+
+func (a *RenderAssets) shouldDrawVoxelFace(block, neighbor byte, face litFace) bool {
+	if generationIsLeaf(block) && generationIsLeaf(neighbor) {
+		// Cutout foliage needs interior layers for depth. Render a single
+		// double-sided quad per shared boundary, rather than two coplanar
+		// quads that fight in the depth buffer and double mesh cost.
+		return face == lightTop || face == lightSouth || face == lightEast
+	}
+	return a.shouldDrawFace(block, neighbor)
 }
 
 func (a *RenderAssets) applyAO(block byte, col color.RGBA, ao float32, useGrass bool, light byte, tintColor color.RGBA) color.RGBA {
@@ -698,7 +708,7 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 				}
 
 				// TOP (Y+)
-				if a.shouldDrawFace(block, getBlock(wx, y+1, wz)) {
+				if a.shouldDrawVoxelFace(block, getBlock(wx, y+1, wz), lightTop) {
 					aos, lights := sampleFaceLighting(wx, y, wz, lightTop, getBlock, getLight)
 
 					// Top of Grass Block
@@ -765,7 +775,7 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 					)
 				}
 				// BOTTOM (Y-)
-				if a.shouldDrawFace(block, getBlock(wx, y-1, wz)) {
+				if a.shouldDrawVoxelFace(block, getBlock(wx, y-1, wz), lightBottom) {
 					aos, lights := sampleFaceLighting(wx, y, wz, lightBottom, getBlock, getLight)
 
 					bottomTintCol := tintColor
@@ -797,7 +807,7 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 					)
 				}
 				// NORTH (Z-)
-				if a.shouldDrawFace(block, getBlock(wx, y, wz-1)) {
+				if a.shouldDrawVoxelFace(block, getBlock(wx, y, wz-1), lightNorth) {
 					aos, lights := sampleFaceLighting(wx, y, wz, lightNorth, getBlock, getLight)
 
 					sideTintCol := tintColor
@@ -873,7 +883,7 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 					}
 				}
 				// SOUTH (Z+)
-				if a.shouldDrawFace(block, getBlock(wx, y, wz+1)) {
+				if a.shouldDrawVoxelFace(block, getBlock(wx, y, wz+1), lightSouth) {
 					aos, lights := sampleFaceLighting(wx, y, wz, lightSouth, getBlock, getLight)
 
 					sideTintCol := tintColor
@@ -929,7 +939,7 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 					}
 				}
 				// EAST (X+)
-				if a.shouldDrawFace(block, getBlock(wx+1, y, wz)) {
+				if a.shouldDrawVoxelFace(block, getBlock(wx+1, y, wz), lightEast) {
 					aos, lights := sampleFaceLighting(wx, y, wz, lightEast, getBlock, getLight)
 
 					sideTintCol := tintColor
@@ -985,7 +995,7 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 					}
 				}
 				// WEST (X-)
-				if a.shouldDrawFace(block, getBlock(wx-1, y, wz)) {
+				if a.shouldDrawVoxelFace(block, getBlock(wx-1, y, wz), lightWest) {
 					aos, lights := sampleFaceLighting(wx, y, wz, lightWest, getBlock, getLight)
 
 					sideTintCol := tintColor

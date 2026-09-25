@@ -31,7 +31,8 @@ spatial patches, while desert decoration uses cacti and dead bushes.
 This is a first subset: no swamp, mushroom island, hydrological river network, structures,
 thin snow, or new biome-specific animal spawn rules are implemented here.
 The heightfield does not reproduce original extreme-hills overhangs. Existing
-caves and ore generation are unchanged. Tree crowns still use simple templates.
+caves and ore generation are unchanged. Tree crowns still use simple templates,
+but their exposed edges vary deterministically with the seed and world position.
 
 ### River channels
 

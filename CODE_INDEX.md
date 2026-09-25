@@ -60,22 +60,23 @@
 | 功能 | 文件 |
 | --- | --- |
 | World、区块查询与修改 | [world_core.go](world_core.go)、[types.go](types.go) |
-| 稀疏16³区块字段、统一值段、展开/压缩和密集存档适配 | [chunk_storage.go](chunk_storage.go)、[save_chunks.go](save_chunks.go)、[world_packets.go](world_packets.go)；正确性/内存/性能测试：[chunk_storage_test.go](chunk_storage_test.go)、[chunk_storage_equivalence_test.go](chunk_storage_equivalence_test.go)；收益与代价：[CHUNK_STORAGE.md](CHUNK_STORAGE.md) |
+| 稀疏16³区块字段、统一值段、展开/压缩和密集存档适配 | [chunk_storage.go](chunk_storage.go)、[save_chunks.go](save_chunks.go)、[world_packets.go](world_packets.go)；正确性/内存/性能及当前地形生成指纹测试：[chunk_storage_test.go](chunk_storage_test.go)、[chunk_storage_equivalence_test.go](chunk_storage_equivalence_test.go)；收益与代价：[CHUNK_STORAGE.md](CHUNK_STORAGE.md) |
 | 稀疏列批量复制到网格快照、首次收包同步统计高度/火把/分段非空数 | [chunk_storage.go](chunk_storage.go)：`CopyColumn`；[world_mesh.go](world_mesh.go)、[world_packets.go](world_packets.go)；等价回归 [chunk_storage_batch_test.go](chunk_storage_batch_test.go) |
 | 线程与关闭、对象池 | [world_lifecycle.go](world_lifecycle.go)、[world_pool.go](world_pool.go) |
 | 生成任务、区块填充、矿脉 | [world_gen.go](world_gen.go) |
 | 群系权重、高度场、河道、地表与植被规则 | [generation_biomes.go](generation_biomes.go) |
 | 地形列、坡度、洞穴和坐标哈希 | [generation_terrain.go](generation_terrain.go) |
 | 生成任务内地表/树木共享采样缓存与逐字节一致性对照 | [generation_cache.go](generation_cache.go)、[generation_cache_test.go](generation_cache_test.go) |
-| 树锚点与跨区块树冠 | [generation_trees.go](generation_trees.go) |
+| 树锚点、跨区块树冠与确定性边缘变化 | [generation_trees.go](generation_trees.go)；跨区块回归 [generation_test.go](generation_test.go)，轮廓回归 [generation_tree_shape_test.go](generation_tree_shape_test.go) |
 | 生成机制及限制 | [GENERATION.md](GENERATION.md) |
 | 光照传播 | [world_light.go](world_light.go) |
 | 六面逐顶点光照、AO、防拐角漏光、四边形对角线选择 | [mesh_lighting.go](mesh_lighting.go)、[mesh_lighting_test.go](mesh_lighting_test.go)、[mesh_lighting_preview_test.go](mesh_lighting_preview_test.go)；范围与实测：[LIGHTING.md](LIGHTING.md) |
 | 客户端区块消息应用、后端中立 DDA 射线查询与 gameplay-vector HitTest 外壳；火把精确双部件选取范围（可透过空隙挖后方方块） | [world_packets.go](world_packets.go)、[world_ray.go](world_ray.go)、[world_ray_game.go](world_ray_game.go)、[torch_hitbox.go](torch_hitbox.go)；回归 [world_ray_torch_test.go](world_ray_torch_test.go) |
 | 客户端光照增量、精确网格失效范围与更新合并 | [world_packet_light.go](world_packet_light.go)、[world_mesh_dirty.go](world_mesh_dirty.go)、[world_mesh_dirty_test.go](world_mesh_dirty_test.go) |
 | 网格任务与快照 | [world_mesh.go](world_mesh.go) |
-| 方块表面网格构建 | [chunk_mesher.go](chunk_mesher.go) |
+| 方块表面网格构建；相邻树叶只保留一张双面内部面，避免重合闪烁并保留树冠厚度 | [chunk_mesher.go](chunk_mesher.go)；回归 [foliage_mesh_test.go](foliage_mesh_test.go) |
 | 火把五个朝向的图集 UV、贴地/贴墙几何与面法线（与选取共享几何）；仙人掌四面纹理裁剪、内缩侧面/邻块照明及堆叠内面剔除 | [chunk_mesher.go](chunk_mesher.go)、[torch_geometry.go](torch_geometry.go)；逐朝向/逐邻接回归 [special_block_mesh_test.go](special_block_mesh_test.go) |
+| 树叶三种方块的原生 WebGPU 近景/远景离屏截图（真实网格、图集、mipmap、cutout 管线；设置 `GOCRAFT_WEBGPU_FOLIAGE_PREVIEW=1`，输出 `work/foliage-*.png`） | [webgpu_foliage_preview_windows_test.go](webgpu_foliage_preview_windows_test.go)、[menu_preview_webgpu_windows_test.go](menu_preview_webgpu_windows_test.go) |
 | Raylib-free 网格数学与颜色、GPU 上传适配 | [mesh_math.go](mesh_math.go)、[mesh_color.go](mesh_color.go)、[render_mesh_upload.go](render_mesh_upload.go)；共享句柄 [render_mesh.go](render_mesh.go) |
 | WebGPU 24 字节顶点打包（诊断预览可保持 36 字节） | [platform/compact_vertex.go](platform/compact_vertex.go)、[platform/compact_vertex_test.go](platform/compact_vertex_test.go) |
 | 后端中立网格上传接口、WebGPU GPU buffer | [render_mesh.go](render_mesh.go)、[platform/renderer.go](platform/renderer.go)、[platform/mesh.go](platform/mesh.go)、[platform/webgpu_backend.go](platform/webgpu_backend.go) |

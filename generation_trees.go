@@ -6,6 +6,7 @@ type treeAnchor struct {
 	x, y, z, height int
 	log, leaves     byte
 	spruce          bool
+	seed            uint32
 }
 
 func sampleTreeAnchor(seed uint32, x, z int) (treeAnchor, bool) {
@@ -14,7 +15,7 @@ func sampleTreeAnchor(seed uint32, x, z int) (treeAnchor, bool) {
 }
 
 func treeAnchorFromColumn(seed uint32, x, z int, c terrainColumn) (treeAnchor, bool) {
-	a := treeAnchor{x: x, y: c.height, z: z, log: blockLog, leaves: blockLeaves}
+	a := treeAnchor{x: x, y: c.height, z: z, log: blockLog, leaves: blockLeaves, seed: seed}
 	if c.height < seaLevel || c.height >= chunkHeight-20 || isOceanBiome(c.biomeID) ||
 		(c.top != blockGrass && c.top != blockDirt && c.top != blockSnow) {
 		return a, false
@@ -75,6 +76,16 @@ func (a treeAnchor) emit(put func(x, y, z int, b byte)) {
 					continue
 				}
 				if dx*dx+dz*dz > r*r+1 {
+					continue
+				}
+				// Break the perfectly level, square-cut edge without punching
+				// holes through the center of the crown. Every chunk that sees
+				// this anchor makes the same world-coordinate decision.
+				edgeNoise := hash2(a.seed+0x4eaf39, a.x+dx+17*y, a.z+dz-29*y)
+				if r == 2 && (absInt(dx) == 2 || absInt(dz) == 2) && edgeNoise < -0.65 {
+					continue
+				}
+				if !a.spruce && y == end && absInt(dx) == 1 && absInt(dz) == 1 && edgeNoise < -0.5 {
 					continue
 				}
 				put(a.x+dx, y, a.z+dz, a.leaves)

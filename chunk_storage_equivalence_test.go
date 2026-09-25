@@ -6,8 +6,8 @@ import (
 	"testing"
 )
 
-// Hash pre-migration byte order across oceans, caves, negative coordinates and
-// multiple seeds. The expected digest is captured before changing storage.
+// Hash generated blocks and light across oceans, caves, negative coordinates
+// and multiple seeds. Update this only for deliberate generation changes.
 func TestChunkStorageTerrainDigest(t *testing.T) {
 	initBlockRegistry()
 	h := sha256.New()
@@ -27,8 +27,8 @@ func TestChunkStorageTerrainDigest(t *testing.T) {
 	}
 	got := fmt.Sprintf("%x", h.Sum(nil))
 	t.Log(got)
-	if got != "6a03ca4e703e039da1917ef7045d0d5e4bd4559ef1f3511e1555ed89e0719b4d" {
-		t.Fatal("storage migration changed generated voxels or lighting")
+	if got != "1ad89c43fe16ba3d4bd635a4d97b26ea1da9e99202f911c18298785d1fca8d68" {
+		t.Fatal("generated voxels or lighting changed unexpectedly")
 	}
 }
 
