@@ -36,6 +36,8 @@ func smeltResult(id int32) int32 {
 	switch byte(id) {
 	case itemRawPork:
 		return int32(itemCookedPork)
+	case itemPotato:
+		return int32(itemBakedPotato)
 	case blockIronOre:
 		return int32(itemIronIngot)
 	case blockGoldOre:

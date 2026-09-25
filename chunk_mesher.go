@@ -330,6 +330,11 @@ func (a *RenderAssets) buildAllMeshDataWithLight(heightMap *[chunkWidth][chunkWi
 
 				def := GetBlock(block)
 				textures := def.Textures
+				if isCrop(block) {
+					textures.North = cropTexture(block, getMeta(wx, y, wz))
+				} else if block == blockFarmland && getMeta(wx, y, wz) != 0 {
+					textures.Top = "textures/block/farmland_moist.png"
+				}
 				px, py, pz := float32(wx), float32(y), float32(wz)
 
 				// Torch geometry is centered inside its block and submitted through

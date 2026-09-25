@@ -23,7 +23,7 @@
 | 原生 Windows 窗口与主循环（不初始化 Raylib 窗口） | [window_win32_windows.go](window_win32_windows.go)、[native_game_windows.go](native_game_windows.go)、[native_game_stub.go](native_game_stub.go)、[native_window_state.go](native_window_state.go) |
 | WebGPU 主菜单、设置和菜单覆盖层：保序批次与裁剪 | [menu_webgpu_windows.go](menu_webgpu_windows.go) |
 | 分辨率切换：帧边界应用窗口尺寸、交换链过期跳帧并重建（菜单/游戏共用） | [window_win32_windows.go](window_win32_windows.go)：`applyPendingResize`；[webgpu_surface_windows.go](webgpu_surface_windows.go)、[webgpu_surface_windows_test.go](webgpu_surface_windows_test.go)；实机回归 [native_window_windows_test.go](native_window_windows_test.go) |
-| 原生窗口/GPU/临时存档双会话回归与图像回读 | [native_window_windows_test.go](native_window_windows_test.go)、[menu_preview_webgpu_windows_test.go](menu_preview_webgpu_windows_test.go)；设置 `GOCRAFT_WEBGPU_REGRESSION=1` |
+| 原生窗口/GPU/临时存档双会话回归与图像回读；实测四怪、已点燃 TNT 与爆炸效果进入 WebGPU 帧 | [native_window_windows_test.go](native_window_windows_test.go)、[menu_preview_webgpu_windows_test.go](menu_preview_webgpu_windows_test.go)；设置 `GOCRAFT_WEBGPU_REGRESSION=1` |
 | WebGPU 原生帧快照与渲染器生命周期 | [webgpu_game_windows.go](webgpu_game_windows.go)、[webgpu_game_stub.go](webgpu_game_stub.go) |
 | WebGPU Playing 单 pass 合成（world + entities/effects + HUD/text + inventory/container + 暂停/死亡菜单） | [webgpu_gameplay_windows.go](webgpu_gameplay_windows.go)：`DrawGameplay` |
 | 后端中立帧快照与窗口设置桥接 | [webgpu_frame.go](webgpu_frame.go)、[settings_window.go](settings_window.go)；配置读写本身在 Raylib-free 的 [settings.go](settings.go) |
@@ -47,7 +47,8 @@
 | 聊天命令 | [server_commands.go](server_commands.go) |
 | 服务端保存编排 | [server_save.go](server_save.go)：`Save` |
 | 保存错误汇总、退出等待完成与失败日志 | [server_save_result_test.go](server_save_result_test.go)、[session_shutdown.go](session_shutdown.go)、[session_shutdown_test.go](session_shutdown_test.go)、[save_failure.go](save_failure.go)；服务端关闭结果经 Done 同步后由 [game_session.go](game_session.go) 读取 |
-| 协议 ID、Packet 接口、读写分帧与分发 | [protocol.go](protocol.go) |
+| 协议 ID、Packet 接口、读写分帧与分发（版本 9） | [protocol.go](protocol.go) |
+| 爆炸事件：一次同步中心与有界方块移除列表，客户端应用后播放粒子和音效 | [protocol_explosion.go](protocol_explosion.go)、[game_packets.go](game_packets.go)、[game_explosion.go](game_explosion.go)、[webgpu_entities_windows.go](webgpu_entities_windows.go)、[game_audio.go](game_audio.go)；回归 [explosion_test.go](explosion_test.go) |
 | 世界时间初始/定期同步消息（协议版本 8） | [protocol_time.go](protocol_time.go)、[server_packets.go](server_packets.go)、[server_network.go](server_network.go)、[game_packets.go](game_packets.go) |
 | VarInt、字符串编码 | [protocol_codec.go](protocol_codec.go) |
 | 区块与方块消息 | [protocol_world.go](protocol_world.go) |
@@ -118,8 +119,10 @@
 | 方块/物品定义、硬度和工具 | [block_registry.go](block_registry.go)、[item_registry.go](item_registry.go)、[mining_data.go](mining_data.go)、[tool_system.go](tool_system.go) |
 | 背包、操作、合成 | [inventory.go](inventory.go)、[inventory_actions.go](inventory_actions.go)、[recipes.go](recipes.go) |
 | 箱子/熔炉逻辑与保存 | [containers.go](containers.go) |
-| 猪与僵尸/骷髅/蜘蛛/苦力怕配置：夜间/暗处刷新、追击/绕障/近战/扑击/引信、蜘蛛贴墙攀爬、太阳灼烧、远距离清理 | [mob_content.go](mob_content.go)、[mob_ai.go](mob_ai.go)、[mob_simulation.go](mob_simulation.go)、[mob_server.go](mob_server.go)、[server_tick.go](server_tick.go)、[mob_hostile_test.go](mob_hostile_test.go)；模型/动画/属性 [content/entities/](content/entities/)、[content/models/](content/models/)、[content/animations/](content/animations/) |
-| 骷髅箭矢：服务端飞行和方块/玩家碰撞、临时实体不写存档、客户端 WebGPU 渲染 | [mob_projectile.go](mob_projectile.go)、[server_entities.go](server_entities.go)、[save_entities.go](save_entities.go)、[webgpu_entities_windows.go](webgpu_entities_windows.go)；回归 [mob_hostile_test.go](mob_hostile_test.go) |
+| 猪与僵尸/骷髅/蜘蛛/苦力怕配置：夜间/暗处多候选落点刷新、追击/绕障/近战/扑击/引信、蜘蛛贴墙攀爬、太阳灼烧、远距离清理；苦力怕引信接共用爆炸逻辑 | [mob_content.go](mob_content.go)、[mob_ai.go](mob_ai.go)、[mob_simulation.go](mob_simulation.go)、[mob_server.go](mob_server.go)、[server_tick.go](server_tick.go)、[mob_hostile_test.go](mob_hostile_test.go)；模型/动画/属性 [content/entities/](content/entities/)、[content/models/](content/models/)、[content/animations/](content/animations/) |
+| TNT 方块、合成（5 火药 + 4 沙子）、右键点燃、4 秒可见引信、剩余引信存档、爆炸遮挡伤害/地形破坏/连锁点燃（不破坏基岩/黑曜石/液体） | [types.go](types.go)、[block_registry.go](block_registry.go)、[mining_data.go](mining_data.go)、[assets.go](assets.go)、[recipes.go](recipes.go)、[input.go](input.go)、[server_packets.go](server_packets.go)、[explosion.go](explosion.go)、[server_entities.go](server_entities.go)、[save_entities.go](save_entities.go)；回归 [explosion_test.go](explosion_test.go) |
+| 农耕闭环：锄地/耕地湿润、小麦种子/土豆/胡萝卜播种，近玩家随机列生长（地下/屋顶下也可）、元数据阶段存档、成熟收获与缺土掉落；草掉种子、僵尸稀有掉土豆/胡萝卜；面包与烤土豆；阶段贴图网格回归 | [farm_actions.go](farm_actions.go)、[farm_tick.go](farm_tick.go)、[types.go](types.go)、[block_registry.go](block_registry.go)、[item_registry.go](item_registry.go)、[tool_system.go](tool_system.go)、[recipes.go](recipes.go)、[player_vitals.go](player_vitals.go)、[containers.go](containers.go)、[mob_content.go](mob_content.go)、[mob_server.go](mob_server.go)、[input.go](input.go)、[server_packets.go](server_packets.go)、[chunk_mesher.go](chunk_mesher.go)、[webgpu_atlas.go](webgpu_atlas.go)；回归 [farm_test.go](farm_test.go) |
+| 骷髅箭矢：服务端飞行和方块/玩家完整身形碰撞、临时实体不写存档、客户端 WebGPU 渲染 | [mob_projectile.go](mob_projectile.go)、[server_entities.go](server_entities.go)、[save_entities.go](save_entities.go)、[webgpu_entities_windows.go](webgpu_entities_windows.go)；回归 [mob_hostile_test.go](mob_hostile_test.go) |
 | 生物掉落表与五种新材料（腐肉、骨头、箭、线、火药），沿用物品实体拾取 | [mob_content.go](mob_content.go)、[mob_server.go](mob_server.go)、[item_registry.go](item_registry.go)、[types.go](types.go)、[server_entities.go](server_entities.go) |
 | 生物 CPU 姿态、原生工作台、四怪显卡画廊与真实本地 TCP/原生窗口同步回归 | [mob_pose.go](mob_pose.go)、[mob_preview_windows.go](mob_preview_windows.go)、[webgpu_workshop_windows.go](webgpu_workshop_windows.go)、[mob_workshop_windows_test.go](mob_workshop_windows_test.go)、[mob_gallery_windows_test.go](mob_gallery_windows_test.go)、[native_window_windows_test.go](native_window_windows_test.go)；设置 `GOCRAFT_WEBGPU_REGRESSION=1` |
 | 后端中立菜单与通用控件（窗口/输入/绘制由接口提供） | [menu_screens.go](menu_screens.go)、[ui_menu.go](ui_menu.go)、[menu_death.go](menu_death.go)、[menu_painter.go](menu_painter.go)、[ui_palette.go](ui_palette.go) |

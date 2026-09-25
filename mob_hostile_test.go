@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"math"
 	"reflect"
 	"testing"
 )
@@ -141,6 +142,27 @@ func TestSkeletonArrowHitsAndWallStopsIt(t *testing.T) {
 	}
 }
 
+func TestArrowSegmentHitsWholePlayerBody(t *testing.T) {
+	s, p := hostileTestServer(t)
+	for _, tc := range []struct {
+		name string
+		y    float64
+		hit  bool
+	}{
+		{"head", p.Y + .1, true},
+		{"legs", p.Y - 1.5, true},
+		{"above", p.Y + .35, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			a := &ArrowEntity{BaseEntity: BaseEntity{X: p.X, Y: tc.y, Z: p.Z - 1}, Vz: 2}
+			a.Tick(s.World)
+			if (a.HitPlayer == p) != tc.hit {
+				t.Fatalf("arrow hit=%t, want %t", a.HitPlayer == p, tc.hit)
+			}
+		})
+	}
+}
+
 func TestSpiderPounceAndCreeperFuse(t *testing.T) {
 	s, p := hostileTestServer(t)
 	p.Z = 12
@@ -253,6 +275,28 @@ func TestNearbyHostileActuallySpawnsAtNight(t *testing.T) {
 			t.Fatalf("time %.0f: hostile spawn=%t", ticks, spawned)
 		}
 	}
+}
+
+func TestNearbySpawnTriesAnotherLoadedColumn(t *testing.T) {
+	s, p := hostileTestServer(t)
+	p.Z = 8
+	s.World.TimeTicks = 18000
+	def := mobContent.Definitions["creeper"]
+	phase := 2.399
+	radius := def.SpawnRadius * .875
+	x, z := int(math.Floor(p.X+math.Sin(phase)*radius)), int(math.Floor(p.Z+math.Cos(phase)*radius))
+	c := lifecycleChunk(s.World, chunkKey{divFloor(x, 16), divFloor(z, 16)})
+	c.mu.Lock()
+	c.skyLight.Fill(15)
+	c.mu.Unlock()
+	s.World.SetBlockAt(x, 70, z, blockGrass)
+	s.spawnNearbyMobs()
+	for _, e := range s.World.entities {
+		if m, ok := e.(*MobEntity); ok && m.Kind == "creeper" && int(m.X) == x && int(m.Z) == z {
+			return
+		}
+	}
+	t.Fatal("spawn did not recover from the first unsuitable column")
 }
 
 func TestSpiderClimbsWallButNotCliff(t *testing.T) {

@@ -11,7 +11,7 @@ import (
 	"path/filepath"
 )
 
-const entitySaveVersion = 9
+const entitySaveVersion = 10
 
 func SaveEntities(savePath string, world *World) error {
 	if err := ensureSaveDir(savePath); err != nil {
@@ -27,13 +27,13 @@ func SaveEntities(savePath string, world *World) error {
 
 	entityCount := uint32(0)
 	for _, e := range world.entities {
-		if _, transient := e.(*ArrowEntity); !transient {
+		if !transientEntity(e) {
 			entityCount++
 		}
 	}
 	writeUint32(&buf, entityCount)
 	for _, e := range world.entities {
-		if _, transient := e.(*ArrowEntity); transient {
+		if transientEntity(e) {
 			continue
 		}
 		x, y, z := e.GetPosition()
@@ -56,6 +56,9 @@ func SaveEntities(savePath string, world *World) error {
 				return err
 			}
 		}
+		if primed, ok := e.(*PrimedTNT); ok {
+			_ = binary.Write(&buf, binary.LittleEndian, uint16(primed.Fuse))
+		}
 
 		// Save ItemEntity-specific data
 		if item, ok := e.(*ItemEntity); ok {
@@ -68,6 +71,14 @@ func SaveEntities(savePath string, world *World) error {
 
 	path := filepath.Join(savePath, entityFile)
 	return writeSaveFile(path, buf.Bytes())
+}
+
+func transientEntity(e Entity) bool {
+	switch e.(type) {
+	case *ArrowEntity:
+		return true
+	}
+	return false
 }
 
 func LoadEntities(savePath string, world *World) (bool, error) {
@@ -167,6 +178,15 @@ func LoadEntities(savePath string, world *World) (bool, error) {
 				ItemStack: ItemStack{ID: int32(itemID), Count: count, Damage: damage},
 				Age:       age,
 			}
+		case EntityPrimedTNT:
+			if data[4] < 10 || buf.Len() < 2 {
+				return false, errors.New("truncated primed TNT")
+			}
+			var fuse uint16
+			if err := binary.Read(buf, binary.LittleEndian, &fuse); err != nil || fuse == 0 || fuse > tntFuseTicks {
+				return false, errors.New("invalid TNT fuse")
+			}
+			e = &PrimedTNT{BaseEntity: BaseEntity{UUID: uuid, Type: EntityPrimedTNT, X: x, Y: y, Z: z}, Fuse: int(fuse)}
 		default:
 			e = &BaseEntity{
 				UUID: uuid, Type: EntityType(etype),

@@ -16,6 +16,7 @@ func (s *Server) Tick() {
 	s.updateMobAI()
 	s.UpdateEntities()
 	s.updateMobs()
+	s.tickFarms()
 	s.tickContainers()
 
 	// Garbage Collect Chunks

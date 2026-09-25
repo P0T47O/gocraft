@@ -79,6 +79,22 @@ func initBlockRegistry() {
 	defer configureBasicMining()
 	// Define and register all block types
 	RegisterBlock(&BlockDef{
+		ID: blockTNT, Name: "TNT",
+		Textures:   blockFaces{Top: "textures/block/tnt_top.png", Bottom: "textures/block/tnt_bottom.png", North: "textures/block/tnt_side.png", South: "textures/block/tnt_side.png", East: "textures/block/tnt_side.png", West: "textures/block/tnt_side.png"},
+		RenderType: RenderTypeCube, IsOpaque: true, IsCollidable: true,
+	})
+	RegisterBlock(&BlockDef{ID: blockFarmland, Name: "Farmland", Textures: blockFaces{Top: "textures/block/farmland.png", Bottom: "textures/block/dirt.png", North: "textures/block/dirt.png", South: "textures/block/dirt.png", East: "textures/block/dirt.png", West: "textures/block/dirt.png"}, RenderType: RenderTypeCube, IsOpaque: true, IsCollidable: true, DropItem: blockDirt})
+	for _, crop := range []struct {
+		id            byte
+		name, texture string
+	}{
+		{blockWheatCrop, "Wheat Crop", "textures/block/wheat_stage0.png"},
+		{blockPotatoCrop, "Potato Crop", "textures/block/potatoes_stage0.png"},
+		{blockCarrotCrop, "Carrot Crop", "textures/block/carrots_stage0.png"},
+	} {
+		RegisterBlock(&BlockDef{ID: crop.id, Name: crop.name, Textures: blockFaces{North: crop.texture}, RenderType: RenderTypeCross, IsTransparent: true, IsCollidable: false, NoDrop: true})
+	}
+	RegisterBlock(&BlockDef{
 		ID:           blockGrass,
 		Name:         "Grass Block",
 		Textures:     blockFaces{Top: "textures/block/grass_block_top.png", Bottom: "textures/block/dirt.png", North: "textures/block/grass_block_side.png", South: "textures/block/grass_block_side.png", East: "textures/block/grass_block_side.png", West: "textures/block/grass_block_side.png"},

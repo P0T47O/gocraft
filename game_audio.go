@@ -10,6 +10,7 @@ type gameSound byte
 const (
 	soundEat gameSound = iota + 1
 	soundHurt
+	soundExplosion
 )
 
 // Small generated PCM effects avoid adding an audio asset/runtime dependency.
@@ -19,6 +20,8 @@ func gameSoundWAV(kind gameSound) []byte {
 	length := rate / 7
 	if kind == soundHurt {
 		length = rate / 5
+	} else if kind == soundExplosion {
+		length = rate / 2
 	}
 	pcmBytes := length * 2
 	wav := make([]byte, 44+pcmBytes)
@@ -48,6 +51,11 @@ func gameSoundWAV(kind gameSound) []byte {
 			sample = (0.4*crunch + 0.6*math.Sin(2*math.Pi*(190+600*t)*t)) * envelope
 		case soundHurt:
 			sample = math.Sin(2*math.Pi*(220-120*t)*t) * envelope
+		case soundExplosion:
+			noise ^= noise << 13
+			noise ^= noise >> 17
+			noise ^= noise << 5
+			sample = (0.7*float64(int32(noise))/float64(math.MaxInt32) + 0.3*math.Sin(2*math.Pi*(75-45*t)*t)) * envelope
 		}
 		binary.LittleEndian.PutUint16(wav[44+i*2:], uint16(int16(sample*5500)))
 	}

@@ -40,14 +40,11 @@ func (a *ArrowEntity) Tick(w *World) {
 		if !ok || p.UUID == a.Owner || p.dead() || p.GameMode != ModeSurvival {
 			continue
 		}
-		// Closest approach to the player's torso along the traveled segment.
-		px, py, pz := p.X-startX, p.Y-playerEyeY*.55-startY, p.Z-startZ
-		projection := (px*a.Vx + py*a.Vy + pz*a.Vz) / distance
-		if projection < 0 || projection > travel {
-			continue
-		}
-		dx, dy, dz := px-a.Vx/distance*projection, py-a.Vy/distance*projection, pz-a.Vz/distance*projection
-		if dx*dx+dy*dy+dz*dz < .55*.55 {
+		// Test the traveled segment against the whole player body. A torso
+		// sphere missed otherwise valid head and leg hits.
+		feet := p.Y - playerEyeY
+		if segmentHitsBox(startX, startY, startZ, a.Vx, a.Vy, a.Vz, travel/distance,
+			p.X-.3, feet, p.Z-.3, p.X+.3, feet+1.8, p.Z+.3) {
 			a.HitPlayer, a.Dead = p, true
 			return
 		}
@@ -61,4 +58,25 @@ func (a *ArrowEntity) Tick(w *World) {
 	a.Z += a.Vz
 	a.Yaw = float32(math.Atan2(a.Vx, a.Vz))
 	a.Dirty = true
+}
+
+func segmentHitsBox(x, y, z, dx, dy, dz, maxT, minX, minY, minZ, maxX, maxY, maxZ float64) bool {
+	t0, t1 := 0.0, maxT
+	for _, axis := range [3][4]float64{{x, dx, minX, maxX}, {y, dy, minY, maxY}, {z, dz, minZ, maxZ}} {
+		if math.Abs(axis[1]) < 1e-9 {
+			if axis[0] < axis[2] || axis[0] > axis[3] {
+				return false
+			}
+			continue
+		}
+		near, far := (axis[2]-axis[0])/axis[1], (axis[3]-axis[0])/axis[1]
+		if near > far {
+			near, far = far, near
+		}
+		t0, t1 = math.Max(t0, near), math.Min(t1, far)
+		if t0 > t1 {
+			return false
+		}
+	}
+	return true
 }

@@ -39,6 +39,18 @@ var allBlocks = []byte{
 	blockCraftingTable,
 	blockChest,
 	blockFurnace,
+	blockTNT,
+	itemWheatSeeds,
+	itemWheat,
+	itemBread,
+	itemPotato,
+	itemCarrot,
+	itemBakedPotato,
+	itemWoodHoe,
+	itemStoneHoe,
+	itemIronHoe,
+	itemDiamondHoe,
+	itemGoldHoe,
 
 	// Liquids
 	blockWater,

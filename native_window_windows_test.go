@@ -190,6 +190,17 @@ func TestNativeWebGPUWindow(t *testing.T) {
 						t.Fatalf("%s was not synchronized into the native game session", kind)
 					}
 				}
+				server.SpawnEntity(&PrimedTNT{BaseEntity: BaseEntity{UUID: "native-primed-tnt", Type: EntityPrimedTNT, X: float64(camera.Position.X), Y: float64(camera.Position.Y), Z: float64(camera.Position.Z) + 5}, Fuse: tntFuseTicks})
+				server.Broadcast(&PacketExplosion{X: float64(camera.Position.X), Y: float64(camera.Position.Y), Z: float64(camera.Position.Z) + 5, Radius: 3})
+				deadline = time.Now().Add(2 * time.Second)
+				for (remoteEntities["native-primed-tnt"] == nil || len(explosionEffects) == 0) && time.Now().Before(deadline) {
+					w.Poll()
+					updateGame()
+					time.Sleep(10 * time.Millisecond)
+				}
+				if remoteEntities["native-primed-tnt"] == nil || len(explosionEffects) == 0 {
+					t.Fatal("TNT or explosion effect did not reach native renderer")
+				}
 			}
 			for frame := 0; frame < 3; frame++ {
 				w.Poll()

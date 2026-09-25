@@ -221,6 +221,20 @@ func initItemRegistry() {
 	registerTool(itemGoldAxe, "Gold Axe", "textures/item/golden_axe.png")
 	Items[itemGoldAxe].ToolType = ToolAxe
 	Items[itemGoldAxe].ToolMaterial = MatGold
+	for _, hoe := range []struct {
+		id            byte
+		name, texture string
+		material      ToolMaterial
+	}{
+		{itemWoodHoe, "Wooden Hoe", "textures/item/wooden_hoe.png", MatWood},
+		{itemStoneHoe, "Stone Hoe", "textures/item/stone_hoe.png", MatStone},
+		{itemIronHoe, "Iron Hoe", "textures/item/iron_hoe.png", MatIron},
+		{itemDiamondHoe, "Diamond Hoe", "textures/item/diamond_hoe.png", MatDiamond},
+		{itemGoldHoe, "Golden Hoe", "textures/item/golden_hoe.png", MatGold},
+	} {
+		registerTool(hoe.id, hoe.name, hoe.texture)
+		Items[hoe.id].ToolType, Items[hoe.id].ToolMaterial = ToolHoe, hoe.material
+	}
 
 	// Standalone resource items.
 	registerItem := func(id byte, name string, tex string) {
@@ -239,6 +253,12 @@ func initItemRegistry() {
 	registerItem(itemArrow, "Arrow", "textures/item/arrow.png")
 	registerItem(itemString, "String", "textures/item/string.png")
 	registerItem(itemGunpowder, "Gunpowder", "textures/item/gunpowder.png")
+	registerItem(itemWheatSeeds, "Wheat Seeds", "textures/item/wheat_seeds.png")
+	registerItem(itemWheat, "Wheat", "textures/item/wheat.png")
+	registerItem(itemBread, "Bread", "textures/item/bread.png")
+	registerItem(itemPotato, "Potato", "textures/item/potato.png")
+	registerItem(itemCarrot, "Carrot", "textures/item/carrot.png")
+	registerItem(itemBakedPotato, "Baked Potato", "textures/item/baked_potato.png")
 	configureTools()
 	for id, d := range Items {
 		if d != nil && d.PlaceBlock == 0 {

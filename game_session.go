@@ -60,6 +60,7 @@ func startGame(savePath string, ip string, isMultiplayer bool) {
 	// Client World
 	resetChunkStreaming()
 	clear(remoteEntities)
+	explosionEffects = nil
 	world = NewClientWorld()
 	world.StartMeshWorkers(assets, 8)
 
@@ -105,6 +106,7 @@ func exitGame() {
 	}
 	resetChunkStreaming()
 	clear(remoteEntities)
+	explosionEffects = nil
 	// Reset State
 	currentState = StateMenu
 	menuPage = MenuMain

@@ -7,6 +7,7 @@ const (
 	ToolPickaxe
 	ToolShovel
 	ToolAxe
+	ToolHoe
 )
 
 type ToolMaterial int

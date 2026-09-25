@@ -201,6 +201,58 @@ func (b *webGPUEntityBatch) addArrow(e *RemoteEntity) {
 	b.addBox(float32(e.X), float32(e.Y), float32(e.Z), .06, .06, .46, e.Yaw, [4]float32{u0, v0, u1, v1}, [4]uint8{255, 255, 255, 255})
 }
 
+func (b *webGPUEntityBatch) addPrimedTNT(e *RemoteEntity, now float32) {
+	u0, v0, u1, v1, ok := webGPUEntityUV("textures/block/tnt_side.png")
+	if !ok {
+		return
+	}
+	tu0, tv0, tu1, tv1, topOK := webGPUEntityUV("textures/block/tnt_top.png")
+	bu0, bv0, bu1, bv1, bottomOK := webGPUEntityUV("textures/block/tnt_bottom.png")
+	if !topOK || !bottomOK {
+		return
+	}
+	color := [4]uint8{255, 255, 255, 255}
+	if int(now*8)%2 == 0 {
+		color = [4]uint8{255, 145, 125, 255}
+	}
+	x, y, z := float32(e.X), float32(e.Y), float32(e.Z)
+	h := float32(.475)
+	side, top, bottom := [4]float32{u0, v0, u1, v1}, [4]float32{tu0, tv0, tu1, tv1}, [4]float32{bu0, bv0, bu1, bv1}
+	b.addQuad([3]float32{x - h, y + h, z + h}, [3]float32{x + h, y + h, z + h}, [3]float32{x + h, y - h, z + h}, [3]float32{x - h, y - h, z + h}, side, color, [3]float32{0, 0, 1})
+	b.addQuad([3]float32{x + h, y + h, z - h}, [3]float32{x - h, y + h, z - h}, [3]float32{x - h, y - h, z - h}, [3]float32{x + h, y - h, z - h}, side, color, [3]float32{0, 0, -1})
+	b.addQuad([3]float32{x + h, y + h, z + h}, [3]float32{x + h, y + h, z - h}, [3]float32{x + h, y - h, z - h}, [3]float32{x + h, y - h, z + h}, side, color, [3]float32{1, 0, 0})
+	b.addQuad([3]float32{x - h, y + h, z - h}, [3]float32{x - h, y + h, z + h}, [3]float32{x - h, y - h, z + h}, [3]float32{x - h, y - h, z - h}, side, color, [3]float32{-1, 0, 0})
+	b.addQuad([3]float32{x - h, y + h, z - h}, [3]float32{x + h, y + h, z - h}, [3]float32{x + h, y + h, z + h}, [3]float32{x - h, y + h, z + h}, top, color, [3]float32{0, 1, 0})
+	b.addQuad([3]float32{x - h, y - h, z + h}, [3]float32{x + h, y - h, z + h}, [3]float32{x + h, y - h, z - h}, [3]float32{x - h, y - h, z - h}, bottom, color, [3]float32{0, -1, 0})
+}
+
+func (b *webGPUEntityBatch) addExplosionEffect(effect explosionEffect) {
+	frame := min(15, int(effect.age*25))
+	u0, v0, u1, v1, ok := webGPUEntityUV(fmt.Sprintf("textures/particle/explosion_%d.png", frame))
+	if !ok {
+		return
+	}
+	uv := [4]float32{u0, v0, u1, v1}
+	spread := effect.radius * min(1, effect.age*3)
+	size := .6 + effect.age*1.7
+	for i := 0; i < 9; i++ {
+		angle := float32(i) * 2.399
+		r := spread * float32(i%3) / 3
+		x := effect.x + r*float32(math.Sin(float64(angle)))
+		y := effect.y + spread*float32((i/3)-1)*.35
+		z := effect.z + r*float32(math.Cos(float64(angle)))
+		for _, yaw := range []float32{angle, angle + math.Pi/2} {
+			dx, dz := rotateY(size/2, 0, yaw)
+			p0 := [3]float32{x - dx, y + size/2, z - dz}
+			p1 := [3]float32{x + dx, y + size/2, z + dz}
+			p2 := [3]float32{x + dx, y - size/2, z + dz}
+			p3 := [3]float32{x - dx, y - size/2, z - dz}
+			b.addQuad(p0, p1, p2, p3, uv, [4]uint8{255, 230, 195, 255}, [3]float32{0, 0, 1})
+			b.addQuad(p1, p0, p3, p2, uv, [4]uint8{255, 230, 195, 255}, [3]float32{0, 0, -1})
+		}
+	}
+}
+
 func webGPUMobFaceUVs(model MobModel, bone MobBone) ([6][4]float32, bool) {
 	w, h, d := bone.Size[0]*16, bone.Size[1]*16, bone.Size[2]*16
 	if bone.UVAxis == "z" {
@@ -375,11 +427,21 @@ func (r *webGPUEntityRenderer) Draw(pass *wgpu.RenderPassEncoder, worldRenderer 
 			batch.addItem(e, now)
 		case e.Type == EntityArrow:
 			batch.addArrow(e)
+		case e.Type == EntityPrimedTNT:
+			batch.addPrimedTNT(e, now)
 		case e.MobKind != "":
 			batch.addMob(e, now)
 		default:
 			batch.addMobPlaceholder(e)
 		}
+	}
+	for _, effect := range explosionEffects {
+		if len(batch.vertices)+144 >= webGPUEntityMaxVertices {
+			if err := flush(); err != nil {
+				return err
+			}
+		}
+		batch.addExplosionEffect(effect)
 	}
 	batch.addMiningCrack(state)
 	return flush()

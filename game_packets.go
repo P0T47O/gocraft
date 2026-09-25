@@ -7,6 +7,22 @@ import (
 
 func handlePacket(pkt Packet) {
 	switch p := pkt.(type) {
+	case *PacketExplosion:
+		if world != nil {
+			for _, pos := range p.Removed {
+				x, y, z := int(pos.X), int(pos.Y), int(pos.Z)
+				if world.getChunkIfGenerated(divFloor(x, chunkWidth), divFloor(z, chunkWidth)) != nil {
+					world.SetBlockAt(x, y, z, blockAir)
+				}
+			}
+		}
+		addExplosionEffect(p)
+		if camera.Position != (gameVec3{}) {
+			dx, dy, dz := float64(camera.Position.X)-p.X, float64(camera.Position.Y)-p.Y, float64(camera.Position.Z)-p.Z
+			if dx*dx+dy*dy+dz*dz < 48*48 {
+				playGameSound(soundExplosion)
+			}
+		}
 	case *PacketWorldTime:
 		if world != nil {
 			world.TimeTicks = float64(p.Ticks)

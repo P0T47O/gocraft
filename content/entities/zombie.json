@@ -4,6 +4,6 @@
   "model":"biped", "animation":"biped", "behaviors":["wander","chase"],
   "idle_ticks":40, "walk_ticks":65, "flee_ticks":20,
   "hostile":true, "detection":16, "attack_range":1.7, "damage":3, "attack_ticks":20,
-  "drops":[{"item":"rotten_flesh","min":0,"max":2}],
+  "drops":[{"item":"rotten_flesh","min":0,"max":2},{"item":"potato","min":1,"max":1,"chance":0.025},{"item":"carrot","min":1,"max":1,"chance":0.025}],
   "spawn_limit":10, "spawn_radius":22
 }

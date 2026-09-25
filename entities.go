@@ -9,10 +9,11 @@ type EntityType int
 // Entity type IDs are serialized in saves and sent in spawn packets. Keep them
 // explicit so adding a new entity cannot silently reinterpret existing data.
 const (
-	EntityPlayer EntityType = 0
-	EntityPig    EntityType = 1
-	EntityItem   EntityType = 2
-	EntityArrow  EntityType = 3
+	EntityPlayer    EntityType = 0
+	EntityPig       EntityType = 1
+	EntityItem      EntityType = 2
+	EntityArrow     EntityType = 3
+	EntityPrimedTNT EntityType = 4
 )
 
 type Entity interface {

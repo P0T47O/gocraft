@@ -401,7 +401,8 @@ func HandleInput(world *World, camera *gameCamera, state *InputState, client *Cl
 		if hit.hit {
 			blockID = world.BlockAt(hit.x, hit.y, hit.z)
 		}
-		if hit.hit && (blockID == blockCraftingTable || containerSize(blockID) > 0) && !inputKeyDown(keyLeftShift) {
+		farmAction := (blockID == blockGrass || blockID == blockDirt) && GetItem(state.CurrentBlock).ToolType == ToolHoe || blockID == blockFarmland && cropForItem(state.CurrentBlock) != blockAir
+		if hit.hit && (blockID == blockCraftingTable || blockID == blockTNT || containerSize(blockID) > 0 || farmAction) && !inputKeyDown(keyLeftShift) {
 			if client != nil {
 				client.Send(&PacketBlockInteract{
 					X:      int32(hit.x),

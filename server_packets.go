@@ -258,6 +258,13 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 		if !s.containerReach(player, pos) {
 			return
 		}
+		if s.interactFarm(player, pos) {
+			return
+		}
+		if s.World.BlockAt(int(p.X), int(p.Y), int(p.Z)) == blockTNT {
+			s.igniteTNT(int(p.X), int(p.Y), int(p.Z), tntFuseTicks)
+			return
+		}
 		if containerSize(s.World.BlockAt(int(p.X), int(p.Y), int(p.Z))) > 0 {
 			s.openContainer(s.findPlayerEntity(wrap.From), pos)
 			return
@@ -342,6 +349,10 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 			s.BroadcastTo(wrap.From, &PacketBlockChange{X: p.X, Y: p.Y, Z: p.Z, BlockID: old, Meta: s.World.MetaAt(int(p.X), int(p.Y), int(p.Z))})
 			return
 		}
+		if p.BlockID == blockFarmland || isCrop(p.BlockID) {
+			s.BroadcastTo(wrap.From, &PacketBlockChange{X: p.X, Y: p.Y, Z: p.Z, BlockID: old, Meta: s.World.MetaAt(int(p.X), int(p.Y), int(p.Z))})
+			return
+		}
 		if p.BlockID != blockAir {
 			// Placement Logic
 			if player.GameMode == ModeSurvival {
@@ -384,6 +395,13 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 				if player.GameMode == ModeSurvival && blockDef.Hardness < 0 {
 					s.BroadcastTo(wrap.From, &PacketBlockChange{X: p.X, Y: p.Y, Z: p.Z, BlockID: oldBlockID})
 					return
+				}
+				if player.GameMode == ModeSurvival {
+					if isCrop(oldBlockID) {
+						s.dropCrop(int(p.X), int(p.Y), int(p.Z), oldBlockID, s.World.MetaAt(int(p.X), int(p.Y), int(p.Z)))
+					} else if oldBlockID == blockTallGrass && rand.Intn(4) == 0 {
+						s.dropFarmItem(int(p.X), int(p.Y), int(p.Z), itemWheatSeeds, 1)
+					}
 				}
 
 				heldID := byte(0)
@@ -441,6 +459,16 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 
 		if p.BlockID == blockAir {
 			s.breakContainer(BlockPos{p.X, p.Y, p.Z})
+			if old == blockFarmland {
+				x, y, z := int(p.X), int(p.Y)+1, int(p.Z)
+				crop := s.World.BlockAt(x, y, z)
+				if isCrop(crop) {
+					if player.GameMode == ModeSurvival {
+						s.dropCrop(x, y, z, crop, s.World.MetaAt(x, y, z))
+					}
+					s.setFarmBlock(x, y, z, blockAir, 0)
+				}
+			}
 		}
 		// Apply block change to World
 		// Validation logic would go here

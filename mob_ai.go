@@ -34,6 +34,7 @@ func (s *Server) updateMobAI() {
 	}
 	var attacks []mobAttack
 	var shots []mobShot
+	var explosions [][3]float64
 	day := worldDaylight(s.World.TimeTicks).Brightness > .8
 	for _, e := range s.World.entities {
 		m, ok := e.(*MobEntity)
@@ -113,12 +114,7 @@ func (s *Server) updateMobAI() {
 				m.State = "fuse"
 				m.Fuse++
 				if m.Fuse >= d.AttackTicks {
-					for _, p := range players {
-						r := math.Hypot(p.X-m.X, p.Z-m.Z)
-						if r < 3.5 && math.Abs(p.Y-m.Y) < 4 && mobSeesPlayer(s.World, m, d, p) {
-							attacks = append(attacks, mobAttack{p, max(1, int(float64(d.Damage)*(1-r/3.5))), "Creeper explosion"})
-						}
-					}
+					explosions = append(explosions, [3]float64{m.X, m.Y + .8, m.Z})
 					m.Health, m.Dropped, m.State = 0, true, "dead"
 				}
 			} else {
@@ -139,6 +135,9 @@ func (s *Server) updateMobAI() {
 		m.Dirty = true
 	}
 	s.World.entitiesMu.Unlock()
+	for _, center := range explosions {
+		s.explode(center[0], center[1], center[2], 3.5, mobContent.Definitions["creeper"].Damage, "Creeper explosion")
+	}
 	for _, attack := range attacks {
 		s.hurtPlayer(attack.player, attack.amount, attack.cause)
 	}

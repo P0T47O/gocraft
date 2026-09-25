@@ -5,7 +5,7 @@ import (
 )
 
 func updateEntities(dt float32) {
-	// Not much to do here for now besides interpolation handled below
+	tickExplosionEffects(dt)
 }
 
 func updateInterpolation(dt float32) {

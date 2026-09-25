@@ -30,6 +30,9 @@ func (s *Server) updateMobs() {
 			d := mobContent.Definitions[m.Kind]
 			m.Dropped = true
 			for i, entry := range d.Drops {
+				if entry.Chance > 0 && float64(m.random()%10000)/10000 >= entry.Chance {
+					continue
+				}
 				count := entry.Min + int32(m.random()%uint32(entry.Max-entry.Min+1))
 				if count == 0 {
 					continue
@@ -97,37 +100,50 @@ func (s *Server) spawnNearbyMobs() {
 		if !online {
 			continue
 		}
-		phase := float64(s.MobSpawnTicks/200) * 2.399
-		x, z := int(math.Floor(p.X+math.Sin(phase)*def.SpawnRadius)), int(math.Floor(p.Z+math.Cos(phase)*def.SpawnRadius))
-		if s.World.getChunkIfGenerated(divFloor(x, 16), divFloor(z, 16)) == nil {
-			continue
-		}
-		for y := chunkHeight - 2; y > 0; y-- {
-			if s.World.BlockAt(x, y, z) != blockGrass {
+		// Try several directions and radii. A single unsuitable column should
+		// not waste the entire ten-second spawn interval.
+		for attempt := 0; attempt < 8; attempt++ {
+			phase := float64(s.MobSpawnTicks/200)*2.399 + float64(attempt)*2.399
+			radius := def.SpawnRadius * (1 - 0.125*float64(attempt%3))
+			x, z := int(math.Floor(p.X+math.Sin(phase)*radius)), int(math.Floor(p.Z+math.Cos(phase)*radius))
+			if s.World.getChunkIfGenerated(divFloor(x, 16), divFloor(z, 16)) == nil {
 				continue
 			}
-			pos := gameVec3{X: float32(x), Y: float32(y) + .501, Z: float32(z)}
-			shape := def.Collider
-			if !colliderLoaded(s.World, pos, shape) || colliderHitsCore(s.World, pos, shape) {
-				break
+			if spawnMobOnColumn(s, kind, def, x, z) {
+				return
 			}
-			if !canSpawnMobAt(s.World, def, x, y+1, z) {
-				break
-			}
-			near := false
-			for _, other := range s.World.entities {
-				ox, oy, oz := other.GetPosition()
-				if (ox-float64(pos.X))*(ox-float64(pos.X))+(oy-float64(pos.Y))*(oy-float64(pos.Y))+(oz-float64(pos.Z))*(oz-float64(pos.Z)) < 9 {
-					near = true
-					break
-				}
-			}
-			if !near {
-				s.SpawnEntity(newMob(kind, fmt.Sprintf("%s-%d", kind, time.Now().UnixNano()), float64(pos.X), float64(pos.Y), float64(pos.Z)))
-			}
-			return
 		}
 	}
+}
+
+func spawnMobOnColumn(s *Server, kind string, def MobDefinition, x, z int) bool {
+	for y := chunkHeight - 2; y > 0; y-- {
+		if s.World.BlockAt(x, y, z) != blockGrass {
+			continue
+		}
+		pos := gameVec3{X: float32(x), Y: float32(y) + .501, Z: float32(z)}
+		shape := def.Collider
+		if !colliderLoaded(s.World, pos, shape) || colliderHitsCore(s.World, pos, shape) {
+			return false
+		}
+		if !canSpawnMobAt(s.World, def, x, y+1, z) {
+			return false
+		}
+		near := false
+		for _, other := range s.World.entities {
+			ox, oy, oz := other.GetPosition()
+			if (ox-float64(pos.X))*(ox-float64(pos.X))+(oy-float64(pos.Y))*(oy-float64(pos.Y))+(oz-float64(pos.Z))*(oz-float64(pos.Z)) < 9 {
+				near = true
+				break
+			}
+		}
+		if !near {
+			s.SpawnEntity(newMob(kind, fmt.Sprintf("%s-%d", kind, time.Now().UnixNano()), float64(pos.X), float64(pos.Y), float64(pos.Z)))
+			return true
+		}
+		return false
+	}
+	return false
 }
 
 func canSpawnMobAt(w *World, def MobDefinition, x, y, z int) bool {

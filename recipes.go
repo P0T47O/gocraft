@@ -230,6 +230,17 @@ func InitRecipes() {
 	for _, chest := range chestRecipes {
 		RegisterRecipe(chest.recipeID, &Recipe{Ingredients: []Item{{ID: int32(chest.plankID), Count: 8}}, Result: Item{ID: int32(blockChest), Count: 1}, Station: blockCraftingTable})
 	}
+	RegisterRecipe(41, &Recipe{
+		Ingredients: []Item{{ID: int32(itemGunpowder), Count: 5}, {ID: int32(blockSand), Count: 4}},
+		Result:      Item{ID: int32(blockTNT), Count: 1}, Station: blockCraftingTable,
+	})
+	for i, hoe := range []struct{ material, tool byte }{
+		{blockPlankOak, itemWoodHoe}, {blockCobblestone, itemStoneHoe},
+		{itemIronIngot, itemIronHoe}, {itemDiamond, itemDiamondHoe}, {itemGoldIngot, itemGoldHoe},
+	} {
+		RegisterRecipe(42+i, &Recipe{Ingredients: []Item{{ID: int32(hoe.material), Count: 2}, {ID: int32(itemStick), Count: 2}}, Result: Item{ID: int32(hoe.tool), Count: 1}, Station: blockCraftingTable})
+	}
+	RegisterRecipe(47, &Recipe{Ingredients: []Item{{ID: int32(itemWheat), Count: 3}}, Result: Item{ID: int32(itemBread), Count: 1}, Station: blockCraftingTable})
 }
 
 // GetCraftableRecipes returns recipes that can be crafted with the given inventory

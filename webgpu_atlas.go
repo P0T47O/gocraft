@@ -165,6 +165,15 @@ func buildWebGPUBlockAtlas() (*webGPUBlockAtlas, error) {
 	for i := 0; i < 10; i++ {
 		pathsSet[fmt.Sprintf("textures/block/destroy_stage_%d.png", i)] = struct{}{}
 	}
+	for i := 0; i < 16; i++ {
+		pathsSet[fmt.Sprintf("textures/particle/explosion_%d.png", i)] = struct{}{}
+	}
+	for _, crop := range []byte{blockWheatCrop, blockPotatoCrop, blockCarrotCrop} {
+		for stage := byte(0); stage <= cropMaxStage(crop); stage++ {
+			pathsSet[cropTexture(crop, stage)] = struct{}{}
+		}
+	}
+	pathsSet["textures/block/farmland_moist.png"] = struct{}{}
 
 	// Grass side overlay is emitted directly by the chunk mesher rather than
 	// being referenced by BlockDef.Textures.

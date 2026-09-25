@@ -64,6 +64,20 @@
 
 函数/方法：`*BaseEntity.GetUUID`、`*BaseEntity.GetType`、`*BaseEntity.GetPosition`、`*BaseEntity.SetPosition`、`*BaseEntity.GetRotation`、`*BaseEntity.SetRotation`、`*BaseEntity.IsDirty`、`*BaseEntity.ClearDirty`、`*BaseEntity.Tick`、`*ItemEntity.Tick`、`*PlayerEntity.Tick`
 
+## [explosion.go](explosion.go)
+
+类型：`PrimedTNT`
+
+函数/方法：`*PrimedTNT.Tick`、`*Server.igniteTNT`、`*Server.explode`、`explosionExposure`
+
+## [farm_actions.go](farm_actions.go)
+
+函数/方法：`isCrop`、`cropForItem`、`cropMaxStage`、`cropTexture`、`*Server.setFarmBlock`、`*Server.nearbyFarmWater`、`*Server.interactFarm`、`*Server.dropFarmItem`、`*Server.dropCrop`
+
+## [farm_tick.go](farm_tick.go)
+
+函数/方法：`*Server.tickFarms`、`*Server.sampleFarmColumn`、`*Server.growCropAt`
+
 ## [frame_time.go](frame_time.go)
 
 函数/方法：`setGameFrameTime`、`gameFrameTime`
@@ -91,6 +105,12 @@
 ## [game_entities.go](game_entities.go)
 
 函数/方法：`updateEntities`、`updateInterpolation`
+
+## [game_explosion.go](game_explosion.go)
+
+类型：`explosionEffect`
+
+函数/方法：`addExplosionEffect`、`tickExplosionEffects`
 
 ## [game_math.go](game_math.go)
 
@@ -270,7 +290,7 @@
 
 类型：`ArrowEntity`
 
-函数/方法：`*ArrowEntity.Tick`
+函数/方法：`*ArrowEntity.Tick`、`segmentHitsBox`
 
 ## [mob_protocol.go](mob_protocol.go)
 
@@ -280,7 +300,7 @@
 
 ## [mob_server.go](mob_server.go)
 
-函数/方法：`*Server.updateMobs`、`*Server.spawnNearbyMobs`、`canSpawnMobAt`、`*Server.mobNearOnlinePlayer`
+函数/方法：`*Server.updateMobs`、`*Server.spawnNearbyMobs`、`spawnMobOnColumn`、`canSpawnMobAt`、`*Server.mobNearOnlinePlayer`
 
 ## [mob_simulation.go](mob_simulation.go)
 
@@ -382,6 +402,12 @@
 
 函数/方法：`*PacketEntitySpawn.ID`、`*PacketEntitySpawn.Encode`、`*PacketEntitySpawn.Decode`、`*PacketEntityDespawn.ID`、`*PacketEntityDespawn.Encode`、`*PacketEntityDespawn.Decode`、`*PacketEntityMeta.ID`、`*PacketEntityMeta.Encode`、`*PacketEntityMeta.Decode`、`*PacketEntityMove.ID`、`*PacketEntityMove.Encode`、`*PacketEntityMove.Decode`
 
+## [protocol_explosion.go](protocol_explosion.go)
+
+类型：`PacketExplosion`
+
+函数/方法：`*PacketExplosion.ID`、`*PacketExplosion.Encode`、`*PacketExplosion.Decode`
+
 ## [protocol_light.go](protocol_light.go)
 
 类型：`PacketChunkLight`
@@ -458,7 +484,7 @@
 
 ## [save_entities.go](save_entities.go)
 
-函数/方法：`SaveEntities`、`LoadEntities`
+函数/方法：`SaveEntities`、`transientEntity`、`LoadEntities`
 
 ## [save_failure.go](save_failure.go)
 
@@ -626,7 +652,7 @@
 
 类型：`webGPUEntityRenderer`、`webGPUEntityBatch`
 
-函数/方法：`ensureWebGPUEntityRenderer`、`closeWebGPUEntityRenderer`、`*webGPUEntityRenderer.Close`、`newWebGPUEntityBatch`、`webGPUEntityUV`、`webGPUEntitySubUV`、`webGPUEntityItemTexture`、`*webGPUEntityBatch.addQuad`、`rotateY`、`rotateZVec`、`*webGPUEntityBatch.addBox`、`*webGPUEntityBatch.addPlayer`、`*webGPUEntityBatch.addItem`、`*webGPUEntityBatch.addArrow`、`webGPUMobFaceUVs`、`*webGPUEntityBatch.addMobBone`、`*webGPUEntityBatch.addMob`、`*webGPUEntityBatch.addMobPlaceholder`、`*webGPUEntityBatch.addMiningCrack`、`*webGPUEntityRenderer.Draw`
+函数/方法：`ensureWebGPUEntityRenderer`、`closeWebGPUEntityRenderer`、`*webGPUEntityRenderer.Close`、`newWebGPUEntityBatch`、`webGPUEntityUV`、`webGPUEntitySubUV`、`webGPUEntityItemTexture`、`*webGPUEntityBatch.addQuad`、`rotateY`、`rotateZVec`、`*webGPUEntityBatch.addBox`、`*webGPUEntityBatch.addPlayer`、`*webGPUEntityBatch.addItem`、`*webGPUEntityBatch.addArrow`、`*webGPUEntityBatch.addPrimedTNT`、`*webGPUEntityBatch.addExplosionEffect`、`webGPUMobFaceUVs`、`*webGPUEntityBatch.addMobBone`、`*webGPUEntityBatch.addMob`、`*webGPUEntityBatch.addMobPlaceholder`、`*webGPUEntityBatch.addMiningCrack`、`*webGPUEntityRenderer.Draw`
 
 ## [webgpu_entity_bounds_windows.go](webgpu_entity_bounds_windows.go)
 

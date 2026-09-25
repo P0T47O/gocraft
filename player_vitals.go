@@ -117,6 +117,14 @@ func foodValue(id int32) (food int, saturation float64) {
 		return 3, 0.6
 	case int32(itemCookedPork):
 		return 8, 12.8
+	case int32(itemBread):
+		return 5, 6
+	case int32(itemPotato):
+		return 1, .6
+	case int32(itemBakedPotato):
+		return 5, 6
+	case int32(itemCarrot):
+		return 3, 3.6
 	}
 	return 0, 0
 }

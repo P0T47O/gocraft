@@ -22,6 +22,7 @@ func (s *Server) UpdateEntities() {
 	s.World.entitiesMu.Lock()
 	var toRemove []string
 	var arrowHits []mobAttack
+	var detonations [][3]float64
 	inventoryDirty := make(map[*PlayerEntity]bool)
 
 	// Collect Players for distance check
@@ -41,6 +42,13 @@ func (s *Server) UpdateEntities() {
 	}
 
 	for _, e := range s.World.entities {
+		if primed, ok := e.(*PrimedTNT); ok {
+			if primed.Dead {
+				toRemove = append(toRemove, primed.UUID)
+				detonations = append(detonations, [3]float64{primed.X, primed.Y, primed.Z})
+			}
+			continue
+		}
 		if arrow, ok := e.(*ArrowEntity); ok {
 			if arrow.HitPlayer != nil {
 				arrowHits = append(arrowHits, mobAttack{arrow.HitPlayer, arrow.Damage, "Shot by skeleton"})
@@ -101,6 +109,9 @@ func (s *Server) UpdateEntities() {
 		delete(s.LastSentMeta, uuid)
 	}
 	s.World.entitiesMu.Unlock()
+	for _, center := range detonations {
+		s.explode(center[0], center[1], center[2], 4, 16, "TNT explosion")
+	}
 	for _, hit := range arrowHits {
 		s.hurtPlayer(hit.player, hit.amount, hit.cause)
 	}

@@ -35,9 +35,10 @@ type MobDefinition struct {
 }
 
 type MobDrop struct {
-	Item string `json:"item"`
-	Min  int32  `json:"min"`
-	Max  int32  `json:"max"`
+	Item   string  `json:"item"`
+	Min    int32   `json:"min"`
+	Max    int32   `json:"max"`
+	Chance float64 `json:"chance,omitempty"`
 }
 
 var mobDropItems = map[string]byte{
@@ -47,6 +48,8 @@ var mobDropItems = map[string]byte{
 	"arrow":        itemArrow,
 	"string":       itemString,
 	"gunpowder":    itemGunpowder,
+	"potato":       itemPotato,
+	"carrot":       itemCarrot,
 }
 
 type MobBone struct {
@@ -117,7 +120,7 @@ func loadMobContent(source fs.FS) (*MobContent, error) {
 			return nil, fmt.Errorf("%s: invalid hostile attributes", path)
 		}
 		for _, drop := range d.Drops {
-			if _, ok := mobDropItems[drop.Item]; !ok || drop.Min < 0 || drop.Max < drop.Min || drop.Max > 64 {
+			if _, ok := mobDropItems[drop.Item]; !ok || drop.Min < 0 || drop.Max < drop.Min || drop.Max > 64 || drop.Chance < 0 || drop.Chance > 1 || math.IsNaN(drop.Chance) {
 				return nil, fmt.Errorf("%s: invalid drop %+v", path, drop)
 			}
 		}
