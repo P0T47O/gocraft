@@ -102,6 +102,7 @@ func (s *Server) explode(x, y, z, radius float64, damage int, cause string) {
 					s.breakContainer(pos)
 				}
 				s.World.SetBlockAt(bx, by, bz, blockAir)
+				s.scheduleFluidAround(pos)
 				removed = append(removed, pos)
 			}
 		}

@@ -7,6 +7,17 @@ import (
 
 func handlePacket(pkt Packet) {
 	switch p := pkt.(type) {
+	case *PacketFluidDelta:
+		if world != nil {
+			for _, change := range p.Changes {
+				x, y, z := int(change.X), int(change.Y), int(change.Z)
+				if world.getChunkIfGenerated(divFloor(x, chunkWidth), divFloor(z, chunkWidth)) == nil {
+					continue
+				}
+				world.SetBlockAt(x, y, z, change.Block)
+				world.SetMetaAt(x, y, z, change.Meta)
+			}
+		}
 	case *PacketExplosion:
 		if world != nil {
 			for _, pos := range p.Removed {

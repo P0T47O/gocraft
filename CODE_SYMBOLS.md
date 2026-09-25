@@ -78,6 +78,12 @@
 
 函数/方法：`*Server.tickFarms`、`*Server.sampleFarmColumn`、`*Server.growCropAt`
 
+## [fluids.go](fluids.go)
+
+类型：`fluidTask`
+
+函数/方法：`isFluid`、`fluidLimit`、`fluidDelay`、`fluidSurfaceHeight`、`*Server.fluidLoaded`、`*Server.scheduleFluid`、`*Server.scheduleFluidAround`、`*Server.setFluidBlock`、`*Server.fluidDesired`、`*Server.fluidStep`、`*Server.tickFluids`
+
 ## [frame_time.go](frame_time.go)
 
 函数/方法：`setGameFrameTime`、`gameFrameTime`
@@ -407,6 +413,12 @@
 类型：`PacketExplosion`
 
 函数/方法：`*PacketExplosion.ID`、`*PacketExplosion.Encode`、`*PacketExplosion.Decode`
+
+## [protocol_fluid.go](protocol_fluid.go)
+
+类型：`FluidChange`、`PacketFluidDelta`
+
+函数/方法：`*PacketFluidDelta.ID`、`*PacketFluidDelta.Encode`、`*PacketFluidDelta.Decode`
 
 ## [protocol_light.go](protocol_light.go)
 

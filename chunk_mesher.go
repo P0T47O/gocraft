@@ -157,6 +157,9 @@ func (a *RenderAssets) shouldDrawFace(block byte, neighbor byte) bool {
 	if neighbor == blockAir {
 		return true
 	}
+	if block == blockLava && (neighbor == blockLava || neighbor == blockWater) {
+		return false
+	}
 	if GetBlock(neighbor).IsTransparent {
 		// Ice Logic: Seamless with itself and Water
 		if block == blockIce {
@@ -336,6 +339,12 @@ func (a *RenderAssets) buildAllMeshDataWithLight(heightMap *[chunkWidth][chunkWi
 					textures.Top = "textures/block/farmland_moist.png"
 				}
 				px, py, pz := float32(wx), float32(y), float32(wz)
+				fluidMeta := byte(0)
+				fluidTop := py + 0.5
+				if isFluid(block) {
+					fluidMeta = getMeta(wx, y, wz)
+					fluidTop = py - 0.5 + fluidSurfaceHeight(fluidMeta)
+				}
 
 				// Torch geometry is centered inside its block and submitted through
 				// the same atlas batch as the rest of the cutout world mesh.
@@ -784,7 +793,7 @@ func (a *RenderAssets) buildAllMeshDataWithLight(heightMap *[chunkWidth][chunkWi
 					}
 
 					getBuilder(pass, usePath).addFaceSmooth(
-						[]float32{px - 0.5, py + 0.5, pz + 0.5, px + 0.5, py + 0.5, pz + 0.5, px + 0.5, py + 0.5, pz - 0.5, px - 0.5, py + 0.5, pz - 0.5},
+						[]float32{px - 0.5, fluidTop, pz + 0.5, px + 0.5, fluidTop, pz + 0.5, px + 0.5, fluidTop, pz - 0.5, px - 0.5, fluidTop, pz - 0.5},
 						meshVec3(0, 1, 0),
 						uvs,
 						colors,
@@ -823,7 +832,13 @@ func (a *RenderAssets) buildAllMeshDataWithLight(heightMap *[chunkWidth][chunkWi
 					)
 				}
 				// NORTH (Z-)
-				if a.shouldDrawVoxelFace(block, getBlock(wx, y, wz-1), lightNorth) {
+				neighborNorth := getBlock(wx, y, wz-1)
+				northFluidLip := isFluid(block) && neighborNorth == block && fluidSurfaceHeight(fluidMeta) > fluidSurfaceHeight(getMeta(wx, y, wz-1))
+				if a.shouldDrawVoxelFace(block, neighborNorth, lightNorth) || northFluidLip {
+					sideBottom := py - 0.5
+					if northFluidLip {
+						sideBottom += fluidSurfaceHeight(getMeta(wx, y, wz-1))
+					}
 					aos, lights, blockLights := sampleFaceLightingWithBlock(wx, y, wz, lightNorth, getBlock, getLight, getBlockLight)
 
 					sideTintCol := tintColor
@@ -846,7 +861,7 @@ func (a *RenderAssets) buildAllMeshDataWithLight(heightMap *[chunkWidth][chunkWi
 					}
 
 					getBuilder(pass, usePath).addFaceSmooth(
-						[]float32{px - 0.5, py + 0.5, pz - 0.5, px + 0.5, py + 0.5, pz - 0.5, px + 0.5, py - 0.5, pz - 0.5, px - 0.5, py - 0.5, pz - 0.5},
+						[]float32{px - 0.5, fluidTop, pz - 0.5, px + 0.5, fluidTop, pz - 0.5, px + 0.5, sideBottom, pz - 0.5, px - 0.5, sideBottom, pz - 0.5},
 						meshVec3(0, 0, -1),
 						uvs,
 						colors,
@@ -899,7 +914,13 @@ func (a *RenderAssets) buildAllMeshDataWithLight(heightMap *[chunkWidth][chunkWi
 					}
 				}
 				// SOUTH (Z+)
-				if a.shouldDrawVoxelFace(block, getBlock(wx, y, wz+1), lightSouth) {
+				neighborSouth := getBlock(wx, y, wz+1)
+				southFluidLip := isFluid(block) && neighborSouth == block && fluidSurfaceHeight(fluidMeta) > fluidSurfaceHeight(getMeta(wx, y, wz+1))
+				if a.shouldDrawVoxelFace(block, neighborSouth, lightSouth) || southFluidLip {
+					sideBottom := py - 0.5
+					if southFluidLip {
+						sideBottom += fluidSurfaceHeight(getMeta(wx, y, wz+1))
+					}
 					aos, lights, blockLights := sampleFaceLightingWithBlock(wx, y, wz, lightSouth, getBlock, getLight, getBlockLight)
 
 					sideTintCol := tintColor
@@ -922,7 +943,7 @@ func (a *RenderAssets) buildAllMeshDataWithLight(heightMap *[chunkWidth][chunkWi
 					}
 
 					getBuilder(pass, usePath).addFaceSmooth(
-						[]float32{px + 0.5, py + 0.5, pz + 0.5, px - 0.5, py + 0.5, pz + 0.5, px - 0.5, py - 0.5, pz + 0.5, px + 0.5, py - 0.5, pz + 0.5},
+						[]float32{px + 0.5, fluidTop, pz + 0.5, px - 0.5, fluidTop, pz + 0.5, px - 0.5, sideBottom, pz + 0.5, px + 0.5, sideBottom, pz + 0.5},
 						meshVec3(0, 0, 1),
 						uvs,
 						colors,
@@ -955,7 +976,13 @@ func (a *RenderAssets) buildAllMeshDataWithLight(heightMap *[chunkWidth][chunkWi
 					}
 				}
 				// EAST (X+)
-				if a.shouldDrawVoxelFace(block, getBlock(wx+1, y, wz), lightEast) {
+				neighborEast := getBlock(wx+1, y, wz)
+				eastFluidLip := isFluid(block) && neighborEast == block && fluidSurfaceHeight(fluidMeta) > fluidSurfaceHeight(getMeta(wx+1, y, wz))
+				if a.shouldDrawVoxelFace(block, neighborEast, lightEast) || eastFluidLip {
+					sideBottom := py - 0.5
+					if eastFluidLip {
+						sideBottom += fluidSurfaceHeight(getMeta(wx+1, y, wz))
+					}
 					aos, lights, blockLights := sampleFaceLightingWithBlock(wx, y, wz, lightEast, getBlock, getLight, getBlockLight)
 
 					sideTintCol := tintColor
@@ -978,7 +1005,7 @@ func (a *RenderAssets) buildAllMeshDataWithLight(heightMap *[chunkWidth][chunkWi
 					}
 
 					getBuilder(pass, usePath).addFaceSmooth(
-						[]float32{px + 0.5, py + 0.5, pz - 0.5, px + 0.5, py + 0.5, pz + 0.5, px + 0.5, py - 0.5, pz + 0.5, px + 0.5, py - 0.5, pz - 0.5},
+						[]float32{px + 0.5, fluidTop, pz - 0.5, px + 0.5, fluidTop, pz + 0.5, px + 0.5, sideBottom, pz + 0.5, px + 0.5, sideBottom, pz - 0.5},
 						meshVec3(1, 0, 0),
 						uvs,
 						colors,
@@ -1011,7 +1038,13 @@ func (a *RenderAssets) buildAllMeshDataWithLight(heightMap *[chunkWidth][chunkWi
 					}
 				}
 				// WEST (X-)
-				if a.shouldDrawVoxelFace(block, getBlock(wx-1, y, wz), lightWest) {
+				neighborWest := getBlock(wx-1, y, wz)
+				westFluidLip := isFluid(block) && neighborWest == block && fluidSurfaceHeight(fluidMeta) > fluidSurfaceHeight(getMeta(wx-1, y, wz))
+				if a.shouldDrawVoxelFace(block, neighborWest, lightWest) || westFluidLip {
+					sideBottom := py - 0.5
+					if westFluidLip {
+						sideBottom += fluidSurfaceHeight(getMeta(wx-1, y, wz))
+					}
 					aos, lights, blockLights := sampleFaceLightingWithBlock(wx, y, wz, lightWest, getBlock, getLight, getBlockLight)
 
 					sideTintCol := tintColor
@@ -1034,7 +1067,7 @@ func (a *RenderAssets) buildAllMeshDataWithLight(heightMap *[chunkWidth][chunkWi
 					}
 
 					getBuilder(pass, usePath).addFaceSmooth(
-						[]float32{px - 0.5, py + 0.5, pz + 0.5, px - 0.5, py + 0.5, pz - 0.5, px - 0.5, py - 0.5, pz - 0.5, px - 0.5, py - 0.5, pz + 0.5},
+						[]float32{px - 0.5, fluidTop, pz + 0.5, px - 0.5, fluidTop, pz - 0.5, px - 0.5, sideBottom, pz - 0.5, px - 0.5, sideBottom, pz + 0.5},
 						meshVec3(-1, 0, 0),
 						uvs,
 						colors,

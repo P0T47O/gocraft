@@ -47,7 +47,8 @@
 | 聊天命令 | [server_commands.go](server_commands.go) |
 | 服务端保存编排 | [server_save.go](server_save.go)：`Save` |
 | 保存错误汇总、退出等待完成与失败日志 | [server_save_result_test.go](server_save_result_test.go)、[session_shutdown.go](session_shutdown.go)、[session_shutdown_test.go](session_shutdown_test.go)、[save_failure.go](save_failure.go)；服务端关闭结果经 Done 同步后由 [game_session.go](game_session.go) 读取 |
-| 协议 ID、Packet 接口、读写分帧与分发（版本 9） | [protocol.go](protocol.go) |
+| 协议 ID、Packet 接口、读写分帧与分发（版本 10） | [protocol.go](protocol.go) |
+| 流动水/岩浆：服务端按需队列、不同流速、源头/瀑布/扩散回收、水岩浆固化、每 tick 访问与改动预算；批量同步并仅在客户端已载入区块应用；元数据决定液面高度与相邻液面落差侧面 | [fluids.go](fluids.go)、[protocol_fluid.go](protocol_fluid.go)、[server_tick.go](server_tick.go)、[server_packets.go](server_packets.go)、[explosion.go](explosion.go)、[game_packets.go](game_packets.go)、[chunk_mesher.go](chunk_mesher.go)；平地/瀑布/跨区块/反应/性能预算回归 [fluids_test.go](fluids_test.go) |
 | 爆炸事件：一次同步中心与有界方块移除列表，客户端应用后播放粒子和音效 | [protocol_explosion.go](protocol_explosion.go)、[game_packets.go](game_packets.go)、[game_explosion.go](game_explosion.go)、[webgpu_entities_windows.go](webgpu_entities_windows.go)、[game_audio.go](game_audio.go)；回归 [explosion_test.go](explosion_test.go) |
 | 世界时间初始/定期同步消息（协议版本 8） | [protocol_time.go](protocol_time.go)、[server_packets.go](server_packets.go)、[server_network.go](server_network.go)、[game_packets.go](game_packets.go) |
 | VarInt、字符串编码 | [protocol_codec.go](protocol_codec.go) |

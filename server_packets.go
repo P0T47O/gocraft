@@ -478,6 +478,7 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 			p.Meta = 0
 		}
 		s.World.SetMetaAt(int(p.X), int(p.Y), int(p.Z), p.Meta)
+		s.scheduleFluidAround(BlockPos{p.X, p.Y, p.Z})
 
 		// Broadcast to all clients (including sender for confirmation, or skip sender)
 		// For now, simple echo to prove it works
