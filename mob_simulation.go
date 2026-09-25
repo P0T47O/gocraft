@@ -52,6 +52,18 @@ func colliderLoaded(w *World, pos gameVec3, c Collider) bool {
 	}
 	return true
 }
+
+// Probe at torso height so a floor, ledge, or unloaded neighbor is not
+// mistaken for a climbable wall. Spiders can only climb while pressing into
+// a real collidable surface in a loaded chunk.
+func spiderWallAhead(w *World, pos, delta gameVec3, c Collider) bool {
+	horizontal := abs32(delta.X) + abs32(delta.Z)
+	if horizontal < .001 {
+		return false
+	}
+	probe := gameVec3{X: pos.X + delta.X/horizontal*.22, Y: pos.Y, Z: pos.Z + delta.Z/horizontal*.22}
+	return colliderLoaded(w, probe, c) && colliderHitsCore(w, probe, c)
+}
 func (m *MobEntity) Tick(w *World) {
 	if m.Kind == "" {
 		legacy := newMob("pig", m.UUID, m.X, m.Y, m.Z)
@@ -119,11 +131,12 @@ func (m *MobEntity) Tick(w *World) {
 		}
 	}
 	// Avoid unloaded terrain and drops over one block during intentional movement.
-	if !colliderLoaded(w, next, d.Collider) || (grounded && !colliderHitsCore(w, offsetAxis(next, 1, -1.05), d.Collider)) {
+	if !colliderLoaded(w, next, d.Collider) || (grounded && m.Kind != "spider" && !colliderHitsCore(w, offsetAxis(next, 1, -1.05), d.Collider)) {
 		next = pos
 		blocked = true
 	}
-	if blocked {
+	climbing := m.Kind == "spider" && m.State == "chase" && blocked && spiderWallAhead(w, pos, delta, d.Collider)
+	if blocked && !climbing {
 		if d.Hostile {
 			turn := float32(1.25)
 			if m.random()&1 == 0 {
@@ -138,7 +151,10 @@ func (m *MobEntity) Tick(w *World) {
 		m.Timer = 20
 	}
 	wet := blockAtPosition(w, float64(next.X), float64(next.Y+.4), float64(next.Z)) == blockWater
-	if wet {
+	if climbing {
+		m.Velocity.Y = 3.2
+		m.State = "climb"
+	} else if wet {
 		m.Velocity.Y += (float32(1) - m.Velocity.Y) * .25
 	} else {
 		m.Velocity.Y = max(m.Velocity.Y-20*.05, float32(-30))

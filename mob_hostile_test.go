@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"reflect"
 	"testing"
 )
@@ -13,6 +14,56 @@ func hostileTestServer(t *testing.T) (*Server, *PlayerEntity) {
 	w.entities = []Entity{p}
 	s := &Server{World: w, Clients: map[string]*ClientConnection{"target": {Send: make(chan Packet, 256)}}, LastSentPos: map[string][3]float64{}, LastSentMeta: map[string]int32{}}
 	return s, p
+}
+
+func TestServerTickHostileCombat(t *testing.T) {
+	for _, tc := range []struct {
+		kind    string
+		playerZ float64
+		ticks   int
+	}{
+		{"zombie", 10, 25},
+		{"skeleton", 13, 25},
+		{"creeper", 10, 40},
+	} {
+		t.Run(tc.kind, func(t *testing.T) {
+			s, p := hostileTestServer(t)
+			p.Z = tc.playerZ
+			s.World.TimeTicks = 18000
+			m := newMob(tc.kind, "combat-"+tc.kind, 8, 70.501, 8)
+			s.World.entities = append(s.World.entities, m)
+			for i := 0; i < tc.ticks; i++ {
+				s.Tick()
+			}
+			if p.Vitals.Health >= maxHealth {
+				t.Fatalf("%s did not damage player through full server loop", tc.kind)
+			}
+			if tc.kind == "creeper" && (m.Health != 0 || !m.Dropped) {
+				t.Fatal("creeper did not self-destruct")
+			}
+			seenState, seenArrow := false, false
+			for len(s.Clients[p.UUID].Send) > 0 {
+				packet := <-s.Clients[p.UUID].Send
+				var wire bytes.Buffer
+				if err := WritePacket(&wire, packet); err != nil {
+					t.Fatal(err)
+				}
+				decoded, err := ReadPacket(&wire)
+				if err != nil {
+					t.Fatalf("%s network packet: %v", tc.kind, err)
+				}
+				if state, ok := decoded.(*PacketMobState); ok && state.Kind == tc.kind {
+					seenState = true
+				}
+				if spawn, ok := decoded.(*PacketEntitySpawn); ok && spawn.Type == EntityArrow {
+					seenArrow = true
+				}
+			}
+			if !seenState || tc.kind == "skeleton" && !seenArrow {
+				t.Fatalf("%s state or arrow was not delivered to client", tc.kind)
+			}
+		})
+	}
 }
 
 func TestHostileContentAndLootTable(t *testing.T) {
@@ -201,5 +252,62 @@ func TestNearbyHostileActuallySpawnsAtNight(t *testing.T) {
 		if spawned != (ticks == 18000) {
 			t.Fatalf("time %.0f: hostile spawn=%t", ticks, spawned)
 		}
+	}
+}
+
+func TestSpiderClimbsWallButNotCliff(t *testing.T) {
+	w := mobTestWorld(t)
+	for x := 6; x <= 10; x++ {
+		for y := 71; y <= 73; y++ {
+			w.SetBlockAt(x, y, 8, blockStone)
+		}
+	}
+	spider := newMob("spider", "climber", 8, 70.501, 5)
+	maxY := spider.Y
+	crossed := false
+	for i := 0; i < 110; i++ {
+		spider.State, spider.Yaw = "chase", 0
+		spider.Tick(w)
+		maxY = max(maxY, spider.Y)
+		crossed = crossed || spider.Z > 9
+	}
+	if maxY < 73.4 || !crossed {
+		t.Fatalf("spider did not scale three-block wall: height=%.2f z=%.2f", maxY, spider.Z)
+	}
+	for x := 0; x < 16; x++ {
+		for z := 8; z < 16; z++ {
+			for y := 70; y <= 73; y++ {
+				w.SetBlockAt(x, y, z, blockAir)
+			}
+		}
+	}
+	spider = newMob("spider", "cliff", 8, 70.501, 5)
+	for i := 0; i < 80; i++ {
+		spider.State, spider.Yaw = "chase", 0
+		spider.Tick(w)
+	}
+	if spider.Y > 70.8 {
+		t.Fatalf("spider climbed empty cliff: %.2f", spider.Y)
+	}
+}
+
+func TestServerTickSpiderPursuesOverWall(t *testing.T) {
+	s, p := hostileTestServer(t)
+	p.Z = 12
+	for x := 6; x <= 10; x++ {
+		for y := 71; y <= 73; y++ {
+			s.World.SetBlockAt(x, y, 8, blockStone)
+		}
+	}
+	spider := newMob("spider", "server-climber", 8, 70.501, 5)
+	spider.Target = p.UUID // Previously spotted target is now behind the wall.
+	s.World.entities = append(s.World.entities, spider)
+	maxY := spider.Y
+	for i := 0; i < 100; i++ {
+		s.Tick()
+		maxY = max(maxY, spider.Y)
+	}
+	if maxY < 73.4 || spider.Z <= 9 {
+		t.Fatalf("server AI failed to pursue across wall: maxY=%.2f z=%.2f state=%s", maxY, spider.Z, spider.State)
 	}
 }

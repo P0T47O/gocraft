@@ -163,6 +163,34 @@ func TestNativeWebGPUWindow(t *testing.T) {
 			if !input.VitalsReady {
 				t.Fatal("local server did not deliver player state")
 			}
+			if session == 0 {
+				// Exercise the real TCP -> client state -> gameplay renderer path
+				// for all hostile models, without touching a personal save.
+				for i, kind := range []string{"zombie", "skeleton", "spider", "creeper"} {
+					mob := newMob(kind, "native-hostile-"+kind, float64(camera.Position.X)+float64(i*2-3), float64(camera.Position.Y-playerEyeY), float64(camera.Position.Z)+6)
+					server.SpawnEntity(mob)
+				}
+				deadline := time.Now().Add(3 * time.Second)
+				for time.Now().Before(deadline) {
+					w.Poll()
+					updateGame()
+					seen := 0
+					for _, kind := range []string{"zombie", "skeleton", "spider", "creeper"} {
+						if e := remoteEntities["native-hostile-"+kind]; e != nil && e.MobKind == kind {
+							seen++
+						}
+					}
+					if seen == 4 {
+						break
+					}
+					time.Sleep(10 * time.Millisecond)
+				}
+				for _, kind := range []string{"zombie", "skeleton", "spider", "creeper"} {
+					if e := remoteEntities["native-hostile-"+kind]; e == nil || e.MobKind != kind {
+						t.Fatalf("%s was not synchronized into the native game session", kind)
+					}
+				}
+			}
 			for frame := 0; frame < 3; frame++ {
 				w.Poll()
 				updateGame()

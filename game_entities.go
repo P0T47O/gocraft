@@ -14,18 +14,21 @@ func updateInterpolation(dt float32) {
 		if lerpFactor > 1.0 {
 			lerpFactor = 1.0
 		}
-		oldX, oldZ := e.X, e.Z
+		oldX, oldY, oldZ := e.X, e.Y, e.Z
 		e.X += (e.TX - e.X) * lerpFactor
 		e.Y += (e.TY - e.Y) * lerpFactor
 		e.Z += (e.TZ - e.Z) * lerpFactor
 		if d, ok := mobContent.Definitions[e.MobKind]; ok {
 			anim := mobContent.Animations[d.Animation]
 			distance := float32(math.Hypot(e.X-oldX, e.Z-oldZ))
+			if e.MobState == "climb" {
+				distance += float32(math.Abs(e.Y - oldY))
+			}
 			if distance < 2 {
 				e.AnimPhase += distance / anim.Stride * 2 * math.Pi
 			}
 			target := float32(0)
-			if e.MobState == "walk" || e.MobState == "flee" || e.MobState == "chase" {
+			if e.MobState == "walk" || e.MobState == "flee" || e.MobState == "chase" || e.MobState == "climb" {
 				target = 1
 			}
 			e.AnimBlend += (target - e.AnimBlend) * min(dt*anim.BlendSpeed, float32(1))

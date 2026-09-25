@@ -286,7 +286,7 @@
 
 类型：`MobEntity`
 
-函数/方法：`newMob`、`*MobEntity.random`、`*MobEntity.hasBehavior`、`colliderLoaded`、`*MobEntity.Tick`、`*MobEntity.hit`
+函数/方法：`newMob`、`*MobEntity.random`、`*MobEntity.hasBehavior`、`colliderLoaded`、`spiderWallAhead`、`*MobEntity.Tick`、`*MobEntity.hit`
 
 ## [native_game_stub.go](native_game_stub.go)
 
