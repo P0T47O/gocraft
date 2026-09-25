@@ -41,8 +41,8 @@ func (p *PlayerEntity) initVitals() {
 func (p *PlayerEntity) dead() bool { return p.Vitals != nil && p.Vitals.Health <= 0 }
 
 type PacketVitals struct {
-	Health, Air, Fire, Food int32
-	Cause                   string
+	Health, Air, Fire, Food, Armor int32
+	Cause                          string
 }
 
 func (*PacketVitals) ID() int32 { return IDVitals }
@@ -51,6 +51,7 @@ func (p *PacketVitals) Encode(b *bytes.Buffer) error {
 	WriteVarInt(b, p.Air)
 	WriteVarInt(b, p.Fire)
 	WriteVarInt(b, p.Food)
+	WriteVarInt(b, p.Armor)
 	return WriteString(b, p.Cause)
 }
 func (p *PacketVitals) Decode(b *bytes.Buffer) error {
@@ -67,6 +68,9 @@ func (p *PacketVitals) Decode(b *bytes.Buffer) error {
 	if p.Food, err = ReadVarInt(b); err != nil {
 		return err
 	}
+	if p.Armor, err = ReadVarInt(b); err != nil {
+		return err
+	}
 	p.Cause, err = ReadString(b)
 	return err
 }
@@ -81,12 +85,12 @@ func (s *Server) sendVitals(p *PlayerEntity) {
 	if p.Vitals == nil {
 		return
 	}
-	v := p.Vitals
-	s.BroadcastTo(p.UUID, vitalsPacket(v))
+	s.BroadcastTo(p.UUID, vitalsPacket(p))
 }
 
-func vitalsPacket(v *PlayerVitals) *PacketVitals {
-	return &PacketVitals{Health: int32(v.Health), Air: int32(v.Air), Fire: int32(v.FireTicks), Food: int32(v.Food), Cause: v.Cause}
+func vitalsPacket(p *PlayerEntity) *PacketVitals {
+	v := p.Vitals
+	return &PacketVitals{Health: int32(v.Health), Air: int32(v.Air), Fire: int32(v.FireTicks), Food: int32(v.Food), Armor: int32(p.Inventory.ArmorPoints()), Cause: v.Cause}
 }
 
 // Food is always consumed on the server from the currently selected stack.
@@ -133,6 +137,8 @@ func (s *Server) hurtPlayer(p *PlayerEntity, amount int, cause string) {
 	if v == nil || p.dead() || p.GameMode != ModeSurvival || v.grace > 0 || v.cooldown > 0 {
 		return
 	}
+	var worn bool
+	amount, worn = p.Inventory.absorbDamage(amount, cause)
 	v.Health = max(0, v.Health-amount)
 	v.Cause = cause
 	v.cooldown = 20
@@ -149,6 +155,9 @@ func (s *Server) hurtPlayer(p *PlayerEntity, amount int, cause string) {
 		}
 		s.SendInventory(p)
 		s.BroadcastTo(p.UUID, &PacketInventoryUpdate{SlotID: -1})
+	}
+	if worn && !p.dead() {
+		s.SendInventory(p)
 	}
 	s.sendVitals(p)
 }
@@ -178,7 +187,7 @@ func (s *Server) tickPlayerVitals(p *PlayerEntity) {
 		v.lastX, v.lastZ = p.X, p.Z
 		return
 	}
-	before := *vitalsPacket(v)
+	before := *vitalsPacket(p)
 	head := blockAtPosition(s.World, p.X, p.Y, p.Z)
 	if head == blockWater {
 		v.Air = max(0, v.Air-1)
@@ -220,7 +229,7 @@ func (s *Server) tickPlayerVitals(p *PlayerEntity) {
 	}
 	v.lastY = p.Y
 	s.tickPlayerFood(p)
-	after := *vitalsPacket(v)
+	after := *vitalsPacket(p)
 	if before != after {
 		s.sendVitals(p)
 	}
@@ -233,10 +242,15 @@ func (s *Server) tickPlayerFood(p *PlayerEntity) {
 	v := p.Vitals
 	dx, dz := p.X-v.lastX, p.Z-v.lastZ
 	v.lastX, v.lastZ = p.X, p.Z
-	// Ignore teleports when accounting for movement exhaustion.
-	v.Exhaustion += 0.005
-	if dx*dx+dz*dz > 0.0001 && dx*dx+dz*dz < 1 {
-		v.Exhaustion += 0.02
+	// Distance-based exhaustion avoids draining food while idle and makes fast
+	// travel cost more without trusting a client-provided sprint flag. Teleports
+	// are excluded from this tick's movement cost.
+	if distance := math.Hypot(dx, dz); distance > 0.01 && distance < 1 {
+		rate := 0.01
+		if distance > 0.27 {
+			rate = 0.1
+		}
+		v.Exhaustion += distance * rate
 	}
 	for v.Exhaustion >= 4 {
 		v.Exhaustion -= 4

@@ -164,7 +164,7 @@ func TestDurabilityPacketAndSaves(t *testing.T) {
 func TestLegacyToolOverflowMigration(t *testing.T) {
 	initBlockRegistry()
 	p := PlayerEntity{BaseEntity: BaseEntity{UUID: "legacy", Type: EntityPlayer}, GameMode: ModeSurvival}
-	for i := range p.Inventory.Slots {
+	for i := 0; i < armorSlotStart; i++ {
 		p.Inventory.Slots[i] = Item{ID: int32(blockDirt), Count: 64}
 	}
 	p.Inventory.Slots[0] = Item{ID: int32(itemWoodPickaxe), Count: 64}

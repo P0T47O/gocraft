@@ -6,9 +6,39 @@ func (inv *Inventory) Click(index, button int, cursor *Item) {
 		return
 	}
 	slot := &inv.Slots[index]
+	if index >= armorSlotStart {
+		if button == 2 {
+			if cursor.ID != 0 || slot.ID == 0 {
+				return
+			}
+			for i := 0; i < armorSlotStart; i++ {
+				MoveStack(&inv.Slots[i], slot, 1)
+				if slot.ID == 0 {
+					return
+				}
+			}
+			return
+		}
+		if cursor.ID == 0 {
+			MoveStack(cursor, slot, 1)
+		} else if armorFits(index, *cursor) {
+			*slot, *cursor = *cursor, *slot
+		}
+		return
+	}
 	if button == 2 {
 		if cursor.ID != 0 || slot.ID == 0 {
 			return
+		}
+		if slot.ID > 0 && slot.ID <= 255 {
+			part := GetItem(byte(slot.ID)).ArmorPart
+			if part != 0 {
+				armor := armorSlotStart + int(part) - 1
+				if inv.Slots[armor].ID == 0 {
+					MoveStack(&inv.Slots[armor], slot, 1)
+					return
+				}
+			}
 		}
 		start, end := 9, 36
 		if index >= 9 {
@@ -48,7 +78,7 @@ func (inv *Inventory) Click(index, button int, cursor *Item) {
 
 func (inv *Inventory) CountItem(id int32) int32 {
 	var total int32
-	for _, s := range inv.Slots {
+	for _, s := range inv.Slots[:armorSlotStart] {
 		if s.ID == id {
 			total += s.Count
 		}

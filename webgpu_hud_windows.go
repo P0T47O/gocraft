@@ -434,6 +434,15 @@ func (b *webGPUHUDBuilder) addVitals(state *InputState, scale float32) {
 			}
 		}
 	}
+	if state.Vitals.Armor > 0 {
+		for i := 0; i < 10; i++ {
+			color := line
+			if state.Vitals.Armor > int32(i*2) {
+				color = [4]float32{.72, .79, .84, 1}
+			}
+			b.rect(x+float32(i)*18*scale, y-23*scale, 14*scale, 9*scale, color)
+		}
+	}
 	fx := b.width/2 + 12*scale
 	b.rect(fx, y-7*scale, 226*scale, 29*scale, background)
 	b.border(fx, y-7*scale, 226*scale, 29*scale, max(scale, 1), line)

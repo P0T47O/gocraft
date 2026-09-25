@@ -516,7 +516,7 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 				// For now let's allow it generally or check GameMode if strict.
 				// Since we use this for robust sync, let's allow it.
 				player.CursorItem = Item{ID: p.ItemID, Count: p.Count, Damage: p.Damage}
-			} else if p.SlotID >= 0 && p.SlotID < 36 {
+			} else if p.SlotID >= 0 && p.SlotID < int32(len(player.Inventory.Slots)) && (p.SlotID < armorSlotStart || incoming.ID == 0 || armorFits(int(p.SlotID), incoming)) {
 				player.Inventory.Slots[p.SlotID] = Item{ID: p.ItemID, Count: p.Count, Damage: p.Damage}
 				// fmt.Printf("Server: Updated slot %d for %s to %d:%d\n", p.SlotID, wrap.From, p.ItemID, p.Count)
 			}
@@ -544,6 +544,7 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 			delete(s.miningSessions, wrap.From)
 			player.Inventory.Click(int(p.SlotID), int(p.Button), &player.CursorItem)
 			s.SendInventory(player)
+			s.sendVitals(player)
 			s.SendTo(wrap.From, &PacketInventoryUpdate{SlotID: -1, ItemID: player.CursorItem.ID, Count: player.CursorItem.Count, Damage: player.CursorItem.Damage})
 		}
 

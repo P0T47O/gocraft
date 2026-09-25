@@ -206,7 +206,7 @@ func handlePacket(pkt Packet) {
 		if p.SlotID == -1 {
 			// Update Cursor Item (Held on mouse)
 			input.CursorItem = Item{ID: p.ItemID, Count: p.Count, Damage: p.Damage}
-		} else if p.SlotID >= 0 && p.SlotID < 36 {
+		} else if p.SlotID >= 0 && p.SlotID < int32(len(localInventory.Slots)) {
 			// Update the authoritative inventory
 			if client != nil {
 				client.Inventory.Slots[p.SlotID] = Item{ID: p.ItemID, Count: p.Count, Damage: p.Damage}

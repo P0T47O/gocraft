@@ -8,6 +8,8 @@ type ItemDef struct {
 	PlaceBlock              byte
 	ToolType                ToolType
 	ToolMaterial            ToolMaterial
+	ArmorPart               byte // 0: not armor; 1-4: helmet, chestplate, leggings, boots
+	ArmorPoints             int
 }
 
 var Items [256]*ItemDef
@@ -259,6 +261,7 @@ func initItemRegistry() {
 	registerItem(itemPotato, "Potato", "textures/item/potato.png")
 	registerItem(itemCarrot, "Carrot", "textures/item/carrot.png")
 	registerItem(itemBakedPotato, "Baked Potato", "textures/item/baked_potato.png")
+	registerArmorItems()
 	configureTools()
 	for id, d := range Items {
 		if d != nil && d.PlaceBlock == 0 {

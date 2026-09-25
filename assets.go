@@ -89,6 +89,18 @@ var allBlocks = []byte{
 	itemIronAxe,
 	itemDiamondAxe,
 	itemGoldAxe,
+	itemGoldHelmet,
+	itemGoldChestplate,
+	itemGoldLeggings,
+	itemGoldBoots,
+	itemIronHelmet,
+	itemIronChestplate,
+	itemIronLeggings,
+	itemIronBoots,
+	itemDiamondHelmet,
+	itemDiamondChestplate,
+	itemDiamondLeggings,
+	itemDiamondBoots,
 
 	// Resources
 	itemCoal,

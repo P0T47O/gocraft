@@ -241,6 +241,13 @@ func InitRecipes() {
 		RegisterRecipe(42+i, &Recipe{Ingredients: []Item{{ID: int32(hoe.material), Count: 2}, {ID: int32(itemStick), Count: 2}}, Result: Item{ID: int32(hoe.tool), Count: 1}, Station: blockCraftingTable})
 	}
 	RegisterRecipe(47, &Recipe{Ingredients: []Item{{ID: int32(itemWheat), Count: 3}}, Result: Item{ID: int32(itemBread), Count: 1}, Station: blockCraftingTable})
+	for tier, material := range []struct{ ingredient, helmet byte }{
+		{itemGoldIngot, itemGoldHelmet}, {itemIronIngot, itemIronHelmet}, {itemDiamond, itemDiamondHelmet},
+	} {
+		for part, count := range [...]int32{5, 8, 7, 4} {
+			RegisterRecipe(48+tier*armorSlotCount+part, &Recipe{Ingredients: []Item{{ID: int32(material.ingredient), Count: count}}, Result: Item{ID: int32(material.helmet) + int32(part), Count: 1}, Station: blockCraftingTable})
+		}
+	}
 }
 
 // GetCraftableRecipes returns recipes that can be crafted with the given inventory

@@ -65,3 +65,30 @@ func TestHungerRecoveryAndStarvation(t *testing.T) {
 		t.Fatal("food regeneration resurrected a dead player")
 	}
 }
+
+func TestHungerMovementCostAndIdle(t *testing.T) {
+	w := lifeTestWorld(t)
+	s, p := lifeTestPlayer(w)
+	v := p.Vitals
+	v.Saturation = 0
+	for i := 0; i < 100; i++ {
+		s.tickPlayerFood(p)
+	}
+	if v.Exhaustion != 0 || v.Food != maxFood {
+		t.Fatal("idle player lost food")
+	}
+	p.X += .2
+	s.tickPlayerFood(p)
+	walk := v.Exhaustion
+	p.X += .3
+	s.tickPlayerFood(p)
+	if walk <= 0 || v.Exhaustion-walk <= walk*5 {
+		t.Fatalf("fast movement not more exhausting: walk=%f total=%f", walk, v.Exhaustion)
+	}
+	p.X += 20 // Teleport; excluded from exhaustion.
+	before := v.Exhaustion
+	s.tickPlayerFood(p)
+	if v.Exhaustion != before {
+		t.Fatal("teleport consumed hunger")
+	}
+}

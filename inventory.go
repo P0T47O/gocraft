@@ -13,7 +13,7 @@ type ItemStack struct {
 type Item = ItemStack
 
 type Inventory struct {
-	Slots [36]Item // 0-8: Hotbar, 9-35: Inventory
+	Slots [40]Item // 0-8 hotbar, 9-35 backpack, 36-39 helmet/chest/legs/boots
 }
 
 func (inv *Inventory) Add(id int32, count int32) int32 {
@@ -25,7 +25,7 @@ func (inv *Inventory) AddStack(stack ItemStack) int32 {
 		return stack.Count
 	}
 	for pass := 0; pass < 2; pass++ {
-		for i := range inv.Slots {
+		for i := 0; i < armorSlotStart; i++ {
 			dst := &inv.Slots[i]
 			if (pass == 0 && !CanStack(*dst, stack)) || (pass == 1 && dst.ID != 0) {
 				continue

@@ -637,7 +637,7 @@ func (s *InputState) UpdateInventorySelection(client *Client) {
 
 	} else {
 		layout := survivalLayout(float32(windowWidth()), float32(windowHeight()))
-		for i := 0; i < 36; i++ {
+		for i := 0; i < len(localInventory.Slots); i++ {
 			if uiContainsPoint(mouse, layout.Slot(i)) {
 				handleSlotInteraction(i, false)
 			}

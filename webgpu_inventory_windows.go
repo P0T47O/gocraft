@@ -327,7 +327,7 @@ func drawWebGPUSurvivalInventory(pass *wgpu.RenderPassEncoder, hud *webGPUHUDRen
 		}
 		labels.shadowText(r.X+64*s, r.Y+34*s, max(float32(10)*s, 8), status, color)
 	}
-	labels.shadowText(layout.X+24*s, layout.Y+544*s, max(float32(11)*s, 8), fmt.Sprintf("%d RECIPES / WHEEL TO BROWSE", len(rows)), webGPUUIMuted)
+	labels.shadowText(layout.X+24*s, layout.Y+524*s, max(float32(10)*s, 8), fmt.Sprintf("%d RECIPES / WHEEL", len(rows)), webGPUUIMuted)
 
 	// Selected recipe summary and the two existing craft hit targets.
 	detail := layout.Rect(342, 84, 628, 174)
@@ -372,7 +372,7 @@ func drawWebGPUSurvivalInventory(pass *wgpu.RenderPassEncoder, hud *webGPUHUDRen
 
 	labels.shadowText(layout.X+354*s, layout.Y+272*s, max(float32(11)*s, 8), "BACKPACK", webGPUUIMuted)
 	used := 0
-	for _, stack := range inv.Slots {
+	for _, stack := range inv.Slots[:armorSlotStart] {
 		if stack.ID != 0 {
 			used++
 		}
@@ -390,6 +390,16 @@ func drawWebGPUSurvivalInventory(pass *wgpu.RenderPassEncoder, hud *webGPUHUDRen
 		if i < 9 {
 			labels.shadowText(r.X+4*s, r.Y+3*s, max(float32(9)*s, 7), fmt.Sprint(i+1), webGPUUIMuted)
 		}
+	}
+	labels.shadowText(layout.X+24*s, layout.Y+538*s, max(float32(10)*s, 8), fmt.Sprintf("ARMOR  %d / 20", inv.ArmorPoints()), webGPUUIMuted)
+	for i, name := range [...]string{"H", "C", "L", "B"} {
+		r := layout.Slot(armorSlotStart + i)
+		shapes.inventorySlot(r.X, r.Y, r.Width, r.Height, s, webGPUUISlot)
+		stack := inv.Slots[armorSlotStart+i]
+		if stack.ID == 0 {
+			labels.shadowText(r.X+21*s, r.Y+19*s, max(float32(12)*s, 8), name, webGPUUIMuted)
+		}
+		shapes.addItemStack(stack, r.X, r.Y, r.Width)
 	}
 	labels.shadowText(layout.X+354*s, layout.Y+594*s, max(float32(10)*s, 8), "LMB MOVE  RMB SPLIT  SHIFT+CLICK QUICK MOVE", webGPUUIMuted)
 

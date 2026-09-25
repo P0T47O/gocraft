@@ -11,6 +11,9 @@ func (l SurvivalLayout) Rect(x, y, w, h float32) uiRect {
 	return newUIRect(l.X+x*l.S, l.Y+y*l.S, w*l.S, h*l.S)
 }
 func (l SurvivalLayout) Slot(i int) uiRect {
+	if i >= armorSlotStart && i < armorSlotStart+armorSlotCount {
+		return l.Rect(24+float32(i-armorSlotStart)*70, 558, 54, 54)
+	}
 	if i < 9 {
 		return l.Rect(354+float32(i)*68, 516, 60, 60)
 	}

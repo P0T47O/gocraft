@@ -15,7 +15,7 @@ type survivalPlayerSave struct {
 }
 
 func saveSurvivalPlayers(root string, world *World) error {
-	data := survivalPlayerSave{Version: 3, Players: make(map[string]PlayerEntity)}
+	data := survivalPlayerSave{Version: 4, Players: make(map[string]PlayerEntity)}
 	world.entitiesMu.RLock()
 	for _, e := range world.entities {
 		if p, ok := e.(*PlayerEntity); ok {
@@ -46,7 +46,7 @@ func loadSurvivalPlayers(root string, world *World) error {
 	if err = json.Unmarshal(b, &data); err != nil {
 		return err
 	}
-	if data.Version != 1 && data.Version != 2 && data.Version != 3 {
+	if data.Version != 1 && data.Version != 2 && data.Version != 3 && data.Version != 4 {
 		return fmt.Errorf("unsupported player save version %d", data.Version)
 	}
 	for name, p := range data.Players {
@@ -77,6 +77,12 @@ func loadSurvivalPlayers(root string, world *World) error {
 		for _, stack := range append(p.Inventory.Slots[:], p.CursorItem) {
 			if !validStack(stack) {
 				return fmt.Errorf("invalid inventory for %q", name)
+			}
+		}
+		for i := armorSlotStart; i < armorSlotStart+armorSlotCount; i++ {
+			stack := p.Inventory.Slots[i]
+			if stack.ID != 0 && !armorFits(i, stack) {
+				return fmt.Errorf("invalid armor slot %d for %q", i, name)
 			}
 		}
 		for _, stack := range p.PendingItems {

@@ -153,7 +153,7 @@ func (p *PacketGameMode) Decode(r *bytes.Buffer) error {
 }
 
 type PacketInventoryUpdate struct {
-	SlotID int32 // 0-8: Hotbar, 9-35: Inventory
+	SlotID int32 // 0-8 hotbar, 9-35 backpack, 36-39 armor
 	ItemID int32
 	Count  int32
 	Damage int32

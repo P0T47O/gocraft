@@ -10,6 +10,10 @@
 
 函数/方法：`moveColliderCore`、`colliderHitsCore`
 
+## [armor.go](armor.go)
+
+函数/方法：`registerArmorItems`、`armorFits`、`*Inventory.ArmorPoints`、`armorProtects`、`*Inventory.absorbDamage`
+
 ## [assets.go](assets.go)
 
 常量或包级数据定义。
