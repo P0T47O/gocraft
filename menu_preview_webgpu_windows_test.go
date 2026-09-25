@@ -43,9 +43,13 @@ func captureNativePreview(t *testing.T, r *webGPUWorldRenderer, width, height ui
 	defer buffer.Release()
 	encoder, err := r.device.CreateCommandEncoder(nil)
 	check(err)
+	sky := r.sceneSky
+	if sky == ([3]float32{}) {
+		sky = worldDaylight(6000).Sky
+	}
 	// Gameplay uses reverse-Z depth (Greater), so an offscreen world preview
 	// must clear depth to zero just like the live gameplay pass.
-	pass, err := encoder.BeginRenderPass(&wgpu.RenderPassDescriptor{ColorAttachments: []wgpu.RenderPassColorAttachment{{View: view, LoadOp: gputypes.LoadOpClear, StoreOp: gputypes.StoreOpStore, ClearValue: gputypes.Color{R: 180.0 / 255, G: 210.0 / 255, B: 1, A: 1}}}, DepthStencilAttachment: &wgpu.RenderPassDepthStencilAttachment{View: r.depthView, DepthLoadOp: gputypes.LoadOpClear, DepthStoreOp: gputypes.StoreOpStore, DepthClearValue: 0}})
+	pass, err := encoder.BeginRenderPass(&wgpu.RenderPassDescriptor{ColorAttachments: []wgpu.RenderPassColorAttachment{{View: view, LoadOp: gputypes.LoadOpClear, StoreOp: gputypes.StoreOpStore, ClearValue: gputypes.Color{R: float64(sky[0]), G: float64(sky[1]), B: float64(sky[2]), A: 1}}}, DepthStencilAttachment: &wgpu.RenderPassDepthStencilAttachment{View: r.depthView, DepthLoadOp: gputypes.LoadOpClear, DepthStoreOp: gputypes.StoreOpStore, DepthClearValue: 0}})
 	check(err)
 	check(draw(pass))
 	check(pass.End())

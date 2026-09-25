@@ -24,6 +24,10 @@ func webGPUCameraMatrices(camera webGPUCamera, width, height uint32) (mgl32.Mat4
 }
 
 func (r *webGPUWorldRenderer) updateSceneCamera(camera webGPUCamera) error {
+	return r.updateSceneCameraAtTime(camera, 6000)
+}
+
+func (r *webGPUWorldRenderer) updateSceneCameraAtTime(camera webGPUCamera, ticks float64) error {
 	r.camera = camera
 	projection, view, eye := webGPUCameraMatrices(camera, r.width, r.height)
 	clipCorrection := mgl32.Mat4{
@@ -36,7 +40,8 @@ func (r *webGPUWorldRenderer) updateSceneCamera(camera webGPUCamera) error {
 	// attachment this preserves separation between distant water and terrain.
 	vp := clipCorrection.Mul4(projection).Mul4(view)
 	fogStart, fogEnd := worldFogRange(renderDistance())
-	fogColor := [4]float32{180.0 / 255.0, 210.0 / 255.0, 1.0, 1.0}
+	daylight := worldDaylight(ticks)
+	r.sceneSky = daylight.Sky
 
 	bytes := make([]byte, webGPUWorldSceneBytes)
 	put := func(offset int, value float32) {
@@ -55,9 +60,11 @@ func (r *webGPUWorldRenderer) updateSceneCamera(camera webGPUCamera) error {
 	// to render distance; water/weather can supply their own range later.
 	put(88, 0)
 	put(92, 0)
-	for i, value := range fogColor {
+	for i, value := range daylight.Sky {
 		put(96+i*4, value)
 	}
+	put(108, 1)
+	put(112, daylight.Brightness)
 	return r.queue.WriteBuffer(r.sceneBuffer, 0, bytes)
 }
 

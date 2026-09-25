@@ -11,16 +11,17 @@ import (
 type meshKind int
 
 type meshSnapshot struct {
-	blocks []byte
-	light  []byte
-	meta   []byte
-	sizeX  int
-	sizeY  int
-	sizeZ  int
-	baseX  int
-	baseZ  int
-	yMin   int // inclusive lower Y bound of copied range
-	yMax   int // exclusive upper Y bound of copied range
+	blocks     []byte
+	light      []byte
+	blockLight []byte
+	meta       []byte
+	sizeX      int
+	sizeY      int
+	sizeZ      int
+	baseX      int
+	baseZ      int
+	yMin       int // inclusive lower Y bound of copied range
+	yMax       int // exclusive upper Y bound of copied range
 }
 
 func (s *meshSnapshot) index(wx, wy, wz int) int {
@@ -47,6 +48,14 @@ func (s *meshSnapshot) lightAt(wx, wy, wz int) byte {
 		return 15
 	}
 	return s.light[idx]
+}
+
+func (s *meshSnapshot) blockLightAt(wx, wy, wz int) byte {
+	idx := s.index(wx, wy, wz)
+	if idx < 0 {
+		return 0
+	}
+	return s.blockLight[idx]
 }
 
 func (s *meshSnapshot) metaAt(wx, wy, wz int) byte {
@@ -103,6 +112,10 @@ func (s *meshSnapshot) Release() {
 		meshSectionBufferPool.Put(s.light)
 		s.light = nil
 	}
+	if s.blockLight != nil {
+		meshSectionBufferPool.Put(s.blockLight)
+		s.blockLight = nil
+	}
 	if s.meta != nil {
 		meshSectionBufferPool.Put(s.meta)
 		s.meta = nil
@@ -149,7 +162,7 @@ func (w *World) StartMeshWorkers(assets *RenderAssets, workers int) {
 					default:
 					}
 					start := time.Now()
-					res.results = assets.buildAllMeshData(&job.heightMap, job.baseX, job.baseZ, job.yMin, job.yMax, job.snapshot.blockAt, job.snapshot.lightAt, job.snapshot.metaAt, w.seed, job.tints)
+					res.results = assets.buildAllMeshDataWithLight(&job.heightMap, job.baseX, job.baseZ, job.yMin, job.yMax, job.snapshot.blockAt, job.snapshot.lightAt, job.snapshot.blockLightAt, job.snapshot.metaAt, w.seed, job.tints)
 					perfMon.recordLoading(phaseMeshCPU, start)
 				}()
 				select {
@@ -180,6 +193,7 @@ func buildMeshSnapshotFromNeighbors(job meshJob) *meshSnapshot {
 	// Allocate from pool
 	blocks := meshSectionBufferPool.Get().([]byte)
 	light := meshSectionBufferPool.Get().([]byte)
+	blockLight := meshSectionBufferPool.Get().([]byte)
 	meta := meshSectionBufferPool.Get().([]byte)
 
 	total := sizeX * sizeY * sizeZ
@@ -190,6 +204,9 @@ func buildMeshSnapshotFromNeighbors(job meshJob) *meshSnapshot {
 	if len(light) < total {
 		light = make([]byte, total)
 	}
+	if len(blockLight) < total {
+		blockLight = make([]byte, total)
+	}
 	if len(meta) < total {
 		meta = make([]byte, total)
 	}
@@ -197,6 +214,7 @@ func buildMeshSnapshotFromNeighbors(job meshJob) *meshSnapshot {
 	// Initialize: light to 15 (skylight default), blocks and meta to 0
 	for i := 0; i < total; i++ {
 		light[i] = 15
+		blockLight[i] = 0
 		blocks[i] = 0
 		meta[i] = 0
 	}
@@ -234,6 +252,7 @@ func buildMeshSnapshotFromNeighbors(job meshJob) *meshSnapshot {
 			chunk.meta.CopyColumn(meta, idx, sizeZ, lx, lz, snapYMin, snapYMax, false)
 			chunk.skyLight.CopyColumn(light, idx, sizeZ, lx, lz, snapYMin, snapYMax, false)
 			chunk.blockLight.CopyColumn(light, idx, sizeZ, lx, lz, snapYMin, snapYMax, true)
+			chunk.blockLight.CopyColumn(blockLight, idx, sizeZ, lx, lz, snapYMin, snapYMax, false)
 		}
 	}
 	for dx := 0; dx < 3; dx++ {
@@ -246,16 +265,17 @@ func buildMeshSnapshotFromNeighbors(job meshJob) *meshSnapshot {
 	}
 
 	return &meshSnapshot{
-		blocks: blocks,
-		light:  light,
-		meta:   meta,
-		sizeX:  sizeX,
-		sizeY:  sizeY,
-		sizeZ:  sizeZ,
-		baseX:  baseX,
-		baseZ:  baseZ,
-		yMin:   snapYMin,
-		yMax:   snapYMax,
+		blocks:     blocks,
+		light:      light,
+		blockLight: blockLight,
+		meta:       meta,
+		sizeX:      sizeX,
+		sizeY:      sizeY,
+		sizeZ:      sizeZ,
+		baseX:      baseX,
+		baseZ:      baseZ,
+		yMin:       snapYMin,
+		yMax:       snapYMax,
 	}
 }
 

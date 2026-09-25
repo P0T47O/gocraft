@@ -13,6 +13,7 @@ type World struct {
 	chunksMu     sync.RWMutex // Protects the chunks map
 	dirty        bool
 	seed         uint32
+	TimeTicks    float64 // Server-authoritative; client advances between sync packets.
 	genQueue     chan chunkGenJob
 	genResults   chan chunkGenResult
 	pending      map[chunkKey]bool
@@ -93,6 +94,7 @@ func NewFlatWorld() *World {
 	w := &World{
 		chunks:       make(map[chunkKey]*Chunk),
 		seed:         uint32(time.Now().UnixNano()),
+		TimeTicks:    initialWorldTime,
 		genQueue:     make(chan chunkGenJob, 256),
 		genResults:   make(chan chunkGenResult, 32),
 		pending:      make(map[chunkKey]bool),
@@ -125,6 +127,7 @@ func NewClientWorld() *World {
 	world := &World{
 		chunks:       map[chunkKey]*Chunk{},
 		seed:         uint32(time.Now().UnixNano()),
+		TimeTicks:    initialWorldTime,
 		genQueue:     make(chan chunkGenJob, 256),
 		genResults:   make(chan chunkGenResult, 32),
 		pending:      map[chunkKey]bool{},

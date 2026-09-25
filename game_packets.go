@@ -7,6 +7,10 @@ import (
 
 func handlePacket(pkt Packet) {
 	switch p := pkt.(type) {
+	case *PacketWorldTime:
+		if world != nil {
+			world.TimeTicks = float64(p.Ticks)
+		}
 	case *PacketVitals:
 		wasDead := input.isDead()
 		if input.VitalsReady {

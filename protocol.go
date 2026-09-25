@@ -6,7 +6,7 @@ import (
 	"io"
 )
 
-const protocolVersion = 7
+const protocolVersion = 8
 
 // PacketID definitions
 const (
@@ -33,6 +33,7 @@ const (
 	IDVitals          = 0x19
 	IDRespawn         = 0x1A
 	IDChunkLight      = 0x1F
+	IDWorldTime       = 0x20
 )
 
 type Packet interface {
@@ -106,6 +107,8 @@ func ReadPacket(conn io.Reader) (Packet, error) {
 		p = &PacketVitals{}
 	case IDRespawn:
 		p = &PacketRespawn{}
+	case IDWorldTime:
+		p = &PacketWorldTime{}
 	case IDLogin:
 		p = &PacketLogin{}
 	case IDChunkData:

@@ -37,6 +37,7 @@
 | Server/连接类型、创建与生命周期 | [server.go](server.go)：`NewServer`、`Start`、`Stop` |
 | TCP 接入、连接关闭、队列与广播 | [server_network.go](server_network.go) |
 | 权威 tick、区块回收 | [server_tick.go](server_tick.go)：`Tick` |
+| 服务端 24000 tick 昼夜时钟、每秒同步与暂停保持 | [server_time.go](server_time.go)、[server_tick.go](server_tick.go)、[world_time.go](world_time.go)；回归 [server_time_test.go](server_time_test.go)、[world_time_test.go](world_time_test.go) |
 | 权威消息处理与玩家操作校验 | [server_packets.go](server_packets.go)：`HandlePacket` |
 | 单人本地作弊开关、专服默认拒绝切模式及 `/give`/`/tp`、服务端挖掘开始/取消/耗时/距离验证 | [game_session.go](game_session.go)、[server.go](server.go)、[server_commands.go](server_commands.go)、[server_packets.go](server_packets.go)、[server_mining.go](server_mining.go)；客户端挖掘动作 [input.go](input.go)，协议动作 [protocol_actions.go](protocol_actions.go)；回归 [server_authority_test.go](server_authority_test.go) |
 | 区块请求排队、快照、发送预算 | [server_chunks.go](server_chunks.go) |
@@ -47,6 +48,7 @@
 | 服务端保存编排 | [server_save.go](server_save.go)：`Save` |
 | 保存错误汇总、退出等待完成与失败日志 | [server_save_result_test.go](server_save_result_test.go)、[session_shutdown.go](session_shutdown.go)、[session_shutdown_test.go](session_shutdown_test.go)、[save_failure.go](save_failure.go)；服务端关闭结果经 Done 同步后由 [game_session.go](game_session.go) 读取 |
 | 协议 ID、Packet 接口、读写分帧与分发 | [protocol.go](protocol.go) |
+| 世界时间初始/定期同步消息（协议版本 8） | [protocol_time.go](protocol_time.go)、[server_packets.go](server_packets.go)、[server_network.go](server_network.go)、[game_packets.go](game_packets.go) |
 | VarInt、字符串编码 | [protocol_codec.go](protocol_codec.go) |
 | 区块与方块消息 | [protocol_world.go](protocol_world.go) |
 | 登录、玩家移动与出生点消息 | [protocol_player.go](protocol_player.go) |
@@ -71,6 +73,7 @@
 | 生成机制及限制 | [GENERATION.md](GENERATION.md) |
 | 光照传播 | [world_light.go](world_light.go) |
 | 六面逐顶点光照、AO、防拐角漏光、四边形对角线选择 | [mesh_lighting.go](mesh_lighting.go)、[mesh_lighting_test.go](mesh_lighting_test.go)、[mesh_lighting_preview_test.go](mesh_lighting_preview_test.go)；范围与实测：[LIGHTING.md](LIGHTING.md) |
+| 昼夜亮度曲线、天空色与保留火把光：网格快照单独采样方块光，顶点传递夜间保留系数 | [world_time.go](world_time.go)、[world_mesh.go](world_mesh.go)、[mesh_lighting.go](mesh_lighting.go)、[chunk_mesher.go](chunk_mesher.go)、[webgpu_camera_windows.go](webgpu_camera_windows.go)、[webgpu_world_renderer_windows.go](webgpu_world_renderer_windows.go)；昼夜/火把 GPU 截图 [webgpu_foliage_preview_windows_test.go](webgpu_foliage_preview_windows_test.go) |
 | 客户端区块消息应用、后端中立 DDA 射线查询与 gameplay-vector HitTest 外壳；火把精确双部件选取范围（可透过空隙挖后方方块） | [world_packets.go](world_packets.go)、[world_ray.go](world_ray.go)、[world_ray_game.go](world_ray_game.go)、[torch_hitbox.go](torch_hitbox.go)；回归 [world_ray_torch_test.go](world_ray_torch_test.go) |
 | 客户端光照增量、精确网格失效范围与更新合并 | [world_packet_light.go](world_packet_light.go)、[world_mesh_dirty.go](world_mesh_dirty.go)、[world_mesh_dirty_test.go](world_mesh_dirty_test.go) |
 | 网格任务与快照 | [world_mesh.go](world_mesh.go) |
@@ -111,6 +114,7 @@
 | 输入、交互、挖掘入口（读取中立输入帧，无 Raylib import）与玩家眼高碰撞 | [input.go](input.go)、[player_collision.go](player_collision.go)；旧 Raylib 物理适配已删除，生命/生物测试直接使用中立向量 |
 | 后端中立 gameplay 向量、玩家运动与通用碰撞 | [game_math.go](game_math.go)、[player_movement.go](player_movement.go)、[actor_physics.go](actor_physics.go) |
 | 生命、饥饿、伤害、死亡、重生与区块保护（服务端生命 tick 已使用后端中立向量） | [player_vitals.go](player_vitals.go)、[player_respawn.go](player_respawn.go)、[survival.go](survival.go) |
+| 世界时间存档与读取（新世界从白天开始） | [save.go](save.go)、[save_manager.go](save_manager.go)、[server_save.go](server_save.go)；回归 [server_time_test.go](server_time_test.go) |
 | 方块/物品定义、硬度和工具 | [block_registry.go](block_registry.go)、[item_registry.go](item_registry.go)、[mining_data.go](mining_data.go)、[tool_system.go](tool_system.go) |
 | 背包、操作、合成 | [inventory.go](inventory.go)、[inventory_actions.go](inventory_actions.go)、[recipes.go](recipes.go) |
 | 箱子/熔炉逻辑与保存 | [containers.go](containers.go) |

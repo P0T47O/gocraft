@@ -188,7 +188,7 @@ func (a *RenderAssets) shouldDrawVoxelFace(block, neighbor byte, face litFace) b
 	return a.shouldDrawFace(block, neighbor)
 }
 
-func (a *RenderAssets) applyAO(block byte, col color.RGBA, ao float32, useGrass bool, light byte, tintColor color.RGBA) color.RGBA {
+func (a *RenderAssets) applyAO(block byte, col color.RGBA, ao float32, useGrass bool, light byte, tintColor color.RGBA, blockLight ...byte) color.RGBA {
 	// Apply Tint if valid (alpha > 0)
 	if tintColor.A > 0 {
 		col = meshColor(
@@ -212,15 +212,26 @@ func (a *RenderAssets) applyAO(block byte, col color.RGBA, ao float32, useGrass 
 	}
 	lightF := 0.1 + (float32(light)/15.0)*0.9
 	f *= lightF
-	return meshColor(
+	result := meshColor(
 		uint8(float32(col.R)*f),
 		uint8(float32(col.G)*f),
 		uint8(float32(col.B)*f),
 		col.A,
 	)
+	if len(blockLight) > 0 && GetBlock(block).RenderType != RenderTypeLiquid && GetBlock(block).RenderType != RenderTypeGlass {
+		result.A = lightRetention(float32(light), float32(blockLight[0]), float32(GetBlock(block).LightLevel))
+	}
+	return result
 }
 
 func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16, baseX, baseZ int, yMin, yMax int, getBlock BlockGetter, getLight LightGetter, getMeta MetaGetter, seed uint32, cachedTints ...*meshTintCache) map[string]map[string][]*MeshBuildData {
+	return a.buildAllMeshDataWithLight(heightMap, baseX, baseZ, yMin, yMax, getBlock, getLight, nil, getMeta, seed, cachedTints...)
+}
+
+func (a *RenderAssets) buildAllMeshDataWithLight(heightMap *[chunkWidth][chunkWidth]int16, baseX, baseZ, yMin, yMax int, getBlock BlockGetter, getLight, getBlockLight LightGetter, getMeta MetaGetter, seed uint32, cachedTints ...*meshTintCache) map[string]map[string][]*MeshBuildData {
+	if getBlockLight == nil {
+		getBlockLight = func(int, int, int) byte { return 0 }
+	}
 	white := meshColor(255, 255, 255, 255)
 	northTint := meshColor(210, 210, 210, 255)
 	southTint := meshColor(225, 225, 225, 255)
@@ -325,7 +336,7 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 				// the same atlas batch as the rest of the cutout world mesh.
 				if def.RenderType == RenderTypeTorch {
 					light := getLight(wx, y, wz)
-					col := a.applyAO(block, white, 0.0, false, light, tintColor)
+					col := a.applyAO(block, white, 0.0, false, light, tintColor, getBlockLight(wx, y, wz))
 
 					meta := getMeta(wx, y, wz)
 					geometry := geometryForTorch(meta)
@@ -444,7 +455,7 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 
 				if def.RenderType == RenderTypeCross {
 					light := getLight(wx, y, wz)
-					col := a.applyAO(block, white, 0, false, light, tintColor)
+					col := a.applyAO(block, white, 0, false, light, tintColor, getBlockLight(wx, y, wz))
 
 					uvRect, inAtlas := a.getAtlasUV(textures.North)
 
@@ -536,7 +547,7 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 						c10, c11 := isOccluding(wx+1, y+1, wz-1), isOccluding(wx+1, y+1, wz+1)
 						ao := float32(cornerAO(sx0, sz0, c00)+cornerAO(sx0, sz1, c01)+cornerAO(sx1, sz0, c10)+cornerAO(sx1, sz1, c11)) / 12.0
 
-						col := a.applyAO(block, white, ao, false, getLight(wx, y+1, wz), tintColor)
+						col := a.applyAO(block, white, ao, false, getLight(wx, y+1, wz), tintColor, getBlockLight(wx, y+1, wz))
 						// Vanilla: Top is cropped 1..15 (0.0625 .. 0.9375)
 						uMin, uMax := float32(0.0625), float32(0.9375)
 						uvs := []float32{uMin, uMin, uMax, uMin, uMax, uMax, uMin, uMax}
@@ -565,7 +576,7 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 						c10, c11 := isOccluding(wx+1, y-1, wz-1), isOccluding(wx+1, y-1, wz+1)
 						ao := float32(cornerAO(sx0, sz0, c00)+cornerAO(sx0, sz1, c01)+cornerAO(sx1, sz0, c10)+cornerAO(sx1, sz1, c11)) / 12.0
 
-						col := a.applyAO(block, bottomTint, ao, false, getLight(wx, y-1, wz), tintColor)
+						col := a.applyAO(block, bottomTint, ao, false, getLight(wx, y-1, wz), tintColor, getBlockLight(wx, y-1, wz))
 						// Vanilla: Bottom is cropped 1..15 (0.0625 .. 0.9375)
 						uMin, uMax := float32(0.0625), float32(0.9375)
 						uvs := []float32{uMin, uMin, uMax, uMin, uMax, uMax, uMin, uMax}
@@ -596,7 +607,7 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 						c10, c11 := isOccluding(wx+1, y-1, wz-1), isOccluding(wx+1, y+1, wz-1)
 						ao := float32(cornerAO(sx0, sy0, c00)+cornerAO(sx0, sy1, c01)+cornerAO(sx1, sy0, c10)+cornerAO(sx1, sy1, c11)) / 12.0
 
-						col := a.applyAO(block, northTint, ao, false, max(cactusLight, getLight(wx, y, wz-1)), tintColor)
+						col := a.applyAO(block, northTint, ao, false, max(cactusLight, getLight(wx, y, wz-1)), tintColor, max(getBlockLight(wx, y, wz), getBlockLight(wx, y, wz-1)))
 						// Match the same 1..15 texel crop as the other sides.
 						uMin, uMax := float32(0.0625), float32(0.9375)
 						uvs := []float32{uMin, 0, uMax, 0, uMax, 1, uMin, 1}
@@ -625,7 +636,7 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 						c10, c11 := isOccluding(wx+1, y-1, wz+1), isOccluding(wx+1, y+1, wz+1)
 						ao := float32(cornerAO(sx0, sy0, c00)+cornerAO(sx0, sy1, c01)+cornerAO(sx1, sy0, c10)+cornerAO(sx1, sy1, c11)) / 12.0
 
-						col := a.applyAO(block, southTint, ao, false, max(cactusLight, getLight(wx, y, wz+1)), tintColor)
+						col := a.applyAO(block, southTint, ao, false, max(cactusLight, getLight(wx, y, wz+1)), tintColor, max(getBlockLight(wx, y, wz), getBlockLight(wx, y, wz+1)))
 						// Sides: Cropped Horizontally (1..15), Full Vertically (0..16)
 						uMin, uMax := float32(0.0625), float32(0.9375)
 						uvs := []float32{uMax, 0, uMin, 0, uMin, 1, uMax, 1}
@@ -654,7 +665,7 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 						c10, c11 := isOccluding(wx+1, y-1, wz+1), isOccluding(wx+1, y+1, wz+1)
 						ao := float32(cornerAO(sz0, sy0, c00)+cornerAO(sz0, sy1, c01)+cornerAO(sz1, sy0, c10)+cornerAO(sz1, sy1, c11)) / 12.0
 
-						col := a.applyAO(block, eastTint, ao, false, max(cactusLight, getLight(wx+1, y, wz)), tintColor)
+						col := a.applyAO(block, eastTint, ao, false, max(cactusLight, getLight(wx+1, y, wz)), tintColor, max(getBlockLight(wx, y, wz), getBlockLight(wx+1, y, wz)))
 						// Sides: Cropped Horizontally (1..15), Full Vertically (0..16)
 						uMin, uMax := float32(0.0625), float32(0.9375)
 						uvs := []float32{uMin, 0, uMax, 0, uMax, 1, uMin, 1}
@@ -683,7 +694,7 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 						c10, c11 := isOccluding(wx-1, y-1, wz+1), isOccluding(wx-1, y+1, wz+1)
 						ao := float32(cornerAO(sz0, sy0, c00)+cornerAO(sz0, sy1, c01)+cornerAO(sz1, sy0, c10)+cornerAO(sz1, sy1, c11)) / 12.0
 
-						col := a.applyAO(block, westTint, ao, false, max(cactusLight, getLight(wx-1, y, wz)), tintColor)
+						col := a.applyAO(block, westTint, ao, false, max(cactusLight, getLight(wx-1, y, wz)), tintColor, max(getBlockLight(wx, y, wz), getBlockLight(wx-1, y, wz)))
 						// Sides: Cropped Horizontally (1..15), Full Vertically (0..16)
 						uMin, uMax := float32(0.0625), float32(0.9375)
 						uvs := []float32{uMax, 0, uMin, 0, uMin, 1, uMax, 1}
@@ -709,7 +720,7 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 
 				// TOP (Y+)
 				if a.shouldDrawVoxelFace(block, getBlock(wx, y+1, wz), lightTop) {
-					aos, lights := sampleFaceLighting(wx, y, wz, lightTop, getBlock, getLight)
+					aos, lights, blockLights := sampleFaceLightingWithBlock(wx, y, wz, lightTop, getBlock, getLight, getBlockLight)
 
 					// Top of Grass Block
 					// Only use Tint if it's Grass Block Top
@@ -747,12 +758,12 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 						t3 := getCornerColor(-1, -1)
 
 						tints := []color.RGBA{t0, t1, t2, t3}
-						colors = a.applyAOSmooth(block, white, aos, lights, tints)
+						colors = a.applyAOSmooth(block, white, aos, lights, tints, blockLights)
 					} else {
 						// Standard Block (Flat Tint)
 						// Make 4 copies of tint
 						tints := []color.RGBA{tintColor, tintColor, tintColor, tintColor}
-						colors = a.applyAOSmooth(block, white, aos, lights, tints)
+						colors = a.applyAOSmooth(block, white, aos, lights, tints, blockLights)
 					}
 
 					usePath := textures.Top
@@ -776,7 +787,7 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 				}
 				// BOTTOM (Y-)
 				if a.shouldDrawVoxelFace(block, getBlock(wx, y-1, wz), lightBottom) {
-					aos, lights := sampleFaceLighting(wx, y, wz, lightBottom, getBlock, getLight)
+					aos, lights, blockLights := sampleFaceLightingWithBlock(wx, y, wz, lightBottom, getBlock, getLight, getBlockLight)
 
 					bottomTintCol := tintColor
 					if block == blockGrass {
@@ -785,7 +796,7 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 					// Replicate tint 4 times
 					tints := []color.RGBA{bottomTintCol, bottomTintCol, bottomTintCol, bottomTintCol}
 
-					colors := a.applyAOSmooth(block, bottomTint, aos, lights, tints)
+					colors := a.applyAOSmooth(block, bottomTint, aos, lights, tints, blockLights)
 
 					usePath := textures.Bottom
 					uvRect, inAtlas := a.getAtlasUV(textures.Bottom)
@@ -808,14 +819,14 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 				}
 				// NORTH (Z-)
 				if a.shouldDrawVoxelFace(block, getBlock(wx, y, wz-1), lightNorth) {
-					aos, lights := sampleFaceLighting(wx, y, wz, lightNorth, getBlock, getLight)
+					aos, lights, blockLights := sampleFaceLightingWithBlock(wx, y, wz, lightNorth, getBlock, getLight, getBlockLight)
 
 					sideTintCol := tintColor
 					if block == blockGrass {
 						sideTintCol = meshColor(0, 0, 0, 0)
 					}
 					tints := []color.RGBA{sideTintCol, sideTintCol, sideTintCol, sideTintCol}
-					colors := a.applyAOSmooth(block, northTint, aos, lights, tints)
+					colors := a.applyAOSmooth(block, northTint, aos, lights, tints, blockLights)
 
 					usePath := textures.North
 					uvRect, inAtlas := a.getAtlasUV(textures.North)
@@ -872,7 +883,7 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 						// It's close enough.
 
 						ovTints := []color.RGBA{smoothFoliage, smoothFoliage, smoothFoliage, smoothFoliage}
-						ovColors := a.applyAOSmooth(block, white, aos, lights, ovTints)
+						ovColors := a.applyAOSmooth(block, white, aos, lights, ovTints, blockLights)
 
 						getBuilder(oPass, oPath).addFaceSmooth(
 							[]float32{px - 0.5, py + 0.5, pz - oDisp, px + 0.5, py + 0.5, pz - oDisp, px + 0.5, py - 0.5, pz - oDisp, px - 0.5, py - 0.5, pz - oDisp},
@@ -884,14 +895,14 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 				}
 				// SOUTH (Z+)
 				if a.shouldDrawVoxelFace(block, getBlock(wx, y, wz+1), lightSouth) {
-					aos, lights := sampleFaceLighting(wx, y, wz, lightSouth, getBlock, getLight)
+					aos, lights, blockLights := sampleFaceLightingWithBlock(wx, y, wz, lightSouth, getBlock, getLight, getBlockLight)
 
 					sideTintCol := tintColor
 					if block == blockGrass {
 						sideTintCol = meshColor(0, 0, 0, 0)
 					}
 					tints := []color.RGBA{sideTintCol, sideTintCol, sideTintCol, sideTintCol}
-					colors := a.applyAOSmooth(block, southTint, aos, lights, tints)
+					colors := a.applyAOSmooth(block, southTint, aos, lights, tints, blockLights)
 
 					usePath := textures.South
 					uvRect, inAtlas := a.getAtlasUV(textures.South)
@@ -928,7 +939,7 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 						}
 
 						ovTints := []color.RGBA{smoothFoliage, smoothFoliage, smoothFoliage, smoothFoliage}
-						ovColors := a.applyAOSmooth(block, white, aos, lights, ovTints)
+						ovColors := a.applyAOSmooth(block, white, aos, lights, ovTints, blockLights)
 
 						getBuilder(oPass, oPath).addFaceSmooth(
 							[]float32{px + 0.5, py + 0.5, pz + oDisp, px - 0.5, py + 0.5, pz + oDisp, px - 0.5, py - 0.5, pz + oDisp, px + 0.5, py - 0.5, pz + oDisp},
@@ -940,14 +951,14 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 				}
 				// EAST (X+)
 				if a.shouldDrawVoxelFace(block, getBlock(wx+1, y, wz), lightEast) {
-					aos, lights := sampleFaceLighting(wx, y, wz, lightEast, getBlock, getLight)
+					aos, lights, blockLights := sampleFaceLightingWithBlock(wx, y, wz, lightEast, getBlock, getLight, getBlockLight)
 
 					sideTintCol := tintColor
 					if block == blockGrass {
 						sideTintCol = meshColor(0, 0, 0, 0)
 					}
 					tints := []color.RGBA{sideTintCol, sideTintCol, sideTintCol, sideTintCol}
-					colors := a.applyAOSmooth(block, eastTint, aos, lights, tints)
+					colors := a.applyAOSmooth(block, eastTint, aos, lights, tints, blockLights)
 
 					usePath := textures.East
 					uvRect, inAtlas := a.getAtlasUV(textures.East)
@@ -984,7 +995,7 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 						}
 
 						ovTints := []color.RGBA{smoothFoliage, smoothFoliage, smoothFoliage, smoothFoliage}
-						ovColors := a.applyAOSmooth(block, white, aos, lights, ovTints)
+						ovColors := a.applyAOSmooth(block, white, aos, lights, ovTints, blockLights)
 
 						getBuilder(oPass, oPath).addFaceSmooth(
 							[]float32{px + 0.5, py + 0.5, pz - oDisp, px + 0.5, py + 0.5, pz + oDisp, px + 0.5, py - 0.5, pz + oDisp, px + 0.5, py - 0.5, pz - oDisp},
@@ -996,14 +1007,14 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 				}
 				// WEST (X-)
 				if a.shouldDrawVoxelFace(block, getBlock(wx-1, y, wz), lightWest) {
-					aos, lights := sampleFaceLighting(wx, y, wz, lightWest, getBlock, getLight)
+					aos, lights, blockLights := sampleFaceLightingWithBlock(wx, y, wz, lightWest, getBlock, getLight, getBlockLight)
 
 					sideTintCol := tintColor
 					if block == blockGrass {
 						sideTintCol = meshColor(0, 0, 0, 0)
 					}
 					tints := []color.RGBA{sideTintCol, sideTintCol, sideTintCol, sideTintCol}
-					colors := a.applyAOSmooth(block, westTint, aos, lights, tints)
+					colors := a.applyAOSmooth(block, westTint, aos, lights, tints, blockLights)
 
 					usePath := textures.West
 					uvRect, inAtlas := a.getAtlasUV(textures.West)
@@ -1040,7 +1051,7 @@ func (a *RenderAssets) buildAllMeshData(heightMap *[chunkWidth][chunkWidth]int16
 						}
 
 						ovTints := []color.RGBA{smoothFoliage, smoothFoliage, smoothFoliage, smoothFoliage}
-						ovColors := a.applyAOSmooth(block, white, aos, lights, ovTints)
+						ovColors := a.applyAOSmooth(block, white, aos, lights, ovTints, blockLights)
 
 						getBuilder(oPass, oPath).addFaceSmooth(
 							[]float32{px - 0.5, py + 0.5, pz + oDisp, px - 0.5, py + 0.5, pz - oDisp, px - 0.5, py - 0.5, pz - oDisp, px - 0.5, py - 0.5, pz + oDisp},

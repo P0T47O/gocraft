@@ -12,7 +12,7 @@ import (
 	"gocraft/platform"
 )
 
-const webGPUWorldSceneBytes = 112
+const webGPUWorldSceneBytes = 128
 const webGPUWorldDepthFormat = gputypes.TextureFormatDepth32Float
 
 const webGPUWorldShader = `
@@ -21,6 +21,7 @@ struct Scene {
     eye_pos: vec4f,
     fog_range: vec4f,
     fog_color: vec4f,
+    daylight: vec4f,
 }
 
 @group(0) @binding(0) var<uniform> scene: Scene;
@@ -80,11 +81,13 @@ fn sample_atlas(uv: vec2f) -> vec4f {
 @fragment
 fn fs_opaque(in: VertexOutput) -> @location(0) vec4f {
     let texel = sample_atlas(in.uv);
-    let alpha = texel.a * in.color.a;
+    // Opaque/cutout vertex alpha carries retained block-light brightness.
+    // Texture alpha alone controls cutout coverage.
+    let alpha = texel.a;
     if alpha < 0.5 {
         discard;
     }
-    let rgb = fogged(texel.rgb * in.color.rgb, in.world_pos);
+    let rgb = fogged(texel.rgb * in.color.rgb * max(scene.daylight.x, in.color.a), in.world_pos);
     return vec4f(rgb, 1.0);
 }
 
@@ -95,7 +98,7 @@ fn fs_translucent(in: VertexOutput) -> @location(0) vec4f {
     if alpha < 0.01 {
         discard;
     }
-    let rgb = fogged(texel.rgb * in.color.rgb, in.world_pos);
+    let rgb = fogged(texel.rgb * in.color.rgb * scene.daylight.x, in.world_pos);
     return vec4f(rgb, alpha);
 }
 `
@@ -122,6 +125,7 @@ type webGPUWorldRenderer struct {
 	atlasBaseView           *wgpu.TextureView
 	atlasSampler            *wgpu.Sampler
 	filterMipmaps           bool
+	sceneSky                [3]float32
 	filterAF                int
 	depthTexture            *wgpu.Texture
 	depthView               *wgpu.TextureView

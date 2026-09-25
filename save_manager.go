@@ -93,6 +93,7 @@ func CreateNewSave(name string, seed int64) (string, error) {
 	ld := LevelData{
 		Name:       name,
 		Seed:       seed,
+		TimeTicks:  initialWorldTime,
 		LastPlayed: time.Now().Unix(),
 		Version:    saveVersion,
 	}

@@ -33,9 +33,15 @@ var faceLightLayouts = [...]faceLightLayout{
 // Opaque cells are excluded, not averaged as black. Two blocked sides prevent
 // a diagonal light leak; AO remains a separate geometric visibility factor.
 func sampleFaceLighting(x, y, z int, face litFace, getBlock BlockGetter, getLight LightGetter) (aos, lights [4]float32) {
+	aos, lights, _ = sampleFaceLightingWithBlock(x, y, z, face, getBlock, getLight, nil)
+	return
+}
+
+func sampleFaceLightingWithBlock(x, y, z int, face litFace, getBlock BlockGetter, getLight, getBlockLight LightGetter) (aos, lights, blockLights [4]float32) {
 	f := faceLightLayouts[face]
 	var blocked [9]bool
 	var levels [9]float32
+	var blockLevels [9]float32
 	for v := -1; v <= 1; v++ {
 		for u := -1; u <= 1; u++ {
 			i := (v+1)*3 + u + 1
@@ -43,6 +49,9 @@ func sampleFaceLighting(x, y, z int, face litFace, getBlock BlockGetter, getLigh
 			blocked[i] = GetBlock(getBlock(wx, wy, wz)).IsOpaque
 			if !blocked[i] {
 				levels[i] = float32(min(byte(15), getLight(wx, wy, wz)))
+				if getBlockLight != nil {
+					blockLevels[i] = float32(min(byte(15), getBlockLight(wx, wy, wz)))
+				}
 			}
 		}
 	}
@@ -63,22 +72,32 @@ func sampleFaceLighting(x, y, z int, face litFace, getBlock BlockGetter, getLigh
 			oc = 3
 		}
 		aos[i] = float32(oc) / 3
-		sum, count := float32(0), float32(0)
+		sum, blockSum, count := float32(0), float32(0), float32(0)
 		for _, idx := range [4]int{4, s1, s2, diag} {
 			if blocked[idx] || (idx == diag && blocked[s1] && blocked[s2]) {
 				continue
 			}
 			sum += levels[idx]
+			blockSum += blockLevels[idx]
 			count++
 		}
 		if count > 0 {
 			lights[i] = sum / count
+			blockLights[i] = blockSum / count
 		}
 	}
 	return
 }
 
-func (a *RenderAssets) applyAOSmooth(block byte, col color.RGBA, aos [4]float32, lights [4]float32, tints []color.RGBA) []color.RGBA {
+func lightRetention(combined, block, emission float32) uint8 {
+	combined = max(combined, emission)
+	block = max(block, emission)
+	full := 0.1 + 0.9*combined/15
+	local := 0.1 + 0.9*block/15
+	return uint8(255 * min(float32(1), local/full))
+}
+
+func (a *RenderAssets) applyAOSmooth(block byte, col color.RGBA, aos [4]float32, lights [4]float32, tints []color.RGBA, blockLights ...[4]float32) []color.RGBA {
 	res := make([]color.RGBA, 4)
 	emission := float32(GetBlock(block).LightLevel)
 	for i := range res {
@@ -100,6 +119,9 @@ func (a *RenderAssets) applyAOSmooth(block byte, col color.RGBA, aos [4]float32,
 		}
 		f := (1 - 0.6*ao) * (0.1 + 0.9*max(emission, lights[i])/15)
 		res[i] = meshColor(uint8(float32(c.R)*f), uint8(float32(c.G)*f), uint8(float32(c.B)*f), c.A)
+		if len(blockLights) > 0 && GetBlock(block).RenderType != RenderTypeLiquid && GetBlock(block).RenderType != RenderTypeGlass {
+			res[i].A = lightRetention(lights[i], blockLights[0][i], emission)
+		}
 	}
 	return res
 }

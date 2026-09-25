@@ -24,7 +24,7 @@
 
 类型：`MeshBuildData`、`meshBuilder`
 
-函数/方法：`*meshBuilder.addFace`、`*meshBuilder.addFaceSmooth`、`*MeshBuildData.Reset`、`*RenderAssets.isTransparent`、`*RenderAssets.getBiomeBaseColor`、`*RenderAssets.getClimateColor`、`*RenderAssets.shouldDrawFace`、`*RenderAssets.shouldDrawVoxelFace`、`*RenderAssets.applyAO`、`*RenderAssets.buildAllMeshData`、`allocFloat32`、`allocUint8`、`allocUint16`
+函数/方法：`*meshBuilder.addFace`、`*meshBuilder.addFaceSmooth`、`*MeshBuildData.Reset`、`*RenderAssets.isTransparent`、`*RenderAssets.getBiomeBaseColor`、`*RenderAssets.getClimateColor`、`*RenderAssets.shouldDrawFace`、`*RenderAssets.shouldDrawVoxelFace`、`*RenderAssets.applyAO`、`*RenderAssets.buildAllMeshData`、`*RenderAssets.buildAllMeshDataWithLight`、`allocFloat32`、`allocUint8`、`allocUint16`
 
 ## [chunk_storage.go](chunk_storage.go)
 
@@ -220,7 +220,7 @@
 
 类型：`litFace`、`faceLightLayout`
 
-函数/方法：`sampleFaceLighting`、`*RenderAssets.applyAOSmooth`、`flipLightDiagonal`
+函数/方法：`sampleFaceLighting`、`sampleFaceLightingWithBlock`、`lightRetention`、`*RenderAssets.applyAOSmooth`、`flipLightDiagonal`
 
 ## [mesh_math.go](mesh_math.go)
 
@@ -382,6 +382,12 @@
 
 函数/方法：`*PacketLogin.ID`、`*PacketLogin.Encode`、`*PacketLogin.Decode`、`*PacketPlayerMove.ID`、`*PacketPlayerMove.Encode`、`*PacketPlayerMove.Decode`、`*PacketSpawnPoint.ID`、`*PacketSpawnPoint.Encode`、`*PacketSpawnPoint.Decode`
 
+## [protocol_time.go](protocol_time.go)
+
+类型：`PacketWorldTime`
+
+函数/方法：`*PacketWorldTime.ID`、`*PacketWorldTime.Encode`、`*PacketWorldTime.Decode`
+
 ## [protocol_world.go](protocol_world.go)
 
 类型：`PacketChunkData`、`PacketBlockChange`、`PacketChunkRequest`、`PacketUnloadChunk`
@@ -428,7 +434,7 @@
 
 类型：`LevelData`
 
-函数/方法：`getZstdEncoder`、`getZstdDecoder`、`ensureSaveDir`、`SaveGame`、`SaveLevelData`、`LoadGame`、`LoadWorld`、`LoadGameIfExists`
+函数/方法：`getZstdEncoder`、`getZstdDecoder`、`ensureSaveDir`、`SaveGame`、`SaveLevelData`、`SaveLevelState`、`LoadGame`、`LoadWorld`、`LoadGameIfExists`
 
 ## [save_chunks.go](save_chunks.go)
 
@@ -520,6 +526,10 @@
 
 函数/方法：`*Server.Tick`
 
+## [server_time.go](server_time.go)
+
+函数/方法：`*Server.tickWorldTime`
+
 ## [session_shutdown.go](session_shutdown.go)
 
 函数/方法：`waitForServerSave`
@@ -594,7 +604,7 @@
 
 ## [webgpu_camera_windows.go](webgpu_camera_windows.go)
 
-函数/方法：`webGPUCameraMatrices`、`*webGPUWorldRenderer.updateSceneCamera`、`*webGPUWorldRenderer.collectVisibleCamera`
+函数/方法：`webGPUCameraMatrices`、`*webGPUWorldRenderer.updateSceneCamera`、`*webGPUWorldRenderer.updateSceneCameraAtTime`、`*webGPUWorldRenderer.collectVisibleCamera`
 
 ## [webgpu_container_windows.go](webgpu_container_windows.go)
 
@@ -712,7 +722,7 @@
 
 类型：`meshKind`、`meshSnapshot`、`meshJob`、`meshResult`
 
-函数/方法：`*meshSnapshot.index`、`*meshSnapshot.blockAt`、`*meshSnapshot.lightAt`、`*meshSnapshot.metaAt`、`*meshSnapshot.Release`、`releaseMeshResults`、`*World.StartMeshWorkers`、`buildMeshSnapshotFromNeighbors`、`*World.markChunkSectionDirty`、`*World.markNeighborsDirty`、`*World.requestImmediateMesh`、`*World.requestImmediateAllSections`、`unloadMeshPass`、`clearSectionMeshes`、`setMeshPending`、`*World.submitMesh`、`*World.ProcessImmediateMeshes`、`*World.acceptsMesh`、`*World.ProcessMeshResults`
+函数/方法：`*meshSnapshot.index`、`*meshSnapshot.blockAt`、`*meshSnapshot.lightAt`、`*meshSnapshot.blockLightAt`、`*meshSnapshot.metaAt`、`*meshSnapshot.Release`、`releaseMeshResults`、`*World.StartMeshWorkers`、`buildMeshSnapshotFromNeighbors`、`*World.markChunkSectionDirty`、`*World.markNeighborsDirty`、`*World.requestImmediateMesh`、`*World.requestImmediateAllSections`、`unloadMeshPass`、`clearSectionMeshes`、`setMeshPending`、`*World.submitMesh`、`*World.ProcessImmediateMeshes`、`*World.acceptsMesh`、`*World.ProcessMeshResults`
 
 ## [world_mesh_dirty.go](world_mesh_dirty.go)
 
@@ -747,4 +757,10 @@
 类型：`worldRenderCache`、`visibleSection`、`translucentDraw`
 
 函数/方法：`worldFarPlane`、`worldFogRange`、`distantBuriedSection`、`*worldRenderCache.radiusOffsets`、`compareVisibleSections`、`compareSectionCoordinates`、`compareTranslucentDraws`、`*worldRenderCache.appendVisibleSections`、`*worldRenderCache.collectTranslucent`
+
+## [world_time.go](world_time.go)
+
+类型：`daylightState`
+
+函数/方法：`worldDaylight`
 

@@ -9,6 +9,9 @@ func (s *Server) Save() error {
 	var failures []error
 	record := func(stage string, err error) { failures = append(failures, fmt.Errorf("%s: %w", stage, err)) }
 	fmt.Println("Server: Saving world state...")
+	if err := SaveLevelState(s.SavePath, s.World.seed, int64(s.World.TimeTicks)); err != nil {
+		record("World clock save failed", err)
+	}
 	if err := s.saveContainers(); err != nil {
 		record("Container save failed", err)
 	}

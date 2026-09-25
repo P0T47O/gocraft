@@ -201,7 +201,7 @@ func (s *Server) Broadcast(p Packet) {
 	// to disconnecting an otherwise healthy client. Authoritative inventory,
 	// block, spawn/despawn, metadata, vitals and chat transitions still use the
 	// reliable enqueue path below.
-	bestEffort := p.ID() == IDPlayerMove || p.ID() == IDEntityMove || p.ID() == IDUnloadChunk || p.ID() == 0x1D
+	bestEffort := p.ID() == IDPlayerMove || p.ID() == IDEntityMove || p.ID() == IDUnloadChunk || p.ID() == IDWorldTime || p.ID() == 0x1D
 	for _, c := range s.Clients {
 		if bestEffort {
 			select {

@@ -34,7 +34,7 @@ func (r *webGPUWorldRenderer) DrawGameplay(world *World, frame webGPUFrameContex
 	if err := updateWebGPUAtlasAnimations(r, frame.Time); err != nil {
 		return fmt.Errorf("update WebGPU atlas animations: %w", err)
 	}
-	if err := r.updateSceneCamera(frame.Camera); err != nil {
+	if err := r.updateSceneCameraAtTime(frame.Camera, world.TimeTicks); err != nil {
 		return fmt.Errorf("update WebGPU gameplay scene: %w", err)
 	}
 	r.collectVisibleCamera(world, frame.Camera)
@@ -71,7 +71,7 @@ func (r *webGPUWorldRenderer) DrawGameplay(world *World, frame webGPUFrameContex
 		Label: "GoCraft WebGPU gameplay pass",
 		ColorAttachments: []wgpu.RenderPassColorAttachment{{
 			View: view, LoadOp: gputypes.LoadOpClear, StoreOp: gputypes.StoreOpStore,
-			ClearValue: gputypes.Color{R: 180.0 / 255.0, G: 210.0 / 255.0, B: 1.0, A: 1.0},
+			ClearValue: gputypes.Color{R: float64(r.sceneSky[0]), G: float64(r.sceneSky[1]), B: float64(r.sceneSky[2]), A: 1},
 		}},
 		DepthStencilAttachment: &wgpu.RenderPassDepthStencilAttachment{
 			View: r.depthView, DepthLoadOp: gputypes.LoadOpClear, DepthStoreOp: gputypes.StoreOpStore,

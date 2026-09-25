@@ -57,6 +57,7 @@ const (
 type LevelData struct {
 	Name       string `json:"name"`
 	Seed       int64  `json:"seed"`
+	TimeTicks  int64  `json:"time_ticks"`
 	LastPlayed int64  `json:"last_played"`
 	Version    int    `json:"version"`
 }
@@ -77,7 +78,7 @@ func SaveGame(savePath string, world *World, state *InputState, camera gameCamer
 	}
 
 	// Save Level Metadata
-	if err := SaveLevelData(savePath, world.seed); err != nil {
+	if err := SaveLevelState(savePath, world.seed, int64(world.TimeTicks)); err != nil {
 		return err
 	}
 
@@ -94,12 +95,17 @@ func SaveGame(savePath string, world *World, state *InputState, camera gameCamer
 }
 
 func SaveLevelData(savePath string, seed uint32) error {
+	return SaveLevelState(savePath, seed, initialWorldTime)
+}
+
+func SaveLevelState(savePath string, seed uint32, ticks int64) error {
 	path := filepath.Join(savePath, levelFile)
 
 	// Try to read existing to keep created time or name if we had one
 	data := LevelData{
 		Name:       filepath.Base(savePath),
 		Seed:       int64(seed),
+		TimeTicks:  ticks,
 		LastPlayed: time.Now().Unix(),
 		Version:    saveVersion,
 	}
@@ -132,6 +138,7 @@ func LoadWorld(savePath string, world *World) (bool, float64, float64, float64, 
 			return false, 0, 0, 0, err
 		}
 		world.seed = uint32(level.Seed)
+		world.TimeTicks = float64(level.TimeTicks)
 	}
 
 	var posX, posY, posZ float64

@@ -128,6 +128,7 @@ Loop:
 	if isPaused {
 		return
 	} // Keep receiving multiplayer packets without gameplay input.
+	world.TimeTicks += float64(dt) * serverTicksPerSec
 
 	world.ProcessMeshResults(assets, 16)
 

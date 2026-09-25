@@ -40,6 +40,8 @@ func TestWebGPUFoliagePreview(t *testing.T) {
 			chunk.heightMap[x][z] = max(chunk.heightMap[x][z], int16(y+1))
 		})
 	}
+	chunk.blocks.Set(8, 1, 12, blockTorch)
+	chunk.heightMap[8][12] = 2
 	initializeChunkLighting(chunk)
 	getBlock := func(x, y, z int) byte {
 		if x < 0 || x >= chunkWidth || z < 0 || z >= chunkWidth || y < 0 || y >= chunkHeight {
@@ -53,7 +55,13 @@ func TestWebGPUFoliagePreview(t *testing.T) {
 		}
 		return max(chunk.skyLight.Get(x, y, z), chunk.blockLight.Get(x, y, z))
 	}
-	results := assets.buildAllMeshData(&chunk.heightMap, 0, 0, 0, 11, getBlock, getLight, func(int, int, int) byte { return 0 }, 42)
+	results := assets.buildAllMeshDataWithLight(&chunk.heightMap, 0, 0, 0, 11, getBlock, getLight,
+		func(x, y, z int) byte {
+			if x < 0 || x >= chunkWidth || z < 0 || z >= chunkWidth || y < 0 || y >= chunkHeight {
+				return 0
+			}
+			return chunk.blockLight.Get(x, y, z)
+		}, func(int, int, int) byte { return 0 }, 42)
 	opaque := assets.applyMeshData(results["opaque"])
 	cutout := assets.applyMeshData(results["cutout"])
 	releaseMeshResults(map[string]map[string][]*MeshBuildData{"glass": results["glass"], "water": results["water"]})
@@ -74,11 +82,13 @@ func TestWebGPUFoliagePreview(t *testing.T) {
 	for _, view := range []struct {
 		name   string
 		camera webGPUCamera
+		ticks  float64
 	}{
-		{"near", webGPUCamera{Position: webGPUVec3{8, 8, 20}, Target: webGPUVec3{8, 4, 8}, Up: webGPUVec3{0, 1, 0}, Fovy: 55}},
-		{"far", webGPUCamera{Position: webGPUVec3{8, 13, 48}, Target: webGPUVec3{8, 4, 8}, Up: webGPUVec3{0, 1, 0}, Fovy: 55}},
+		{"near", webGPUCamera{Position: webGPUVec3{8, 8, 20}, Target: webGPUVec3{8, 4, 8}, Up: webGPUVec3{0, 1, 0}, Fovy: 55}, 6000},
+		{"far", webGPUCamera{Position: webGPUVec3{8, 13, 48}, Target: webGPUVec3{8, 4, 8}, Up: webGPUVec3{0, 1, 0}, Fovy: 55}, 6000},
+		{"night", webGPUCamera{Position: webGPUVec3{8, 8, 20}, Target: webGPUVec3{8, 4, 8}, Up: webGPUVec3{0, 1, 0}, Fovy: 55}, 18000},
 	} {
-		if err := r.updateSceneCamera(view.camera); err != nil {
+		if err := r.updateSceneCameraAtTime(view.camera, view.ticks); err != nil {
 			t.Fatal(err)
 		}
 		img := captureNativePreview(t, r, width, height, func(pass *wgpu.RenderPassEncoder) error {
@@ -92,10 +102,11 @@ func TestWebGPUFoliagePreview(t *testing.T) {
 			return r.drawMeshMap(pass, cutout, cache)
 		})
 		foliagePixels := 0
+		sky := img.RGBAAt(0, 0)
 		for y := 0; y < int(height)/2; y++ {
 			for x := int(width) / 3; x < int(width)*2/3; x++ {
 				i := y*img.Stride + x*4
-				if img.Pix[i] != 180 || img.Pix[i+1] != 210 || img.Pix[i+2] != 255 {
+				if img.Pix[i] != sky.R || img.Pix[i+1] != sky.G || img.Pix[i+2] != sky.B {
 					foliagePixels++
 				}
 			}

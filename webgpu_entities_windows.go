@@ -109,6 +109,10 @@ func webGPUEntityItemTexture(id byte) string {
 }
 
 func (b *webGPUEntityBatch) addQuad(p0, p1, p2, p3 [3]float32, uv [4]float32, color [4]uint8, normal [3]float32) {
+	// Entity skins use texture alpha for cutout. Vertex alpha is the world
+	// shader's retained block-light fraction, so ordinary entities follow
+	// daylight instead of remaining fully bright at midnight.
+	color[3] = 0
 	base := uint32(len(b.vertices))
 	b.vertices = append(b.vertices,
 		platform.Vertex{Position: p0, Texcoord: [2]float32{uv[0], uv[1]}, Color: color, Normal: normal},

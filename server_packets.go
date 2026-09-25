@@ -57,6 +57,7 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 
 		// Send the seed before any chunk snapshots or meshes.
 		s.BroadcastTo(p.Username, p)
+		s.BroadcastTo(p.Username, &PacketWorldTime{Ticks: int64(s.World.TimeTicks)})
 
 		// 2. Send Spawn Point
 		var spawnX, spawnY, spawnZ float64
