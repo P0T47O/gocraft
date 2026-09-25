@@ -325,6 +325,12 @@ func HandleInput(world *World, camera *gameCamera, state *InputState, client *Cl
 		}
 		return hit
 	}
+	if mobTarget != "" && inputMousePressed(mouseRight) {
+		if client != nil {
+			client.Send(&PacketInteractMob{Target: mobTarget})
+		}
+		return hit
+	}
 
 	// Progressive Mining Logic
 	if hit.hit && inputMouseDown(mouseLeft) {
@@ -402,7 +408,7 @@ func HandleInput(world *World, camera *gameCamera, state *InputState, client *Cl
 			blockID = world.BlockAt(hit.x, hit.y, hit.z)
 		}
 		farmAction := (blockID == blockGrass || blockID == blockDirt) && GetItem(state.CurrentBlock).ToolType == ToolHoe || blockID == blockFarmland && cropForItem(state.CurrentBlock) != blockAir
-		if hit.hit && (blockID == blockCraftingTable || blockID == blockTNT || containerSize(blockID) > 0 || farmAction) && !inputKeyDown(keyLeftShift) {
+		if hit.hit && (blockID == blockCraftingTable || blockID == blockTNT || blockID == blockBed || containerSize(blockID) > 0 || farmAction) && !inputKeyDown(keyLeftShift) {
 			if client != nil {
 				client.Send(&PacketBlockInteract{
 					X:      int32(hit.x),
@@ -414,6 +420,12 @@ func HandleInput(world *World, camera *gameCamera, state *InputState, client *Cl
 			return hit // Consume interaction
 		}
 		if currentGameMode == ModeSurvival {
+			if state.CurrentBlock == itemBow {
+				if client != nil {
+					client.Send(&PacketPlayerAction{ActionType: 3})
+				}
+				return hit
+			}
 			if food, _ := foodValue(int32(state.CurrentBlock)); food > 0 {
 				if client != nil {
 					client.Send(&PacketPlayerAction{ActionType: 2})

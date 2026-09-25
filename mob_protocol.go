@@ -12,6 +12,7 @@ type PacketMobState struct {
 	X, Y, Z               float64
 	Yaw                   float32
 	Health, Hurt, Death   int
+	Baby                  bool
 }
 
 func (*PacketMobState) ID() int32 { return 0x1D }
@@ -33,7 +34,7 @@ func (p *PacketMobState) Decode(r *bytes.Buffer) error {
 	return json.Unmarshal([]byte(b), p)
 }
 func (m *MobEntity) snapshot() *PacketMobState {
-	return &PacketMobState{IDString: m.UUID, Kind: m.Kind, State: m.State, X: m.X, Y: m.Y, Z: m.Z, Yaw: m.Yaw, Health: m.Health, Hurt: m.Hurt, Death: m.Death}
+	return &PacketMobState{IDString: m.UUID, Kind: m.Kind, State: m.State, X: m.X, Y: m.Y, Z: m.Z, Yaw: m.Yaw, Health: m.Health, Hurt: m.Hurt, Death: m.Death, Baby: m.BabyTicks > 0}
 }
 
 type PacketAttackMob struct{ Target string }
@@ -115,7 +116,9 @@ func (s *Server) attackMob(p *PlayerEntity, target string) {
 	damage := 1
 	slot := &p.Inventory.Slots[p.SelectedSlot]
 	tool := GetItem(byte(slot.ID))
-	if tool.ToolType != ToolNone {
+	if value := swordDamage(byte(slot.ID)); value > 0 {
+		damage = value
+	} else if tool.ToolType != ToolNone {
 		damage = 2 + harvestTier(tool.ToolMaterial)
 		if tool.ToolType == ToolAxe {
 			damage++

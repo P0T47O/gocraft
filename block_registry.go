@@ -84,6 +84,8 @@ func initBlockRegistry() {
 		RenderType: RenderTypeCube, IsOpaque: true, IsCollidable: true,
 	})
 	RegisterBlock(&BlockDef{ID: blockFarmland, Name: "Farmland", Textures: blockFaces{Top: "textures/block/farmland.png", Bottom: "textures/block/dirt.png", North: "textures/block/dirt.png", South: "textures/block/dirt.png", East: "textures/block/dirt.png", West: "textures/block/dirt.png"}, RenderType: RenderTypeCube, IsOpaque: true, IsCollidable: true, DropItem: blockDirt})
+	RegisterBlock(&BlockDef{ID: blockWhiteWool, Name: "White Wool", Textures: blockFaces{Top: "textures/block/white_wool.png", Bottom: "textures/block/white_wool.png", North: "textures/block/white_wool.png", South: "textures/block/white_wool.png", East: "textures/block/white_wool.png", West: "textures/block/white_wool.png"}, RenderType: RenderTypeCube, IsOpaque: true, IsCollidable: true})
+	RegisterBlock(&BlockDef{ID: blockBed, Name: "Bed", Textures: blockFaces{Top: "textures/block/red_bed_head_up.png", Bottom: "textures/block/bed_down.png", North: "textures/block/red_bed_head_east.png", South: "textures/block/red_bed_head_west.png", East: "textures/block/red_bed_head_east.png", West: "textures/block/red_bed_head_west.png"}, RenderType: RenderTypeCube, IsTransparent: true, IsCollidable: false})
 	for _, crop := range []struct {
 		id            byte
 		name, texture string

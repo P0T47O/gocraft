@@ -19,6 +19,7 @@ func configureBasicMining() {
 	set(2, ToolPickaxe, MatWood, false, blockCobblestone)
 	set(3.5, ToolPickaxe, MatWood, false, blockFurnace)
 	set(0, ToolNone, MatNone, false, blockTNT)
+	set(.8, ToolNone, MatNone, false, blockWhiteWool, blockBed)
 	set(.6, ToolShovel, MatNone, false, blockFarmland)
 	set(0, ToolNone, MatNone, true, blockWheatCrop, blockPotatoCrop, blockCarrotCrop)
 	set(.8, ToolPickaxe, MatWood, false, blockSandstone)

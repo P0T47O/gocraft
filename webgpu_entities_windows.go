@@ -330,7 +330,14 @@ func (b *webGPUEntityBatch) addMob(e *RemoteEntity, now float32) {
 		if !ok {
 			continue
 		}
-		b.addMobBone(pose.center, bone.Size, pose.angleX, bone.RotationY, bone.RotationZ, e.Yaw, deathAngle, root, uvs, color)
+		center, size := pose.center, bone.Size
+		if e.MobBaby {
+			for axis := 0; axis < 3; axis++ {
+				center[axis] *= .6
+				size[axis] *= .6
+			}
+		}
+		b.addMobBone(center, size, pose.angleX, bone.RotationY, bone.RotationZ, e.Yaw, deathAngle, root, uvs, color)
 	}
 }
 

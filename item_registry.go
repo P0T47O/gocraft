@@ -262,6 +262,20 @@ func initItemRegistry() {
 	registerItem(itemCarrot, "Carrot", "textures/item/carrot.png")
 	registerItem(itemBakedPotato, "Baked Potato", "textures/item/baked_potato.png")
 	registerArmorItems()
+	for _, sword := range []struct {
+		id            byte
+		name, texture string
+		durability    int32
+	}{
+		{itemWoodSword, "Wooden Sword", "wooden_sword", 59},
+		{itemStoneSword, "Stone Sword", "stone_sword", 131},
+		{itemIronSword, "Iron Sword", "iron_sword", 250},
+		{itemDiamondSword, "Diamond Sword", "diamond_sword", 1561},
+		{itemGoldSword, "Golden Sword", "golden_sword", 32},
+	} {
+		Items[sword.id] = &ItemDef{ID: sword.id, Name: sword.name, Icon: "textures/item/" + sword.texture + ".png", MaxStack: 1, MaxDurability: sword.durability}
+	}
+	Items[itemBow] = &ItemDef{ID: itemBow, Name: "Bow", Icon: "textures/item/bow.png", MaxStack: 1, MaxDurability: 384}
 	configureTools()
 	for id, d := range Items {
 		if d != nil && d.PlaceBlock == 0 {

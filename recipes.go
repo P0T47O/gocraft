@@ -248,6 +248,13 @@ func InitRecipes() {
 			RegisterRecipe(48+tier*armorSlotCount+part, &Recipe{Ingredients: []Item{{ID: int32(material.ingredient), Count: count}}, Result: Item{ID: int32(material.helmet) + int32(part), Count: 1}, Station: blockCraftingTable})
 		}
 	}
+	for i, sword := range []struct{ ingredient, result byte }{
+		{blockPlankOak, itemWoodSword}, {blockCobblestone, itemStoneSword}, {itemIronIngot, itemIronSword}, {itemDiamond, itemDiamondSword}, {itemGoldIngot, itemGoldSword},
+	} {
+		RegisterRecipe(60+i, &Recipe{Ingredients: []Item{{ID: int32(sword.ingredient), Count: 2}, {ID: int32(itemStick), Count: 1}}, Result: Item{ID: int32(sword.result), Count: 1}, Station: blockCraftingTable})
+	}
+	RegisterRecipe(65, &Recipe{Ingredients: []Item{{ID: int32(itemStick), Count: 3}, {ID: int32(itemString), Count: 3}}, Result: Item{ID: int32(itemBow), Count: 1}, Station: blockCraftingTable})
+	RegisterRecipe(66, &Recipe{Ingredients: []Item{{ID: int32(blockWhiteWool), Count: 3}, {ID: int32(blockPlankOak), Count: 3}}, Result: Item{ID: int32(blockBed), Count: 1}, Station: blockCraftingTable})
 }
 
 // GetCraftableRecipes returns recipes that can be crafted with the given inventory

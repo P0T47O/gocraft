@@ -1,0 +1,8 @@
+{
+  "id": "sheep", "health": 8, "speed": 1.1, "flee_speed": 2.4,
+  "collider": {"Width": 0.8, "Depth": 1.2, "Height": 1.0, "StepHeight": 1},
+  "model": "sheep", "animation": "quadruped", "behaviors": ["wander", "flee"],
+  "idle_ticks": 40, "walk_ticks": 60, "flee_ticks": 80,
+  "drops": [{"item": "wool", "min": 1, "max": 2}],
+  "spawn_limit": 8, "spawn_radius": 12
+}

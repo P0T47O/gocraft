@@ -71,6 +71,7 @@ type RemoteEntity struct {
 	MobKind, MobState                                   string
 	TargetYaw, AnimPhase, AnimBlend, MobHurt, DeathTime float32
 	MobHealth                                           int
+	MobBaby                                             bool
 	ID                                                  string
 	Type                                                EntityType
 	X, Y, Z                                             float64 // Visual position (Lerped)

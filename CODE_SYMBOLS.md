@@ -272,6 +272,10 @@
 
 函数/方法：`*Server.updateMobAI`、`nearestMobTarget`、`mobSeesPlayer`
 
+## [mob_breeding.go](mob_breeding.go)
+
+函数/方法：`breedingFood`、`*Server.feedMob`、`*Server.tickBreeding`
+
 ## [mob_content.go](mob_content.go)
 
 类型：`MobDefinition`、`MobDrop`、`MobBone`、`MobModel`、`MobAnimation`、`MobContent`
@@ -300,7 +304,7 @@
 
 类型：`ArrowEntity`
 
-函数/方法：`*ArrowEntity.Tick`、`segmentHitsBox`
+函数/方法：`*ArrowEntity.Tick`、`segmentBoxEntry`
 
 ## [mob_protocol.go](mob_protocol.go)
 
@@ -390,6 +394,10 @@
 
 函数/方法：`*PlayerEntity.initVitals`、`*PlayerEntity.dead`、`*PacketVitals.ID`、`*PacketVitals.Encode`、`*PacketVitals.Decode`、`*PacketRespawn.ID`、`*PacketRespawn.Encode`、`*PacketRespawn.Decode`、`*Server.sendVitals`、`vitalsPacket`、`*Server.eatSelectedFood`、`foodValue`、`*Server.hurtPlayer`、`*Server.tickPlayerVitals`、`*Server.tickPlayerFood`、`*Server.updatePlayerVitals`、`*Server.pendingRespawnChunks`、`*Server.safeRespawn`、`*Server.respawnPlayer`
 
+## [player_weapons.go](player_weapons.go)
+
+函数/方法：`swordDamage`、`*Server.shootSelectedBow`
+
 ## [protocol.go](protocol.go)
 
 类型：`Packet`
@@ -429,6 +437,12 @@
 类型：`PacketChunkLight`
 
 函数/方法：`chunkLightSize`、`*PacketChunkLight.ID`、`*PacketChunkLight.Encode`、`*PacketChunkLight.Decode`
+
+## [protocol_mob_interact.go](protocol_mob_interact.go)
+
+类型：`PacketInteractMob`
+
+函数/方法：`*PacketInteractMob.ID`、`*PacketInteractMob.Encode`、`*PacketInteractMob.Decode`
 
 ## [protocol_player.go](protocol_player.go)
 
@@ -597,6 +611,10 @@
 ## [settings_window.go](settings_window.go)
 
 函数/方法：`ApplySettings`
+
+## [sleep.go](sleep.go)
+
+函数/方法：`*Server.useBed`、`*Server.allSurvivalPlayersSleeping`
 
 ## [survival.go](survival.go)
 

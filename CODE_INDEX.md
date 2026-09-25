@@ -47,7 +47,7 @@
 | 聊天命令 | [server_commands.go](server_commands.go) |
 | 服务端保存编排 | [server_save.go](server_save.go)：`Save` |
 | 保存错误汇总、退出等待完成与失败日志 | [server_save_result_test.go](server_save_result_test.go)、[session_shutdown.go](session_shutdown.go)、[session_shutdown_test.go](session_shutdown_test.go)、[save_failure.go](save_failure.go)；服务端关闭结果经 Done 同步后由 [game_session.go](game_session.go) 读取 |
-| 协议 ID、Packet 接口、读写分帧与分发（版本 11） | [protocol.go](protocol.go) |
+| 协议 ID、Packet 接口、读写分帧与分发（版本 12） | [protocol.go](protocol.go) |
 | 流动水/岩浆：服务端按需队列、不同流速、源头/瀑布/扩散回收、水岩浆固化、每 tick 访问与改动预算；批量同步并仅在客户端已载入区块应用；元数据决定液面高度与相邻液面落差侧面 | [fluids.go](fluids.go)、[protocol_fluid.go](protocol_fluid.go)、[server_tick.go](server_tick.go)、[server_packets.go](server_packets.go)、[explosion.go](explosion.go)、[game_packets.go](game_packets.go)、[chunk_mesher.go](chunk_mesher.go)；平地/瀑布/跨区块/反应/性能预算回归 [fluids_test.go](fluids_test.go) |
 | 爆炸事件：一次同步中心与有界方块移除列表，客户端应用后播放粒子和音效 | [protocol_explosion.go](protocol_explosion.go)、[game_packets.go](game_packets.go)、[game_explosion.go](game_explosion.go)、[webgpu_entities_windows.go](webgpu_entities_windows.go)、[game_audio.go](game_audio.go)；回归 [explosion_test.go](explosion_test.go) |
 | 世界时间初始/定期同步消息（协议版本 8） | [protocol_time.go](protocol_time.go)、[server_packets.go](server_packets.go)、[server_network.go](server_network.go)、[game_packets.go](game_packets.go) |
@@ -59,6 +59,9 @@
 | 容器/生物/生命消息；生物攻击距离/AABB 权威校验与玩家生命 tick 已不依赖 Raylib | [container_protocol.go](container_protocol.go)、[mob_protocol.go](mob_protocol.go)、[player_vitals.go](player_vitals.go) |
 | 服务端饥饿/饱和/消耗、手持食物校验、自然恢复/饥饿伤害；右键食物与协议动作（版本7） | [player_vitals.go](player_vitals.go)、[server_packets.go](server_packets.go)、[input.go](input.go)、[protocol_actions.go](protocol_actions.go)、[protocol.go](protocol.go)；回归 [player_food_test.go](player_food_test.go) |
 | 生存饥饿移动消耗（静止不扣、快跑更耗）、金/铁/钻石护甲与工作台配方、四个装备槽、服务端减伤/耐久/死亡掉落、存档和生命协议护甲点、WebGPU 背包与 HUD | [player_vitals.go](player_vitals.go)、[armor.go](armor.go)、[item_registry.go](item_registry.go)、[inventory.go](inventory.go)、[inventory_actions.go](inventory_actions.go)、[recipes.go](recipes.go)、[survival.go](survival.go)、[inventory_layout.go](inventory_layout.go)、[webgpu_inventory_windows.go](webgpu_inventory_windows.go)、[webgpu_hud_windows.go](webgpu_hud_windows.go)；回归 [armor_test.go](armor_test.go)、[player_food_test.go](player_food_test.go) |
+| 生存武器：五级剑、弓与服务端消耗箭/耐久、射线最近实体碰撞 | [player_weapons.go](player_weapons.go)、[mob_projectile.go](mob_projectile.go)、[mob_protocol.go](mob_protocol.go)、[server_entities.go](server_entities.go)、[item_registry.go](item_registry.go)、[recipes.go](recipes.go)、[input.go](input.go)；回归 [survival_progression_test.go](survival_progression_test.go) |
+| 床：右键设置重生点、在线生存玩家共同跳夜、未载入床区块等待生成、拆床后安全回退；单格低矮方块；重生点存档往返 | [sleep.go](sleep.go)、[server_time.go](server_time.go)、[player_vitals.go](player_vitals.go)、[survival.go](survival.go)、[server_packets.go](server_packets.go)、[block_registry.go](block_registry.go)、[chunk_mesher.go](chunk_mesher.go)、[recipes.go](recipes.go)；回归 [survival_progression_test.go](survival_progression_test.go) |
+| 绵羊/羊毛与喂食繁殖：小麦喂羊、胡萝卜喂猪、服务端视线/距离核验、配对、幼体同步与存档往返 | [content/entities/sheep.json](content/entities/sheep.json)、[content/models/sheep.json](content/models/sheep.json)、[mob_breeding.go](mob_breeding.go)、[protocol_mob_interact.go](protocol_mob_interact.go)、[mob_simulation.go](mob_simulation.go)、[save_entities.go](save_entities.go)、[webgpu_entities_windows.go](webgpu_entities_windows.go)；回归 [survival_progression_test.go](survival_progression_test.go) |
 
 ## 世界、地形与渲染
 

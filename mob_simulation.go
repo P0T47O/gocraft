@@ -15,6 +15,7 @@ type MobEntity struct {
 	LostTicks, AttackCooldown, Fuse, SunTicks int
 	AvoidTicks                                int
 	AvoidYaw                                  float32
+	LoveTicks, BreedCooldown, BabyTicks       int
 }
 
 func newMob(kind, id string, x, y, z float64) *MobEntity {

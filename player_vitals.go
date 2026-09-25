@@ -22,6 +22,8 @@ type PlayerVitals struct {
 	Exhaustion             float64
 	Cause                  string
 	SpawnX, SpawnY, SpawnZ float64
+	HomeX, HomeY, HomeZ    int32
+	HasHome                bool
 	FallDistance           float64
 	cooldown               int
 	dryTicks               int
@@ -313,6 +315,14 @@ func (s *Server) pendingRespawnChunks() map[chunkKey]bool {
 			continue
 		}
 		x, z := int(math.Floor(p.Vitals.SpawnX+.5)), int(math.Floor(p.Vitals.SpawnZ+.5))
+		if p.Vitals.HasHome {
+			hx, hz := int(p.Vitals.HomeX), int(p.Vitals.HomeZ)
+			for cx := divFloor(hx-1, chunkWidth); cx <= divFloor(hx+1, chunkWidth); cx++ {
+				for cz := divFloor(hz-1, chunkWidth); cz <= divFloor(hz+1, chunkWidth); cz++ {
+					keys[chunkKey{X: cx, Z: cz}] = true
+				}
+			}
+		}
 		for cx := divFloor(x-16, chunkWidth); cx <= divFloor(x+16, chunkWidth); cx++ {
 			for cz := divFloor(z-16, chunkWidth); cz <= divFloor(z+16, chunkWidth); cz++ {
 				keys[chunkKey{X: cx, Z: cz}] = true
@@ -323,6 +333,31 @@ func (s *Server) pendingRespawnChunks() map[chunkKey]bool {
 }
 
 func (s *Server) safeRespawn(v *PlayerVitals) (float64, float64, float64, bool) {
+	if v.HasHome {
+		hx, hz := int(v.HomeX), int(v.HomeZ)
+		if s.World.getChunkIfGenerated(divFloor(hx, chunkWidth), divFloor(hz, chunkWidth)) == nil {
+			s.World.requestChunk(divFloor(hx, chunkWidth), divFloor(hz, chunkWidth))
+			return 0, 0, 0, false
+		}
+	}
+	if v.HasHome && s.World.BlockAt(int(v.HomeX), int(v.HomeY), int(v.HomeZ)) == blockBed {
+		pendingHome := false
+		for _, d := range [...]BlockPos{{1, 0, 0}, {-1, 0, 0}, {0, 0, 1}, {0, 0, -1}} {
+			x, y, z := int(v.HomeX+d.X), int(v.HomeY), int(v.HomeZ+d.Z)
+			cx, cz := divFloor(x, chunkWidth), divFloor(z, chunkWidth)
+			if s.World.getChunkIfGenerated(cx, cz) == nil {
+				pendingHome = true
+				s.World.requestChunk(cx, cz)
+				continue
+			}
+			if GetBlock(s.World.BlockAt(x, y-1, z)).IsCollidable && s.World.BlockAt(x, y, z) == blockAir && s.World.BlockAt(x, y+1, z) == blockAir {
+				return float64(x), float64(y) - 0.5 + playerEyeY + 0.005, float64(z), true
+			}
+		}
+		if pendingHome {
+			return 0, 0, 0, false
+		}
+	}
 	ax, az := int(math.Floor(v.SpawnX+0.5)), int(math.Floor(v.SpawnZ+0.5))
 	pending := false
 	for radius := 0; radius <= 16; radius++ {
@@ -379,7 +414,7 @@ func (s *Server) respawnPlayer(p *PlayerEntity) {
 		return
 	}
 	old := p.Vitals
-	p.Vitals = &PlayerVitals{Health: maxHealth, Air: maxAir, Food: maxFood, Saturation: 5, SpawnX: old.SpawnX, SpawnY: old.SpawnY, SpawnZ: old.SpawnZ, lastX: x, lastY: y, lastZ: z, grace: 60}
+	p.Vitals = &PlayerVitals{Health: maxHealth, Air: maxAir, Food: maxFood, Saturation: 5, SpawnX: old.SpawnX, SpawnY: old.SpawnY, SpawnZ: old.SpawnZ, HomeX: old.HomeX, HomeY: old.HomeY, HomeZ: old.HomeZ, HasHome: old.HasHome, lastX: x, lastY: y, lastZ: z, grace: 60}
 	p.SetPosition(x, y, z)
 	s.BroadcastTo(p.UUID, &PacketSpawnPoint{X: x, Y: y, Z: z})
 	s.sendVitals(p)

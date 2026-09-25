@@ -51,7 +51,13 @@ func (s *Server) UpdateEntities() {
 		}
 		if arrow, ok := e.(*ArrowEntity); ok {
 			if arrow.HitPlayer != nil {
-				arrowHits = append(arrowHits, mobAttack{arrow.HitPlayer, arrow.Damage, "Shot by skeleton"})
+				arrowHits = append(arrowHits, mobAttack{arrow.HitPlayer, arrow.Damage, "Shot by arrow"})
+			}
+			if arrow.HitMob != nil {
+				arrow.HitMob.hit(arrow.Damage, float32(arrow.Vx), float32(arrow.Vz))
+				if p := s.findPlayerEntity(arrow.Owner); p != nil && mobContent.Definitions[arrow.HitMob.Kind].Hostile {
+					arrow.HitMob.Target = p.UUID
+				}
 			}
 			if arrow.Dead {
 				toRemove = append(toRemove, arrow.UUID)

@@ -147,6 +147,7 @@ func handlePacket(pkt Packet) {
 			remoteEntities[p.IDString] = e
 		}
 		e.MobKind, e.MobState, e.MobHealth = p.Kind, p.State, p.Health
+		e.MobBaby = p.Baby
 		e.TX, e.TY, e.TZ = p.X, p.Y, p.Z
 		e.TargetYaw = p.Yaw
 		e.MobHurt = float32(p.Hurt) / 20

@@ -29,6 +29,8 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 	switch p := pkt.(type) {
 	case *PacketAttackMob:
 		s.attackMob(s.findPlayerEntity(wrap.From), p.Target)
+	case *PacketInteractMob:
+		s.feedMob(s.findPlayerEntity(wrap.From), p.Target)
 	case *PacketContainerClick:
 		s.clickContainer(s.findPlayerEntity(wrap.From), p)
 	case *PacketRespawn:
@@ -261,6 +263,9 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 		if s.interactFarm(player, pos) {
 			return
 		}
+		if s.useBed(player, pos) {
+			return
+		}
 		if s.World.BlockAt(int(p.X), int(p.Y), int(p.Z)) == blockTNT {
 			s.igniteTNT(int(p.X), int(p.Y), int(p.Z), tntFuseTicks)
 			return
@@ -351,6 +356,10 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 		}
 		if p.BlockID == blockFarmland || isCrop(p.BlockID) {
 			s.BroadcastTo(wrap.From, &PacketBlockChange{X: p.X, Y: p.Y, Z: p.Z, BlockID: old, Meta: s.World.MetaAt(int(p.X), int(p.Y), int(p.Z))})
+			return
+		}
+		if p.BlockID == blockBed && (p.Y <= 0 || !GetBlock(s.World.BlockAt(int(p.X), int(p.Y)-1, int(p.Z))).IsCollidable) {
+			s.BroadcastTo(wrap.From, &PacketBlockChange{X: p.X, Y: p.Y, Z: p.Z, BlockID: old})
 			return
 		}
 		if p.BlockID != blockAir {
@@ -549,6 +558,10 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 		}
 
 	case *PacketPlayerAction:
+		if p.ActionType == 3 {
+			s.shootSelectedBow(s.findPlayerEntity(wrap.From))
+			return
+		}
 		if p.ActionType == 2 {
 			s.eatSelectedFood(s.findPlayerEntity(wrap.From))
 			return

@@ -50,6 +50,7 @@ var mobDropItems = map[string]byte{
 	"gunpowder":    itemGunpowder,
 	"potato":       itemPotato,
 	"carrot":       itemCarrot,
+	"wool":         blockWhiteWool,
 }
 
 type MobBone struct {

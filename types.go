@@ -60,6 +60,8 @@ const (
 	blockWheatCrop     byte = 46
 	blockPotatoCrop    byte = 47
 	blockCarrotCrop    byte = 48
+	blockBed           byte = 49
+	blockWhiteWool     byte = 50
 )
 
 // Item IDs share the byte namespace with blocks and are also persisted and
@@ -119,6 +121,12 @@ const (
 	itemDiamondChestplate byte = 147
 	itemDiamondLeggings   byte = 148
 	itemDiamondBoots      byte = 149
+	itemWoodSword         byte = 150
+	itemStoneSword        byte = 151
+	itemIronSword         byte = 152
+	itemDiamondSword      byte = 153
+	itemGoldSword         byte = 154
+	itemBow               byte = 155
 )
 
 type hitInfo struct {

@@ -23,6 +23,7 @@ type Server struct {
 	miningSessions    map[string]miningSession
 	pendingLights     map[chunkKey]map[string]uint16
 	MobSpawnTicks     int
+	sleeping          map[string]BlockPos
 	fluidClock        uint64
 	fluidQueue        []fluidTask
 	fluidHead         int
