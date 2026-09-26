@@ -72,3 +72,10 @@ func closeExperimentalWebGPURenderer() {
 	activeWebGPUWorldRenderer = nil
 	resetWebGPUAtlasAnimations()
 }
+
+func releaseExperimentalWebGPULOD() {
+	if activeWebGPUWorldRenderer != nil && activeWebGPUWorldRenderer.lod != nil {
+		activeWebGPUWorldRenderer.lod.close()
+		activeWebGPUWorldRenderer.lod = nil
+	}
+}

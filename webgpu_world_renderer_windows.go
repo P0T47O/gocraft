@@ -135,6 +135,7 @@ type webGPUWorldRenderer struct {
 	msaaTexture             *wgpu.Texture
 	msaaView                *wgpu.TextureView
 	worldSamples            uint32
+	lod                     *webGPULODRenderer
 	width, height           uint32
 	surfaceNeedsReconfigure bool
 	camera                  webGPUCamera
@@ -446,6 +447,10 @@ func (r *webGPUWorldRenderer) Close() {
 }
 
 func (r *webGPUWorldRenderer) closeResources(resetBackend bool) {
+	if r.lod != nil {
+		r.lod.close()
+		r.lod = nil
+	}
 	if r.solidPipeline != nil {
 		r.solidPipeline.Release()
 		r.solidPipeline = nil

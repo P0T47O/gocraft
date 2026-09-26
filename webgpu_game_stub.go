@@ -13,3 +13,4 @@ func drawExperimentalWebGPUFrame() error {
 }
 
 func closeExperimentalWebGPURenderer() {}
+func releaseExperimentalWebGPULOD()    {}

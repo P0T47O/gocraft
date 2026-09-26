@@ -91,6 +91,11 @@ func (r *webGPUWorldRenderer) DrawGameplay(world *World, frame webGPUFrameContex
 		r.surface.DiscardTexture()
 		return err
 	}
+	if err := r.drawDistantTerrain(pass, world, frame.Camera); err != nil {
+		_ = pass.End()
+		r.surface.DiscardTexture()
+		return err
+	}
 
 	pass.SetPipeline(r.solidPipeline)
 	pass.SetBindGroup(0, r.bindGroup, nil)

@@ -226,6 +226,18 @@
 
 函数/方法：`GetItem`、`initBlockItems`、`configureTools`、`GetItemVisual`、`MoveStack`、`StackLimit`、`CanStack`、`*ItemStack.Wear`、`validStack`、`*PlayerEntity.claimPendingItems`、`migratePlayerItems`、`initItemRegistry`
 
+## [lod_renderer_windows.go](lod_renderer_windows.go)
+
+类型：`lodBuildResult`、`webGPULODRenderer`
+
+函数/方法：`newWebGPULODRenderer`、`*webGPULODRenderer.buildLoop`、`*webGPULODRenderer.close`、`*webGPULODRenderer.radiusOffsets`、`lodTileInRange`、`lodTileTouchesOutsideInner`、`*webGPULODRenderer.draw`、`*webGPUWorldRenderer.drawDistantTerrain`
+
+## [lod_terrain.go](lod_terrain.go)
+
+类型：`lodTileKey`、`lodTileData`
+
+函数/方法：`lodSurfaceColor`、`buildLODTile`
+
 ## [main.go](main.go)
 
 类型：`ProgramState`、`MenuPage`、`RemoteEntity`
@@ -616,7 +628,7 @@
 
 类型：`GameSettings`
 
-函数/方法：`normalizeMSAASamples`、`renderDistance`、`clampRenderDistance`、`LoadSettings`、`SaveSettings`
+函数/方法：`clampHorizonDistance`、`horizonDistance`、`normalizeMSAASamples`、`renderDistance`、`clampRenderDistance`、`LoadSettings`、`SaveSettings`
 
 ## [settings_window.go](settings_window.go)
 
@@ -716,11 +728,11 @@
 
 ## [webgpu_game_stub.go](webgpu_game_stub.go)
 
-函数/方法：`ensureExperimentalWebGPURenderer`、`drawExperimentalWebGPUFrame`、`closeExperimentalWebGPURenderer`
+函数/方法：`ensureExperimentalWebGPURenderer`、`drawExperimentalWebGPUFrame`、`closeExperimentalWebGPURenderer`、`releaseExperimentalWebGPULOD`
 
 ## [webgpu_game_windows.go](webgpu_game_windows.go)
 
-函数/方法：`webGPUMousePosition`、`webGPUFrameFromWindow`、`ensureExperimentalWebGPURenderer`、`drawExperimentalWebGPUFrame`、`closeExperimentalWebGPURenderer`
+函数/方法：`webGPUMousePosition`、`webGPUFrameFromWindow`、`ensureExperimentalWebGPURenderer`、`drawExperimentalWebGPUFrame`、`closeExperimentalWebGPURenderer`、`releaseExperimentalWebGPULOD`
 
 ## [webgpu_gameplay_windows.go](webgpu_gameplay_windows.go)
 

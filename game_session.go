@@ -97,6 +97,7 @@ func exitGame() {
 		world.Close()
 		world = nil
 	}
+	releaseExperimentalWebGPULOD()
 	if !nativeWindowActive {
 		closeExperimentalWebGPURenderer()
 	}

@@ -16,11 +16,27 @@ type GameSettings struct {
 	Mipmaps          bool
 	Anisotropy       int // 1 disables anisotropic filtering; otherwise 2/4/8/16.
 	MSAASamples      int // 1 disables world-edge antialiasing; 4 enables it. UI remains single-sample.
+	HorizonDistance  int // Distant simplified terrain radius in chunks; 0 disables it.
 }
 
 const minRenderDistance = 8
 const maxRenderDistance = 128
 const defaultRenderDistance = 24
+const defaultHorizonDistance = 96
+
+func clampHorizonDistance(v int) int {
+	if v <= 0 {
+		return 0
+	}
+	return max(32, min(128, v))
+}
+
+func horizonDistance() int {
+	if currentSettings == nil {
+		return defaultHorizonDistance
+	}
+	return clampHorizonDistance(currentSettings.HorizonDistance)
+}
 
 func normalizeMSAASamples(samples int) int {
 	if samples == 1 {
@@ -63,6 +79,7 @@ func LoadSettings() *GameSettings {
 		Mipmaps:          true,
 		Anisotropy:       8,
 		MSAASamples:      4,
+		HorizonDistance:  defaultHorizonDistance,
 	}
 
 	data, err := os.ReadFile(settingsFile)
@@ -77,6 +94,7 @@ func LoadSettings() *GameSettings {
 	settings.RenderDistance = clampRenderDistance(settings.RenderDistance)
 	settings.Anisotropy = normalizeAnisotropy(settings.Anisotropy)
 	settings.MSAASamples = normalizeMSAASamples(settings.MSAASamples)
+	settings.HorizonDistance = clampHorizonDistance(settings.HorizonDistance)
 	currentSettings = settings
 	return settings
 }

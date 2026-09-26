@@ -13,7 +13,7 @@ import (
 
 func webGPUCameraMatrices(camera webGPUCamera, width, height uint32) (mgl32.Mat4, mgl32.Mat4, mgl32.Vec3) {
 	aspect := float32(max(uint32(1), width)) / float32(max(uint32(1), height))
-	projection := mgl32.Perspective(mgl32.DegToRad(camera.Fovy), aspect, 0.01, worldFarPlane(renderDistance()))
+	projection := mgl32.Perspective(mgl32.DegToRad(camera.Fovy), aspect, 0.01, worldFarPlane(max(renderDistance(), horizonDistance())))
 	eye := mgl32.Vec3{camera.Position.X, camera.Position.Y, camera.Position.Z}
 	view := mgl32.LookAtV(
 		eye,
@@ -39,7 +39,7 @@ func (r *webGPUWorldRenderer) updateSceneCameraAtTime(camera webGPUCamera, ticks
 	// Reverse the [0,1] depth range. Together with a floating-point depth
 	// attachment this preserves separation between distant water and terrain.
 	vp := clipCorrection.Mul4(projection).Mul4(view)
-	fogStart, fogEnd := worldFogRange(renderDistance())
+	fogStart, fogEnd := worldFogRange(max(renderDistance(), horizonDistance()))
 	daylight := worldDaylight(ticks)
 	r.sceneSky = daylight.Sky
 
@@ -65,6 +65,7 @@ func (r *webGPUWorldRenderer) updateSceneCameraAtTime(camera webGPUCamera, ticks
 	}
 	put(108, 1)
 	put(112, daylight.Brightness)
+	put(116, float32(max(0, renderDistance()-2)*chunkWidth))
 	return r.queue.WriteBuffer(r.sceneBuffer, 0, bytes)
 }
 
