@@ -29,16 +29,22 @@ struct Output {
 }
 @vertex fn vs_main(input: Input) -> Output {
     var out: Output;
-    out.position = scene.view_proj * vec4f(input.position, 1.0);
-    out.world_pos = input.position;
+    var pos = input.position;
+    let horizontal = length(pos.xz - scene.eye_pos.xz);
+    // Keep a shallow underlay beneath real terrain, but retain it when the
+    // full chunk stream has not caught up. Fade the offset across the seam.
+    if input.color.a > 0.999 {
+        pos.y -= 2.5 * (1.0 - smoothstep(max(0.0, scene.daylight.y - 64.0), scene.daylight.y + 64.0, horizontal));
+    }
+    out.position = scene.view_proj * vec4f(pos, 1.0);
+    out.world_pos = pos;
     out.color = input.color;
     return out;
 }
 @fragment fn fs_main(input: Output) -> @location(0) vec4f {
     let horizontal = length(input.world_pos.xz - scene.eye_pos.xz);
-    // Full-detail chunks own the inner view. Two chunks of overlap avoid a
-    // visible hole while a boundary mesh is being uploaded.
-    if horizontal < scene.daylight.y { discard; }
+    // Approximate tree crowns must not poke through loaded full-detail trees.
+    if input.color.a < 0.999 && horizontal < scene.daylight.y { discard; }
     let fog = smoothstep(scene.fog_range.x, scene.fog_range.y, horizontal);
     return vec4f(mix(input.color.rgb * scene.daylight.x, scene.fog_color.rgb, fog), 1.0);
 }
@@ -162,24 +168,13 @@ func lodTileInRange(key, center lodTileKey, radius int) bool {
 	return dx*dx+dz*dz <= (radius+1)*(radius+1)
 }
 
-func lodTileTouchesOutsideInner(key lodTileKey, camera webGPUCamera, innerRadius float32) bool {
-	if innerRadius <= 0 {
-		return true
-	}
-	x0, z0 := float64(key.X*lodTileSize), float64(key.Z*lodTileSize)
-	x := max(math.Abs(x0-float64(camera.Position.X)), math.Abs(x0+lodTileSize-float64(camera.Position.X)))
-	z := max(math.Abs(z0-float64(camera.Position.Z)), math.Abs(z0+lodTileSize-float64(camera.Position.Z)))
-	return x*x+z*z >= float64(innerRadius)*float64(innerRadius)
-}
-
 func (lod *webGPULODRenderer) draw(pass *wgpu.RenderPassEncoder, r *webGPUWorldRenderer, camera webGPUCamera, cache *worldRenderCache) error {
 	center := lodTileKey{int(math.Floor(float64(camera.Position.X) / lodTileSize)), int(math.Floor(float64(camera.Position.Z) / lodTileSize))}
 	radius := (horizonDistance()*chunkWidth + lodTileSize - 1) / lodTileSize
-	innerRadius := float32(max(0, renderDistance()-2) * chunkWidth)
 	projection, view, _ := webGPUCameraMatrices(camera, r.width, r.height)
 	frustum := ExtractFrustum(projection.Mul4(view))
 	for key, mesh := range lod.tiles {
-		if !lodTileInRange(key, center, radius) || !lodTileTouchesOutsideInner(key, camera, innerRadius) {
+		if !lodTileInRange(key, center, radius) {
 			mesh.Unload()
 			delete(lod.tiles, key)
 		}
@@ -188,7 +183,7 @@ func (lod *webGPULODRenderer) draw(pass *wgpu.RenderPassEncoder, r *webGPUWorldR
 		select {
 		case result := <-lod.results:
 			delete(lod.pending, result.key)
-			if !lodTileInRange(result.key, center, radius) || !lodTileTouchesOutsideInner(result.key, camera, innerRadius) {
+			if !lodTileInRange(result.key, center, radius) {
 				continue
 			}
 			mesh, err := r.backend.UploadChecked(result.data.vertices, result.data.indices)
@@ -208,9 +203,6 @@ func (lod *webGPULODRenderer) draw(pass *wgpu.RenderPassEncoder, r *webGPUWorldR
 	scheduled := 0
 	for _, offset := range lod.radiusOffsets(radius) {
 		key := lodTileKey{center.X + offset.X, center.Z + offset.Z}
-		if !lodTileTouchesOutsideInner(key, camera, innerRadius) {
-			continue
-		}
 		min := mgl32.Vec3{float32(key.X * lodTileSize), 0, float32(key.Z * lodTileSize)}
 		max := min.Add(mgl32.Vec3{lodTileSize, chunkHeight, lodTileSize})
 		if !frustum.IntersectsAABB(min, max) {

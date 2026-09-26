@@ -51,6 +51,29 @@ func TestLODTileDeterministicAndNoWorldMutation(t *testing.T) {
 	}
 }
 
+func TestLODTreeSilhouettesAreBoundedAndTagged(t *testing.T) {
+	count := 0
+	for z := -2; z <= 2; z++ {
+		for x := -2; x <= 2; x++ {
+			key := lodTileKey{x, z}
+			tile := buildLODTile(1234511, key)
+			for _, v := range tile.vertices {
+				if v.Color[3] != 254 {
+					continue
+				}
+				count++
+				if v.Position[0] < float32(x*lodTileSize)-3 || v.Position[0] > float32((x+1)*lodTileSize)+3 ||
+					v.Position[2] < float32(z*lodTileSize)-3 || v.Position[2] > float32((z+1)*lodTileSize)+3 {
+					t.Fatalf("tree vertex outside tile margin: key=%v vertex=%v", key, v.Position)
+				}
+			}
+		}
+	}
+	if count == 0 {
+		t.Fatal("sample region contains no distant tree silhouettes")
+	}
+}
+
 func TestHorizonDistanceClamp(t *testing.T) {
 	for _, tc := range [][2]int{{-1, 0}, {0, 0}, {1, 32}, {64, 64}, {200, 128}} {
 		if got := clampHorizonDistance(tc[0]); got != tc[1] {

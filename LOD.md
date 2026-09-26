@@ -10,11 +10,15 @@ simplified, non-interactive terrain beyond it.
 
 - A 128×128-block LOD tile uses an 8-block grid (16×16 cells) sampled directly
   from the deterministic seed/terrain-column functions. It does not create or
-  retain `Chunk` objects, compute caves, light propagation, foliage or entities.
-- Land, biome surface colors and a flat water layer use compact WebGPU meshes.
-  Real chunks render over the distant surface; the LOD shader clips an inner
-  circle two chunks inside the full-detail radius. This allows a short overlap
-  while the normal mesh stream catches up.
+  retain `Chunk` objects, compute caves, light propagation or entities. One
+  deterministic tree candidate per cell adds a small trunk/crown silhouette in
+  wooded biomes; this is a density approximation, not the exact full-chunk tree.
+- Land, biome surface colors, tree silhouettes and a flat water layer use
+  compact WebGPU meshes. The distant ground remains beneath the full-detail
+  radius as a lowered underlay, so lagging chunk delivery does not leave an
+  empty ring. Approximate trees are hidden inside that radius; real chunks
+  render over the underlay. A 128-block-wide height transition avoids a hard
+  step where the full-detail radius ends.
 - Two CPU workers generate tiles. A bounded queue and at most four GPU uploads
   per frame prevent a long single-frame stall. Visible tiles are requested
   nearest-first; meshes outside the radius are unloaded. GPU creation, upload
@@ -24,8 +28,9 @@ simplified, non-interactive terrain beyond it.
   radii. The settings page cycles the horizon through Off/64/96/128 chunks;
   default is 96, independently of the 24-chunk full-detail default.
 
-`BenchmarkLODTileBuild` on an i7-14700HX measured roughly 0.70 ms and 60 KiB
-of temporary allocations per tile (two short runs). This is a CPU-only tile
+`BenchmarkLODTileBuild` on an i7-14700HX measured roughly 1.39 ms per tile
+with tree silhouettes (200 iterations; the previous bare-ground prototype
+measured about 0.70 ms). This is a CPU-only tile
 microbenchmark, not a gameplay FPS or full-horizon completion measurement.
 
 ## Checks
@@ -42,16 +47,17 @@ microbenchmark, not a gameplay FPS or full-horizon completion measurement.
 ## Deliberate limits before considering a main-branch merge
 
 - Distant terrain comes from the procedural seed, not persisted/edited chunk
-  snapshots. Player-built structures, mining, caves, trees and entity motion
-  are absent; edits outside the full-detail radius will not appear until their
+  snapshots. Player-built structures, mining, caves and entity motion are
+  absent; tree silhouettes approximate biome density but do not represent the
+  exact trees. Edits outside the full-detail radius will not appear until their
   real chunks load. Multiplayer therefore has no authoritative LOD updates yet.
 - One 8-block grid resolution is used throughout the far view. There is no
   multi-level quadtree, LOD disk cache or distant structure representation.
 - Biome colors are a small palette rather than averaged atlas textures. Water
   is an opaque, flat color, and transitions at shorelines/near-full meshes
   still need visual inspection in live play. The offscreen preview deliberately
-  contains no full chunks, so its inner clipped circle is a test fixture, not
-  a claimed final gameplay image.
+  contains no full chunks, so it verifies the fallback underlay but cannot
+  prove a seamless real-chunk handoff.
 - Full `RenderDistance=128` still requests complete chunks. For the intended
   experiment, keep full distance around 16–32 and use `Horizon=96/128`.
 

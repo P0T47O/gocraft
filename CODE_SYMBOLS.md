@@ -230,13 +230,13 @@
 
 类型：`lodBuildResult`、`webGPULODRenderer`
 
-函数/方法：`newWebGPULODRenderer`、`*webGPULODRenderer.buildLoop`、`*webGPULODRenderer.close`、`*webGPULODRenderer.radiusOffsets`、`lodTileInRange`、`lodTileTouchesOutsideInner`、`*webGPULODRenderer.draw`、`*webGPUWorldRenderer.drawDistantTerrain`
+函数/方法：`newWebGPULODRenderer`、`*webGPULODRenderer.buildLoop`、`*webGPULODRenderer.close`、`*webGPULODRenderer.radiusOffsets`、`lodTileInRange`、`*webGPULODRenderer.draw`、`*webGPUWorldRenderer.drawDistantTerrain`
 
 ## [lod_terrain.go](lod_terrain.go)
 
 类型：`lodTileKey`、`lodTileData`
 
-函数/方法：`lodSurfaceColor`、`buildLODTile`
+函数/方法：`lodSurfaceColor`、`buildLODTile`、`appendLODTreeCandidate`
 
 ## [main.go](main.go)
 

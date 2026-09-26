@@ -11,13 +11,13 @@ import (
 	"github.com/gogpu/wgpu"
 )
 
-func TestLODTileInnerClipPruning(t *testing.T) {
-	camera := webGPUCamera{Position: webGPUVec3{0, 70, 0}}
-	if lodTileTouchesOutsideInner(lodTileKey{0, 0}, camera, 300) {
-		t.Fatal("fully clipped inner tile should not be generated")
+func TestLODTileRangeIncludesNearUnderlay(t *testing.T) {
+	center := lodTileKey{0, 0}
+	if !lodTileInRange(center, center, 4) || !lodTileInRange(lodTileKey{4, 0}, center, 4) {
+		t.Fatal("LOD must cover the near field while full chunks are streaming")
 	}
-	if !lodTileTouchesOutsideInner(lodTileKey{2, 0}, camera, 300) || !lodTileTouchesOutsideInner(lodTileKey{-3, 0}, camera, 300) {
-		t.Fatal("overlapping boundary tile was discarded")
+	if lodTileInRange(lodTileKey{7, 0}, center, 4) {
+		t.Fatal("LOD tile outside horizon retained")
 	}
 }
 
