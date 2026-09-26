@@ -51,8 +51,15 @@ struct Output {
 `
 
 type lodBuildResult struct {
-	key  lodTileKey
-	data lodTileData
+	key     lodTileKey
+	version uint64
+	data    lodTileData
+}
+
+type lodBuildJob struct {
+	key       lodTileKey
+	version   uint64
+	overrides map[lodPoint]lodColumn
 }
 
 type webGPULODRenderer struct {
@@ -60,8 +67,9 @@ type webGPULODRenderer struct {
 	shader   *wgpu.ShaderModule
 	pipeline *wgpu.RenderPipeline
 	tiles    map[lodTileKey]platform.MeshHandle
-	pending  map[lodTileKey]bool
-	jobs     chan lodTileKey
+	versions map[lodTileKey]uint64
+	pending  map[lodTileKey]uint64
+	jobs     chan lodBuildJob
 	results  chan lodBuildResult
 	stop     chan struct{}
 	workers  sync.WaitGroup
@@ -71,8 +79,8 @@ type webGPULODRenderer struct {
 
 func newWebGPULODRenderer(r *webGPUWorldRenderer, seed uint32) (*webGPULODRenderer, error) {
 	lod := &webGPULODRenderer{
-		seed: seed, tiles: make(map[lodTileKey]platform.MeshHandle), pending: make(map[lodTileKey]bool),
-		jobs: make(chan lodTileKey, 32), results: make(chan lodBuildResult, 8), stop: make(chan struct{}),
+		seed: seed, tiles: make(map[lodTileKey]platform.MeshHandle), versions: make(map[lodTileKey]uint64), pending: make(map[lodTileKey]uint64),
+		jobs: make(chan lodBuildJob, 32), results: make(chan lodBuildResult, 8), stop: make(chan struct{}),
 	}
 	var err error
 	lod.shader, err = r.device.CreateShaderModule(&wgpu.ShaderModuleDescriptor{Label: "GoCraft distant terrain", WGSL: webGPULODShader})
@@ -110,13 +118,13 @@ func (lod *webGPULODRenderer) buildLoop() {
 		select {
 		case <-lod.stop:
 			return
-		case key := <-lod.jobs:
+		case job := <-lod.jobs:
 			select {
 			case <-lod.stop:
 				return
 			default:
 			}
-			result := lodBuildResult{key: key, data: buildLODTile(lod.seed, key)}
+			result := lodBuildResult{key: job.key, version: job.version, data: buildLODTileWithColumns(lod.seed, job.key, job.overrides)}
 			select {
 			case lod.results <- result:
 			case <-lod.stop:
@@ -168,7 +176,8 @@ func lodTileInRange(key, center lodTileKey, radius int) bool {
 	return dx*dx+dz*dz <= (radius+1)*(radius+1)
 }
 
-func (lod *webGPULODRenderer) draw(pass *wgpu.RenderPassEncoder, r *webGPUWorldRenderer, camera webGPUCamera, cache *worldRenderCache) error {
+func (lod *webGPULODRenderer) draw(pass *wgpu.RenderPassEncoder, r *webGPUWorldRenderer, camera webGPUCamera, world *World) error {
+	cache := &world.render
 	center := lodTileKey{int(math.Floor(float64(camera.Position.X) / lodTileSize)), int(math.Floor(float64(camera.Position.Z) / lodTileSize))}
 	radius := (horizonDistance()*chunkWidth + lodTileSize - 1) / lodTileSize
 	projection, view, _ := webGPUCameraMatrices(camera, r.width, r.height)
@@ -177,13 +186,16 @@ func (lod *webGPULODRenderer) draw(pass *wgpu.RenderPassEncoder, r *webGPUWorldR
 		if !lodTileInRange(key, center, radius) {
 			mesh.Unload()
 			delete(lod.tiles, key)
+			delete(lod.versions, key)
 		}
 	}
 	for i := 0; i < 4; i++ {
 		select {
 		case result := <-lod.results:
-			delete(lod.pending, result.key)
-			if !lodTileInRange(result.key, center, radius) {
+			if pending, ok := lod.pending[result.key]; ok && pending == result.version {
+				delete(lod.pending, result.key)
+			}
+			if !lodTileInRange(result.key, center, radius) || result.version != world.lodVersions[result.key] {
 				continue
 			}
 			mesh, err := r.backend.UploadChecked(result.data.vertices, result.data.indices)
@@ -194,6 +206,7 @@ func (lod *webGPULODRenderer) draw(pass *wgpu.RenderPassEncoder, r *webGPUWorldR
 				old.Unload()
 			}
 			lod.tiles[result.key] = mesh
+			lod.versions[result.key] = result.version
 		default:
 			i = 4
 		}
@@ -214,12 +227,15 @@ func (lod *webGPULODRenderer) draw(pass *wgpu.RenderPassEncoder, r *webGPUWorldR
 			}
 			cache.drawCalls++
 			cache.triangles += int(mesh.IndexCount()) / 3
-			continue
+			if lod.versions[key] == world.lodVersions[key] {
+				continue
+			}
 		}
-		if !lod.pending[key] && scheduled < 16 {
+		version := world.lodVersions[key]
+		if pending, ok := lod.pending[key]; (!ok || pending != version) && scheduled < 16 {
 			select {
-			case lod.jobs <- key:
-				lod.pending[key] = true
+			case lod.jobs <- lodBuildJob{key: key, version: version, overrides: world.snapshotLODTile(key)}:
+				lod.pending[key] = version
 				scheduled++
 			default:
 			}
@@ -246,5 +262,5 @@ func (r *webGPUWorldRenderer) drawDistantTerrain(pass *wgpu.RenderPassEncoder, w
 			return err
 		}
 	}
-	return r.lod.draw(pass, r, camera, &world.render)
+	return r.lod.draw(pass, r, camera, world)
 }

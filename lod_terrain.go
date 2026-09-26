@@ -23,8 +23,18 @@ func lodSurfaceColor(block byte) [4]uint8 {
 		return [4]uint8{211, 198, 142, 255}
 	case blockSnow:
 		return [4]uint8{226, 232, 228, 255}
-	case blockStone:
+	case blockStone, blockCobblestone, blockStoneSlab, blockCobbleStairs:
 		return [4]uint8{118, 120, 118, 255}
+	case blockPlank, blockPlankOak, blockPlankBirch, blockPlankSpruce, blockOakSlab, blockOakStairs:
+		return [4]uint8{150, 116, 75, 255}
+	case blockGlass, blockIronBlock, blockWhiteWool:
+		return [4]uint8{209, 215, 212, 255}
+	case blockObsidian:
+		return [4]uint8{43, 37, 57, 255}
+	case blockGoldBlock, blockGlowstone:
+		return [4]uint8{225, 183, 74, 255}
+	case blockDiamondBlock:
+		return [4]uint8{80, 205, 206, 255}
 	case blockGravel:
 		return [4]uint8{135, 130, 126, 255}
 	case blockIce:
@@ -38,6 +48,10 @@ func lodSurfaceColor(block byte) [4]uint8 {
 // full chunks, samples caves, or touches GPU/world state, so workers can build
 // these meshes without competing with the client chunk owner.
 func buildLODTile(seed uint32, key lodTileKey) lodTileData {
+	return buildLODTileWithColumns(seed, key, nil)
+}
+
+func buildLODTileWithColumns(seed uint32, key lodTileKey, overrides map[lodPoint]lodColumn) lodTileData {
 	const side = lodCellsPerTile + 1
 	data := lodTileData{
 		vertices: make([]platform.Vertex, 0, side*side+lodCellsPerTile*lodCellsPerTile*4),
@@ -50,10 +64,14 @@ func buildLODTile(seed uint32, key lodTileKey) lodTileData {
 		for x := 0; x < side; x++ {
 			wx, wz := baseX+x*lodCellSize, baseZ+z*lodCellSize
 			column := sampleTerrainColumn(seed, wx, wz)
-			heights[z][x], tops[z][x] = column.height, column.top
+			height, top := column.height, column.top
+			if changed, ok := overrides[lodPoint{wx, wz}]; ok {
+				height, top = changed.height, changed.top
+			}
+			heights[z][x], tops[z][x] = height, top
 			data.vertices = append(data.vertices, platform.Vertex{
-				Position: [3]float32{float32(wx), float32(column.height) - .65, float32(wz)},
-				Color:    lodSurfaceColor(column.top),
+				Position: [3]float32{float32(wx), float32(height) - .65, float32(wz)},
+				Color:    lodSurfaceColor(top),
 			})
 		}
 	}

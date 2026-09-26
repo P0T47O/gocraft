@@ -95,5 +95,8 @@ func (w *World) applyChunkPacket(p *PacketChunkData) bool {
 		perfMon.IncrementChunkLoad()
 	}
 	w.applyPendingEdits(chunkKey{cx, cz})
+	if geometryChanged || !c.lodCaptured {
+		w.recordChunkLODColumns(c, cx, cz)
+	}
 	return true
 }

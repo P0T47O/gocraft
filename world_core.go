@@ -30,6 +30,8 @@ type World struct {
 	nextMeshID   uint64
 	lightChanged map[chunkKey]bool
 	pendingEdits map[chunkKey][]blockEdit
+	lodColumns   map[lodPoint]lodColumn // Client-owned sparse deviations from seed terrain.
+	lodVersions  map[lodTileKey]uint64
 
 	// Entity System
 	entities   []Entity
@@ -81,6 +83,7 @@ type Chunk struct {
 	meshRetries          [sectionCount]byte // Track failures to prevent infinite retry loops
 	dirty                bool
 	generated            bool
+	lodCaptured          bool // Client snapshot taken for the current seed.
 	sectionDirty         []bool
 	pendingOpaque        []bool
 	pendingWater         []bool
@@ -384,6 +387,9 @@ func (w *World) SetBlockAt(x, y, z int, block byte) {
 	sec := sectionIndexForY(y)
 	chunk.invalidateMeshSection(sec)
 	chunk.mu.Unlock()
+	if w.IsClient && (chunk.lodCaptured || horizonDistance() > renderDistance()) && x%lodCellSize == 0 && z%lodCellSize == 0 {
+		w.recordLODColumn(chunk, x, z)
+	}
 	opacityChanged := lightOpaque(oldBlock, oldMeta) != lightOpaque(block, 0)
 	if emitsLight(oldBlock) || emitsLight(block) || opacityChanged {
 		w.updateBlockLight(x, y, z, oldBlock, block)
@@ -612,6 +618,13 @@ func (w *World) UnloadChunks(playerX, playerZ, radius int, onUnload func(int, in
 	w.chunksMu.RUnlock()
 
 	if len(toRemove) > 0 {
+		if w.IsClient && horizonDistance() > renderDistance() {
+			for _, key := range toRemove {
+				if chunk := w.getChunkIfGenerated(key.X, key.Z); chunk != nil && !chunk.lodCaptured {
+					w.recordChunkLODColumns(chunk, key.X, key.Z)
+				}
+			}
+		}
 		// Call onUnload callbacks before taking the write lock
 		if onUnload != nil {
 			for _, key := range toRemove {

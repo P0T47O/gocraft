@@ -228,15 +228,21 @@
 
 ## [lod_renderer_windows.go](lod_renderer_windows.go)
 
-类型：`lodBuildResult`、`webGPULODRenderer`
+类型：`lodBuildResult`、`lodBuildJob`、`webGPULODRenderer`
 
 函数/方法：`newWebGPULODRenderer`、`*webGPULODRenderer.buildLoop`、`*webGPULODRenderer.close`、`*webGPULODRenderer.radiusOffsets`、`lodTileInRange`、`*webGPULODRenderer.draw`、`*webGPUWorldRenderer.drawDistantTerrain`
+
+## [lod_state.go](lod_state.go)
+
+类型：`lodPoint`、`lodColumn`
+
+函数/方法：`lodSurfaceBlock`、`snapshotLODColumn`、`*World.recordLODColumn`、`*World.recordChunkLODColumns`、`*World.resetLODState`、`*World.snapshotLODTile`
 
 ## [lod_terrain.go](lod_terrain.go)
 
 类型：`lodTileKey`、`lodTileData`
 
-函数/方法：`lodSurfaceColor`、`buildLODTile`、`appendLODTree`
+函数/方法：`lodSurfaceColor`、`buildLODTile`、`buildLODTileWithColumns`、`appendLODTree`
 
 ## [main.go](main.go)
 

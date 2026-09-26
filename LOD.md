@@ -25,6 +25,14 @@ simplified, non-interactive terrain beyond it.
   nearest-first; meshes outside the radius are unloaded. GPU creation, upload
   and disposal remain on the render thread. Leaving the world releases its LOD
   meshes/workers even though the menu keeps the main renderer alive.
+- Incoming client chunks contribute only the 8-block-grid surface samples that
+  differ from the procedural seed. Decorations, natural tree leaves/logs and
+  liquids are ignored for this comparison. Subsequent edits at sampled points
+  refresh those columns; stale worker results are rejected by per-tile version
+  numbers. A tile is rebuilt in the background while its previous mesh stays
+  visible. Chunks first loaded while the horizon was disabled are sampled
+  before unloading if the horizon has since been enabled. These sparse deltas
+  survive ordinary chunk unloads but are cleared on world-seed change.
 - The view projection and boundary fog follow the larger of full and distant
   radii. The settings page cycles the horizon through Off/64/96/128 chunks;
   default is 96, independently of the 24-chunk full-detail default.
@@ -47,11 +55,14 @@ microbenchmark, not a gameplay FPS or full-horizon completion measurement.
 
 ## Deliberate limits before considering a main-branch merge
 
-- Distant terrain comes from the procedural seed, not persisted/edited chunk
-  snapshots. Player-built structures, mining, caves and entity motion are
-  absent; tree silhouettes occupy real generated tree positions but do not
-  reproduce every leaf block. Edits outside the full-detail radius will not appear until their
-  real chunks load. Multiplayer therefore has no authoritative LOD updates yet.
+- Distant terrain is a sampled heightfield, not a full chunk or structure
+  mesh. Server-sent edits at its grid points appear after the corresponding
+  chunk has been received, but details between those points, underground
+  caves, doors, vegetation edits and entities remain absent. Tree silhouettes
+  occupy real generated tree positions but do not reproduce every leaf block.
+  Natural logs/leaves are excluded from surface sampling, so log-only player
+  structures are also not yet represented. Unvisited distant edits cannot be
+  known without a separate server LOD protocol.
 - One 8-block grid resolution is used throughout the far view. There is no
   multi-level quadtree, LOD disk cache or distant structure representation.
 - Biome colors are a small palette rather than averaged atlas textures. Water

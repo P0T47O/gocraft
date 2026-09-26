@@ -39,6 +39,7 @@ func (p *ChunkPool) Put(c *Chunk) {
 // Reset clears the chunk data so it can be reused
 func (c *Chunk) Reset() {
 	c.lightDirtySections = 0
+	c.lodCaptured = false
 	c.instance = 0
 	c.sectionBlocks = [sectionCount]uint16{}
 	c.torches = c.torches[:0]

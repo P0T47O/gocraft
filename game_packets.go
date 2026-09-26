@@ -121,6 +121,9 @@ func handlePacket(pkt Packet) {
 		world.SetMetaAt(int(p.X), int(p.Y), int(p.Z), p.Meta)
 
 	case *PacketLogin:
+		if world.seed != p.Seed {
+			world.resetLODState()
+		}
 		world.seed = p.Seed
 		fmt.Printf("Synced with server seed: %d\n", p.Seed)
 

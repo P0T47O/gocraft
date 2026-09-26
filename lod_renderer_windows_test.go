@@ -49,11 +49,22 @@ func TestWebGPUDistantTerrainPreview(t *testing.T) {
 		t.Fatalf("no distant terrain drawn: renderer=%v drawCalls=%d", r.lod != nil, world.render.drawCalls)
 	}
 	img := captureNativePreview(t, r, frame.Width, frame.Height, func(pass *wgpu.RenderPassEncoder) error {
-		return r.lod.draw(pass, r, frame.Camera, &world.render)
+		return r.lod.draw(pass, r, frame.Camera, world)
 	})
 	path := filepath.Join("work", "lod-terrain.png")
 	saveNativePreview(t, img, path)
 	t.Logf("distant terrain preview: %s; ready tiles=%d", path, len(r.lod.tiles))
+	changedTile := lodTileKey{1, 1}
+	world.lodColumns = map[lodPoint]lodColumn{{128, 128}: {110, blockCobblestone}}
+	world.lodVersions = map[lodTileKey]uint64{changedTile: 1}
+	for time.Now().Before(deadline.Add(5*time.Second)) && r.lod.versions[changedTile] != 1 {
+		if err := r.DrawGameplay(world, frame, state); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if r.lod.versions[changedTile] != 1 {
+		t.Fatal("authoritative terrain edit did not rebuild its distant tile")
+	}
 	world.seed = 42
 	if err := r.DrawGameplay(world, frame, state); err != nil {
 		t.Fatal(err)
