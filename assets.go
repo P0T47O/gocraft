@@ -42,6 +42,11 @@ var allBlocks = []byte{
 	blockTNT,
 	blockBed,
 	blockWhiteWool,
+	blockOakSlab,
+	blockOakStairs,
+	blockStoneSlab,
+	blockCobbleStairs,
+	blockWoodDoor,
 	itemWheatSeeds,
 	itemWheat,
 	itemBread,
@@ -109,6 +114,9 @@ var allBlocks = []byte{
 	itemDiamondSword,
 	itemGoldSword,
 	itemBow,
+	itemShears,
+	itemFlint,
+	itemFeather,
 
 	// Resources
 	itemCoal,

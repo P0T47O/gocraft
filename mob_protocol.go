@@ -13,6 +13,7 @@ type PacketMobState struct {
 	Yaw                   float32
 	Health, Hurt, Death   int
 	Baby                  bool
+	Sheared               bool
 }
 
 func (*PacketMobState) ID() int32 { return 0x1D }
@@ -34,7 +35,7 @@ func (p *PacketMobState) Decode(r *bytes.Buffer) error {
 	return json.Unmarshal([]byte(b), p)
 }
 func (m *MobEntity) snapshot() *PacketMobState {
-	return &PacketMobState{IDString: m.UUID, Kind: m.Kind, State: m.State, X: m.X, Y: m.Y, Z: m.Z, Yaw: m.Yaw, Health: m.Health, Hurt: m.Hurt, Death: m.Death, Baby: m.BabyTicks > 0}
+	return &PacketMobState{IDString: m.UUID, Kind: m.Kind, State: m.State, X: m.X, Y: m.Y, Z: m.Z, Yaw: m.Yaw, Health: m.Health, Hurt: m.Hurt, Death: m.Death, Baby: m.BabyTicks > 0, Sheared: m.Sheared}
 }
 
 type PacketAttackMob struct{ Target string }

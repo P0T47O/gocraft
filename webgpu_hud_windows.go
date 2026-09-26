@@ -306,6 +306,16 @@ func (b *webGPUHUDBuilder) addBlockIcon(block byte, x, y, size float32) {
 	if def == nil || def.ID == blockAir || def.Textures.Top == "" {
 		return
 	}
+	if block == blockWoodDoor {
+		if uv, ok := assets.atlas.UVs[GetItem(block).Icon]; ok {
+			pad := size * .1
+			b.texturedRect(x+pad, y+pad, size-2*pad, size-2*pad, uv.X, uv.Y, uv.X+uv.Width, uv.Y+uv.Height, [4]float32{1, 1, 1, 1})
+			return
+		}
+	}
+	if isShapedBlock(block) && b.addShapedIcon(def, x, y, size) {
+		return
+	}
 	if (def.RenderType == RenderTypeCube || def.RenderType == RenderTypeCutout || def.RenderType == RenderTypeGlass || def.RenderType == RenderTypeLiquid) &&
 		b.addCubeIcon(def, x, y, size) {
 		return
@@ -320,6 +330,29 @@ func (b *webGPUHUDBuilder) addBlockIcon(block byte, x, y, size float32) {
 		tint = b.iconTints.foliage
 	}
 	b.texturedRect(x+pad, y+pad, size-pad*2, size-pad*2, uv.X, uv.Y, uv.X+uv.Width, uv.Y+uv.Height, tint)
+}
+
+// Use the same boxes as world geometry so slabs, stairs and doors are not
+// represented by a misleading full cube in the hotbar or inventory.
+func (b *webGPUHUDBuilder) addShapedIcon(def *BlockDef, x, y, size float32) bool {
+	atlas := assets.atlas.UVs
+	top, okTop := atlas[def.Textures.Top]
+	left, okLeft := atlas[def.Textures.South]
+	right, okRight := atlas[def.Textures.East]
+	if !okTop || !okLeft || !okRight {
+		return false
+	}
+	project := func(px, py, pz float32) [2]float32 {
+		return [2]float32{x + size*(.5+.372*(px-pz)), y + size*(.5+.215*(px+pz)-.43*py)}
+	}
+	boxes, count := shapeBoxes(def.ID, faceNorth)
+	for _, box := range boxes[:count] {
+		lx, ly, lz, hx, hy, hz := box.minX, box.minY, box.minZ, box.maxX, box.maxY, box.maxZ
+		b.texturedQuad([4][2]float32{project(lx, hy, hz), project(hx, hy, hz), project(hx, ly, hz), project(lx, ly, hz)}, left, [4]float32{.70, .70, .70, 1})
+		b.texturedQuad([4][2]float32{project(hx, hy, hz), project(hx, hy, lz), project(hx, ly, lz), project(hx, ly, hz)}, right, [4]float32{.84, .84, .84, 1})
+		b.texturedQuad([4][2]float32{project(lx, hy, lz), project(hx, hy, lz), project(hx, hy, hz), project(lx, hy, hz)}, top, [4]float32{1, 1, 1, 1})
+	}
+	return true
 }
 
 func (b *webGPUHUDBuilder) addCubeIcon(def *BlockDef, x, y, size float32) bool {

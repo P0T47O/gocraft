@@ -30,7 +30,10 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 	case *PacketAttackMob:
 		s.attackMob(s.findPlayerEntity(wrap.From), p.Target)
 	case *PacketInteractMob:
-		s.feedMob(s.findPlayerEntity(wrap.From), p.Target)
+		player := s.findPlayerEntity(wrap.From)
+		if !s.shearMob(player, p.Target) {
+			s.feedMob(player, p.Target)
+		}
 	case *PacketContainerClick:
 		s.clickContainer(s.findPlayerEntity(wrap.From), p)
 	case *PacketRespawn:
@@ -266,6 +269,9 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 		if s.useBed(player, pos) {
 			return
 		}
+		if s.toggleDoor(pos) {
+			return
+		}
 		if s.World.BlockAt(int(p.X), int(p.Y), int(p.Z)) == blockTNT {
 			s.igniteTNT(int(p.X), int(p.Y), int(p.Z), tntFuseTicks)
 			return
@@ -350,7 +356,9 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 		}
 
 		old := s.World.BlockAt(int(p.X), int(p.Y), int(p.Z))
-		if p.BlockID != blockAir && (p.BlockID >= 100 || GetBlock(p.BlockID).ID == blockAir || (old != blockAir && old != blockWater)) {
+		oldMeta := s.World.MetaAt(int(p.X), int(p.Y), int(p.Z))
+		mergeSlab := isSlab(p.BlockID) && old == p.BlockID && (oldMeta == 0 || oldMeta == shapeUpper) && p.Meta == shapeDouble
+		if p.BlockID != blockAir && (p.BlockID >= 100 || GetBlock(p.BlockID).ID == blockAir || (old != blockAir && old != blockWater && !mergeSlab)) {
 			s.BroadcastTo(wrap.From, &PacketBlockChange{X: p.X, Y: p.Y, Z: p.Z, BlockID: old, Meta: s.World.MetaAt(int(p.X), int(p.Y), int(p.Z))})
 			return
 		}
@@ -358,8 +366,16 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 			s.BroadcastTo(wrap.From, &PacketBlockChange{X: p.X, Y: p.Y, Z: p.Z, BlockID: old, Meta: s.World.MetaAt(int(p.X), int(p.Y), int(p.Z))})
 			return
 		}
+		if p.BlockID != blockAir && !validPlacementMeta(p.BlockID, p.Meta) && !mergeSlab {
+			s.BroadcastTo(wrap.From, &PacketBlockChange{X: p.X, Y: p.Y, Z: p.Z, BlockID: old, Meta: s.World.MetaAt(int(p.X), int(p.Y), int(p.Z))})
+			return
+		}
 		if p.BlockID == blockBed && (p.Y <= 0 || !GetBlock(s.World.BlockAt(int(p.X), int(p.Y)-1, int(p.Z))).IsCollidable) {
 			s.BroadcastTo(wrap.From, &PacketBlockChange{X: p.X, Y: p.Y, Z: p.Z, BlockID: old})
+			return
+		}
+		if p.BlockID == blockWoodDoor && (old != blockAir || !s.World.canPlaceDoor(int(p.X), int(p.Y), int(p.Z))) {
+			s.BroadcastTo(wrap.From, &PacketBlockChange{X: p.X, Y: p.Y, Z: p.Z, BlockID: old, Meta: oldMeta})
 			return
 		}
 		if p.BlockID != blockAir {
@@ -384,7 +400,7 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 					if !player.Inventory.Consume(int32(p.BlockID), 1) {
 						// Failed to consume (cheating? lag?), revert client block
 						fmt.Printf("Player %s tried to place Block %d without item.\n", wrap.From, p.BlockID)
-						s.BroadcastTo(wrap.From, &PacketBlockChange{X: p.X, Y: p.Y, Z: p.Z, BlockID: old})
+						s.BroadcastTo(wrap.From, &PacketBlockChange{X: p.X, Y: p.Y, Z: p.Z, BlockID: old, Meta: oldMeta})
 						return
 					}
 				}
@@ -426,11 +442,15 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 					if dropID == 0 {
 						dropID = blockDef.ID // Drop self by default
 					}
+					if oldBlockID == blockGravel && rand.Intn(10) == 0 {
+						dropID = itemFlint
+					}
 
 					count := blockDef.DropCount
 					if count <= 0 {
 						count = 1
 					}
+					count *= slabDropCount(oldBlockID, s.World.MetaAt(int(p.X), int(p.Y), int(p.Z)))
 
 					if dropID != 0 {
 						// Spawn Item Entity
@@ -483,10 +503,22 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 		// Validation logic would go here
 		fmt.Printf("Server: Block set at %d %d %d\n", p.X, p.Y, p.Z)
 		s.World.SetBlockAt(int(p.X), int(p.Y), int(p.Z), p.BlockID)
-		if p.BlockID != blockTorch || p.Meta > 4 {
+		if p.BlockID == blockChest || p.BlockID == blockFurnace || isStair(p.BlockID) || p.BlockID == blockWoodDoor {
+			p.Meta = placementMeta(p.BlockID, player.Yaw, p.Meta&shapeUpper != 0)
+		} else if p.BlockID != blockTorch && !isSlab(p.BlockID) {
 			p.Meta = 0
 		}
 		s.World.SetMetaAt(int(p.X), int(p.Y), int(p.Z), p.Meta)
+		if p.BlockID == blockAir {
+			s.removeUnsupportedDoorAbove(int(p.X), int(p.Y), int(p.Z), player.GameMode == ModeSurvival)
+		}
+		if p.BlockID == blockWoodDoor {
+			s.World.SetBlockAt(int(p.X), int(p.Y)+1, int(p.Z), blockWoodDoor)
+			s.World.SetMetaAt(int(p.X), int(p.Y)+1, int(p.Z), p.Meta|shapeUpper)
+			s.Broadcast(&PacketBlockChange{X: p.X, Y: p.Y + 1, Z: p.Z, BlockID: blockWoodDoor, Meta: p.Meta | shapeUpper})
+		} else if p.BlockID == blockAir && old == blockWoodDoor {
+			s.removeOtherDoorHalf(int(p.X), int(p.Y), int(p.Z), oldMeta)
+		}
 		s.scheduleFluidAround(BlockPos{p.X, p.Y, p.Z})
 
 		// Broadcast to all clients (including sender for confirmation, or skip sender)

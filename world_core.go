@@ -195,6 +195,9 @@ func (w *World) PlaceAdjacent(hit hitInfo, block byte) (int, int, int, bool) {
 	if w.BlockAt(nx, ny, nz) != blockAir && w.BlockAt(nx, ny, nz) != blockWater {
 		return 0, 0, 0, false
 	}
+	if block == blockWoodDoor && !w.canPlaceDoor(nx, ny, nz) {
+		return 0, 0, 0, false
+	}
 	if block == blockTorch {
 		if hit.normal.Y < 0 {
 			return 0, 0, 0, false
@@ -300,16 +303,33 @@ func (w *World) SetMetaAt(x, y, z int, meta byte) {
 		return
 	}
 	chunk.mu.Lock()
-	if chunk.meta.Get(lx, y, lz) == meta {
+	oldMeta := chunk.meta.Get(lx, y, lz)
+	if oldMeta == meta {
 		chunk.mu.Unlock()
 		return
 	}
+	block := chunk.blocks.Get(lx, y, lz)
 	chunk.meta.Set(lx, y, lz, meta)
 	chunk.dirty = true
 	ensureChunkSections(chunk)
 	sec := sectionIndexForY(y)
 	chunk.invalidateMeshSection(sec)
 	chunk.mu.Unlock()
+	if lightOpaque(block, oldMeta) != lightOpaque(block, meta) {
+		w.updateBlockLight(x, y, z, block, block)
+		w.updateSkyLight(x, y, z)
+	}
+	if isStair(block) {
+		for _, neighbor := range [...]struct{ dx, dz int }{{-1, 0}, {1, 0}, {0, -1}, {0, 1}} {
+			nx, nz := x+neighbor.dx, z+neighbor.dz
+			if divFloor(nx, chunkWidth) == cx && divFloor(nz, chunkWidth) == cz {
+				continue
+			}
+			ncx, ncz := divFloor(nx, chunkWidth), divFloor(nz, chunkWidth)
+			w.markChunkSectionDirty(ncx, ncz, sec)
+			w.requestImmediateMesh(ncx, ncz, sec)
+		}
+	}
 	w.requestImmediateMesh(cx, cz, sec)
 	w.dirty = true
 }
@@ -333,6 +353,7 @@ func (w *World) SetBlockAt(x, y, z int, block byte) {
 		chunk.mu.Unlock()
 		return
 	}
+	oldMeta := chunk.meta.Get(lx, y, lz)
 	chunk.blocks.Set(lx, y, lz, block)
 	if oldBlock == blockAir {
 		chunk.sectionBlocks[y/sectionHeight]++
@@ -363,7 +384,7 @@ func (w *World) SetBlockAt(x, y, z int, block byte) {
 	sec := sectionIndexForY(y)
 	chunk.invalidateMeshSection(sec)
 	chunk.mu.Unlock()
-	opacityChanged := isOpaqueBlock(oldBlock) != isOpaqueBlock(block)
+	opacityChanged := lightOpaque(oldBlock, oldMeta) != lightOpaque(block, 0)
 	if emitsLight(oldBlock) || emitsLight(block) || opacityChanged {
 		w.updateBlockLight(x, y, z, oldBlock, block)
 	}

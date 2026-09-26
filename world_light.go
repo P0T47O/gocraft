@@ -1,6 +1,9 @@
 package main
 
 func isOpaqueBlock(block byte) bool { return GetBlock(block).IsOpaque }
+func lightOpaque(block, meta byte) bool {
+	return isOpaqueBlock(block) || isSlab(block) && meta&shapeDouble != 0
+}
 func lightEmission(block byte) byte { return GetBlock(block).LightLevel }
 func emitsLight(block byte) bool    { return lightEmission(block) > 0 }
 
@@ -50,7 +53,7 @@ func initializeChunkLighting(c *Chunk) {
 			open := true
 			for y := chunkHeight - 1; y >= 0; y-- {
 				block := c.blocks.Get(x, y, z)
-				if isOpaqueBlock(block) {
+				if lightOpaque(block, c.meta.Get(x, y, z)) {
 					open = false
 				}
 				if !open {
@@ -68,7 +71,7 @@ func initializeChunkLighting(c *Chunk) {
 	for x := 0; x < chunkWidth; x++ {
 		for y := 0; y < chunkHeight; y++ {
 			for z := 0; z < chunkWidth; z++ {
-				if c.skyLight.Get(x, y, z) != 0 || isOpaqueBlock(c.blocks.Get(x, y, z)) {
+				if c.skyLight.Get(x, y, z) != 0 || lightOpaque(c.blocks.Get(x, y, z), c.meta.Get(x, y, z)) {
 					continue
 				}
 				p := lightPos{x, y, z}
@@ -100,7 +103,7 @@ func spreadLocalLight(c *Chunk, light *chunkPlane, queue []lightPos) {
 		} // Guard before unsigned subtraction.
 		for _, d := range lightDirections {
 			n := p.add(d)
-			if !localLightPos(n) || isOpaqueBlock(c.blocks.Get(n.x, n.y, n.z)) {
+			if !localLightPos(n) || lightOpaque(c.blocks.Get(n.x, n.y, n.z), c.meta.Get(n.x, n.y, n.z)) {
 				continue
 			}
 			if light.Get(n.x, n.y, n.z) < level-1 {
@@ -160,7 +163,7 @@ func (c *lightChunkCache) directSky(x, y, z int) bool {
 		c.known[x][z] = true
 		c.top[x][z] = -1
 		for cy := chunkHeight - 1; cy >= 0; cy-- {
-			if isOpaqueBlock(c.c.blocks.Get(x, cy, z)) {
+			if lightOpaque(c.c.blocks.Get(x, cy, z), c.c.meta.Get(x, cy, z)) {
 				c.top[x][z] = cy
 				break
 			}
@@ -240,7 +243,7 @@ func (u *lightUpdate) desired(p lightPos, sky bool) byte {
 	if sky {
 		value = 0
 	}
-	if !isOpaqueBlock(block) {
+	if !lightOpaque(block, c.c.meta.Get(x, p.y, z)) {
 		if sky && c.directSky(x, p.y, z) {
 			return 15
 		}
@@ -315,8 +318,8 @@ func (u *lightUpdate) stitch(cx, cz int) {
 		}
 		as, bs := int(ac.c.skyLight.Get(ax, a.y, az)), int(bc.c.skyLight.Get(bx, b.y, bz))
 		al, bl := int(ac.c.blockLight.Get(ax, a.y, az)), int(bc.c.blockLight.Get(bx, b.y, bz))
-		toA := !isOpaqueBlock(ac.c.blocks.Get(ax, a.y, az)) && (bs > as+1 || bl > al+1)
-		toB := !isOpaqueBlock(bc.c.blocks.Get(bx, b.y, bz)) && (as > bs+1 || al > bl+1)
+		toA := !lightOpaque(ac.c.blocks.Get(ax, a.y, az), ac.c.meta.Get(ax, a.y, az)) && (bs > as+1 || bl > al+1)
+		toB := !lightOpaque(bc.c.blocks.Get(bx, b.y, bz), bc.c.meta.Get(bx, b.y, bz)) && (as > bs+1 || al > bl+1)
 		if toA || toB {
 			seeds = append(seeds, a, b)
 		}

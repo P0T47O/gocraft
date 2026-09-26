@@ -16,6 +16,8 @@ type MobEntity struct {
 	AvoidTicks                                int
 	AvoidYaw                                  float32
 	LoveTicks, BreedCooldown, BabyTicks       int
+	Sheared                                   bool
+	ShearCooldown                             int
 }
 
 func newMob(kind, id string, x, y, z float64) *MobEntity {

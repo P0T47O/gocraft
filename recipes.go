@@ -255,6 +255,13 @@ func InitRecipes() {
 	}
 	RegisterRecipe(65, &Recipe{Ingredients: []Item{{ID: int32(itemStick), Count: 3}, {ID: int32(itemString), Count: 3}}, Result: Item{ID: int32(itemBow), Count: 1}, Station: blockCraftingTable})
 	RegisterRecipe(66, &Recipe{Ingredients: []Item{{ID: int32(blockWhiteWool), Count: 3}, {ID: int32(blockPlankOak), Count: 3}}, Result: Item{ID: int32(blockBed), Count: 1}, Station: blockCraftingTable})
+	RegisterRecipe(67, &Recipe{Ingredients: []Item{{ID: int32(blockPlankOak), Count: 3}}, Result: Item{ID: int32(blockOakSlab), Count: 6}, Station: blockCraftingTable})
+	RegisterRecipe(68, &Recipe{Ingredients: []Item{{ID: int32(blockPlankOak), Count: 6}}, Result: Item{ID: int32(blockOakStairs), Count: 4}, Station: blockCraftingTable})
+	RegisterRecipe(69, &Recipe{Ingredients: []Item{{ID: int32(blockStone), Count: 3}}, Result: Item{ID: int32(blockStoneSlab), Count: 6}, Station: blockCraftingTable})
+	RegisterRecipe(70, &Recipe{Ingredients: []Item{{ID: int32(blockCobblestone), Count: 6}}, Result: Item{ID: int32(blockCobbleStairs), Count: 4}, Station: blockCraftingTable})
+	RegisterRecipe(71, &Recipe{Ingredients: []Item{{ID: int32(itemIronIngot), Count: 2}}, Result: Item{ID: int32(itemShears), Count: 1}, Station: blockCraftingTable})
+	RegisterRecipe(72, &Recipe{Ingredients: []Item{{ID: int32(itemFlint), Count: 1}, {ID: int32(itemStick), Count: 1}, {ID: int32(itemFeather), Count: 1}}, Result: Item{ID: int32(itemArrow), Count: 4}, Station: blockCraftingTable})
+	RegisterRecipe(73, &Recipe{Ingredients: []Item{{ID: int32(blockPlankOak), Count: 6}}, Result: Item{ID: int32(blockWoodDoor), Count: 3}, Station: blockCraftingTable})
 }
 
 // GetCraftableRecipes returns recipes that can be crafted with the given inventory

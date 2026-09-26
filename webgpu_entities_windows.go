@@ -212,6 +212,9 @@ func (b *webGPUEntityBatch) addPrimedTNT(e *RemoteEntity, now float32) {
 		return
 	}
 	color := [4]uint8{255, 255, 255, 255}
+	if e.MobKind == "sheep" && e.MobSheared {
+		color = [4]uint8{185, 185, 185, 255}
+	}
 	if int(now*8)%2 == 0 {
 		color = [4]uint8{255, 145, 125, 255}
 	}

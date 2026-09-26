@@ -68,7 +68,21 @@ func (s *Server) explode(x, y, z, radius float64, damage int, cause string) {
 	}
 	s.World.entitiesMu.Unlock()
 	removed := make([]BlockPos, 0, 256)
+	removedSet := make(map[BlockPos]struct{}, 256)
 	chain := make([]BlockPos, 0, 8)
+	removeBlock := func(bx, by, bz int) {
+		pos := BlockPos{int32(bx), int32(by), int32(bz)}
+		if by < 0 || by >= chunkHeight || s.World.BlockAt(bx, by, bz) == blockAir {
+			return
+		}
+		if _, exists := removedSet[pos]; exists {
+			return
+		}
+		s.World.SetBlockAt(bx, by, bz, blockAir)
+		s.scheduleFluidAround(pos)
+		removedSet[pos] = struct{}{}
+		removed = append(removed, pos)
+	}
 	minX, maxX := int(math.Floor(x-radius)), int(math.Floor(x+radius))
 	minY, maxY := max(0, int(math.Floor(y-radius))), min(chunkHeight-1, int(math.Floor(y+radius)))
 	minZ, maxZ := int(math.Floor(z-radius)), int(math.Floor(z+radius))
@@ -101,9 +115,22 @@ func (s *Server) explode(x, y, z, radius float64, damage int, cause string) {
 				if containerSize(block) > 0 {
 					s.breakContainer(pos)
 				}
-				s.World.SetBlockAt(bx, by, bz, blockAir)
-				s.scheduleFluidAround(pos)
-				removed = append(removed, pos)
+				if block == blockWoodDoor {
+					meta := s.World.MetaAt(bx, by, bz)
+					otherY := doorOtherY(by, meta)
+					if s.World.BlockAt(bx, otherY, bz) == blockWoodDoor && s.World.MetaAt(bx, otherY, bz)&shapeUpper != meta&shapeUpper && s.World.MetaAt(bx, otherY, bz)&3 == meta&3 {
+						removeBlock(bx, otherY, bz)
+					}
+				}
+				// Removing a supporting block must also remove both door halves,
+				// even when the door itself lies just outside the blast sphere.
+				if s.World.BlockAt(bx, by+1, bz) == blockWoodDoor && s.World.MetaAt(bx, by+1, bz)&shapeUpper == 0 {
+					if s.World.BlockAt(bx, by+2, bz) == blockWoodDoor && s.World.MetaAt(bx, by+2, bz)&shapeUpper != 0 {
+						removeBlock(bx, by+2, bz)
+					}
+					removeBlock(bx, by+1, bz)
+				}
+				removeBlock(bx, by, bz)
 			}
 		}
 	}

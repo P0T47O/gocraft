@@ -70,7 +70,10 @@ fn sample_atlas(uv: vec2f) -> vec4f {
     // remain nearest-neighbor. Evaluate derivatives before any varying branch.
     let size = vec2f(textureDimensions(atlas_tex, 0));
     let footprint = max(length(dpdx(uv) * size), length(dpdy(uv) * size));
-    let filtered = textureSample(atlas_tex, atlas_sampler, uv);
+    // The 16px tile atlas loses its last recognizable detail too early with
+    // the hardware's neutral mip choice. Keep half a mip level of detail;
+    // anisotropic filtering still handles grazing-angle footprints.
+    let filtered = textureSampleBias(atlas_tex, atlas_sampler, uv, -0.5);
     if footprint <= 1.0 {
         let pixel = clamp(vec2i(floor(uv * size)), vec2i(0), vec2i(size) - vec2i(1));
         return textureLoad(atlas_tex, pixel, 0);
@@ -129,12 +132,15 @@ type webGPUWorldRenderer struct {
 	filterAF                int
 	depthTexture            *wgpu.Texture
 	depthView               *wgpu.TextureView
+	msaaTexture             *wgpu.Texture
+	msaaView                *wgpu.TextureView
+	worldSamples            uint32
 	width, height           uint32
 	surfaceNeedsReconfigure bool
 	camera                  webGPUCamera
 }
 
-func newWebGPUWorldRenderer(hwnd uintptr, assets *RenderAssets, width, height uint32) (*webGPUWorldRenderer, error) {
+func newWebGPUWorldRenderer(hwnd uintptr, assets *RenderAssets, width, height uint32, samples ...uint32) (*webGPUWorldRenderer, error) {
 	if hwnd == 0 {
 		return nil, fmt.Errorf("native window handle is null")
 	}
@@ -143,7 +149,10 @@ func newWebGPUWorldRenderer(hwnd uintptr, assets *RenderAssets, width, height ui
 		return nil, fmt.Errorf("build block atlas: %w", err)
 	}
 
-	r := &webGPUWorldRenderer{width: max(uint32(1), width), height: max(uint32(1), height)}
+	r := &webGPUWorldRenderer{width: max(uint32(1), width), height: max(uint32(1), height), worldSamples: 1}
+	if len(samples) > 0 && samples[0] == 4 {
+		r.worldSamples = 4
+	}
 	fail := func(err error) (*webGPUWorldRenderer, error) {
 		r.closeResources(false)
 		return nil, err
@@ -204,6 +213,9 @@ func newWebGPUWorldRenderer(hwnd uintptr, assets *RenderAssets, width, height ui
 }
 
 func (r *webGPUWorldRenderer) createPipelineResources(atlas *webGPUBlockAtlas) error {
+	if r.worldSamples == 0 {
+		r.worldSamples = 1 // GPU-only fixtures construct the renderer without a surface.
+	}
 	var err error
 	r.shader, err = r.device.CreateShaderModule(&wgpu.ShaderModuleDescriptor{Label: "GoCraft WebGPU world shader", WGSL: webGPUWorldShader})
 	if err != nil {
@@ -302,7 +314,7 @@ func (r *webGPUWorldRenderer) createPipelineResources(atlas *webGPUBlockAtlas) e
 		}},
 	}
 	primitive := gputypes.PrimitiveState{Topology: gputypes.PrimitiveTopologyTriangleList, FrontFace: gputypes.FrontFaceCCW, CullMode: gputypes.CullModeNone}
-	multisample := gputypes.MultisampleState{Count: 1, Mask: 0xFFFFFFFF}
+	multisample := gputypes.MultisampleState{Count: r.worldSamples, Mask: 0xFFFFFFFF}
 
 	opaqueDescriptor := &wgpu.RenderPipelineDescriptor{
 		Label:     "GoCraft WebGPU opaque world pipeline",
@@ -368,12 +380,34 @@ func (r *webGPUWorldRenderer) configureSurface() error {
 		r.depthTexture.Release()
 		r.depthTexture = nil
 	}
+	if r.msaaView != nil {
+		r.msaaView.Release()
+		r.msaaView = nil
+	}
+	if r.msaaTexture != nil {
+		r.msaaTexture.Release()
+		r.msaaTexture = nil
+	}
 	var err error
+	if r.worldSamples > 1 {
+		r.msaaTexture, err = r.device.CreateTexture(&wgpu.TextureDescriptor{
+			Label: "GoCraft multisampled world color", Size: wgpu.Extent3D{Width: r.width, Height: r.height, DepthOrArrayLayers: 1},
+			MipLevelCount: 1, SampleCount: r.worldSamples, Dimension: gputypes.TextureDimension2D,
+			Format: r.format, Usage: gputypes.TextureUsageRenderAttachment,
+		})
+		if err != nil {
+			return fmt.Errorf("create WebGPU multisampled color: %w", err)
+		}
+		r.msaaView, err = r.device.CreateTextureView(r.msaaTexture, nil)
+		if err != nil {
+			return fmt.Errorf("create WebGPU multisampled color view: %w", err)
+		}
+	}
 	r.depthTexture, err = r.device.CreateTexture(&wgpu.TextureDescriptor{
 		Label:         "GoCraft WebGPU world depth",
 		Size:          wgpu.Extent3D{Width: r.width, Height: r.height, DepthOrArrayLayers: 1},
 		MipLevelCount: 1,
-		SampleCount:   1,
+		SampleCount:   r.worldSamples,
 		Dimension:     gputypes.TextureDimension2D,
 		Format:        webGPUWorldDepthFormat,
 		Usage:         gputypes.TextureUsageRenderAttachment,
@@ -426,6 +460,14 @@ func (r *webGPUWorldRenderer) closeResources(resetBackend bool) {
 	if r.depthTexture != nil {
 		r.depthTexture.Release()
 		r.depthTexture = nil
+	}
+	if r.msaaView != nil {
+		r.msaaView.Release()
+		r.msaaView = nil
+	}
+	if r.msaaTexture != nil {
+		r.msaaTexture.Release()
+		r.msaaTexture = nil
 	}
 	if r.translucentPipeline != nil {
 		r.translucentPipeline.Release()

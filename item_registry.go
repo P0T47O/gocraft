@@ -159,6 +159,9 @@ func migratePlayerItems(p *PlayerEntity) {
 
 func initItemRegistry() {
 	initBlockItems()
+	// Door inventory art is a readable item sprite, while its placed block keeps
+	// the two independently textured world halves.
+	Items[blockWoodDoor].Icon = "textures/item/oak_door.png"
 	// Tool definitions.
 	registerTool := func(id byte, name string, tex string) {
 		Items[id] = &ItemDef{ID: id, Name: name, Icon: tex, MaxStack: 64}
@@ -253,6 +256,9 @@ func initItemRegistry() {
 	registerItem(itemRottenFlesh, "Rotten Flesh", "textures/item/rotten_flesh.png")
 	registerItem(itemBone, "Bone", "textures/item/bone.png")
 	registerItem(itemArrow, "Arrow", "textures/item/arrow.png")
+	registerItem(itemFlint, "Flint", "textures/item/flint.png")
+	registerItem(itemFeather, "Feather", "textures/item/feather.png")
+	Items[itemShears] = &ItemDef{ID: itemShears, Name: "Shears", Icon: "textures/item/shears.png", MaxStack: 1, MaxDurability: 238}
 	registerItem(itemString, "String", "textures/item/string.png")
 	registerItem(itemGunpowder, "Gunpowder", "textures/item/gunpowder.png")
 	registerItem(itemWheatSeeds, "Wheat Seeds", "textures/item/wheat_seeds.png")

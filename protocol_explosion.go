@@ -17,7 +17,7 @@ type PacketExplosion struct {
 func (p *PacketExplosion) ID() int32 { return IDExplosion }
 
 func (p *PacketExplosion) Encode(w *bytes.Buffer) error {
-	if len(p.Removed) > 1024 {
+	if len(p.Removed) > 2048 {
 		return fmt.Errorf("explosion too large: %d blocks", len(p.Removed))
 	}
 	for _, v := range []float64{p.X, p.Y, p.Z} {
@@ -54,7 +54,7 @@ func (p *PacketExplosion) Decode(r *bytes.Buffer) error {
 	if err := binary.Read(r, binary.BigEndian, &count); err != nil {
 		return err
 	}
-	if count > 1024 || r.Len() < int(count)*12 {
+	if count > 2048 || r.Len() < int(count)*12 {
 		return fmt.Errorf("invalid explosion block count: %d", count)
 	}
 	p.Removed = make([]BlockPos, count)

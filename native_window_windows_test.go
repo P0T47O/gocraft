@@ -57,7 +57,7 @@ func TestNativeWebGPUWindow(t *testing.T) {
 	initBlockRegistry()
 	InitRecipes()
 	a := newWebGPUCPUAssets()
-	r, err := newWebGPUWorldRenderer(w.hwnd, a, uint32(w.width), uint32(w.height))
+	r, err := newWebGPUWorldRenderer(w.hwnd, a, uint32(w.width), uint32(w.height), uint32(normalizeMSAASamples(LoadSettings().MSAASamples)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -250,6 +250,14 @@ func TestNativeWebGPUWindow(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	settings.MSAASamples = 1
+	if err = ensureExperimentalWebGPURenderer(); err != nil {
+		t.Fatalf("change MSAA after leaving world: %v", err)
+	}
+	if activeWebGPUWorldRenderer == r || activeWebGPUWorldRenderer.worldSamples != 1 {
+		t.Fatal("MSAA setting did not recreate the retained menu renderer")
+	}
+	closeExperimentalWebGPURenderer()
 	nativeWindowProc(w.hwnd, 0x10, 0, 0)
 	if !w.closed {
 		t.Fatal("close request not recorded")

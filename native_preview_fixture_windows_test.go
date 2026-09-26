@@ -12,7 +12,7 @@ import (
 
 // Preview resources and state are restored on the owning OS thread. No personal
 // settings or saves are loaded, and input edges stay empty during capture.
-func nativePreviewFixture(t *testing.T) (*webGPUWorldRenderer, func()) {
+func nativePreviewFixture(t *testing.T, samples ...uint32) (*webGPUWorldRenderer, func()) {
 	t.Helper()
 	runtime.LockOSThread()
 	oldFrame, oldCursor := windowFrame, windowCursor
@@ -27,7 +27,7 @@ func nativePreviewFixture(t *testing.T) (*webGPUWorldRenderer, func()) {
 		runtime.UnlockOSThread()
 		t.Fatal(err)
 	}
-	currentSettings = &GameSettings{PlayerName: "Preview", ResolutionWidth: 1280, ResolutionHeight: 720, Mipmaps: true, Anisotropy: 8, RenderDistance: defaultRenderDistance}
+	currentSettings = &GameSettings{PlayerName: "Preview", ResolutionWidth: 1280, ResolutionHeight: 720, Mipmaps: true, Anisotropy: 8, MSAASamples: 4, RenderDistance: defaultRenderDistance}
 	assets = newWebGPUCPUAssets()
 	restore := func() {
 		w.Close()
@@ -38,7 +38,7 @@ func nativePreviewFixture(t *testing.T) (*webGPUWorldRenderer, func()) {
 		remoteEntities = oldEntities
 		runtime.UnlockOSThread()
 	}
-	r, err := newWebGPUWorldRenderer(w.hwnd, assets, 1280, 720)
+	r, err := newWebGPUWorldRenderer(w.hwnd, assets, 1280, 720, samples...)
 	if err != nil {
 		restore()
 		t.Fatal(err)

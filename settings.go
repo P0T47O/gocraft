@@ -15,11 +15,19 @@ type GameSettings struct {
 	RenderDistance   int // Chunks; client-pull streaming supports live changes.
 	Mipmaps          bool
 	Anisotropy       int // 1 disables anisotropic filtering; otherwise 2/4/8/16.
+	MSAASamples      int // 1 disables world-edge antialiasing; 4 enables it. UI remains single-sample.
 }
 
 const minRenderDistance = 8
 const maxRenderDistance = 128
 const defaultRenderDistance = 24
+
+func normalizeMSAASamples(samples int) int {
+	if samples == 1 {
+		return 1
+	}
+	return 4
+}
 
 func renderDistance() int {
 	if currentSettings == nil {
@@ -54,6 +62,7 @@ func LoadSettings() *GameSettings {
 		RenderDistance:   defaultRenderDistance,
 		Mipmaps:          true,
 		Anisotropy:       8,
+		MSAASamples:      4,
 	}
 
 	data, err := os.ReadFile(settingsFile)
@@ -67,6 +76,7 @@ func LoadSettings() *GameSettings {
 
 	settings.RenderDistance = clampRenderDistance(settings.RenderDistance)
 	settings.Anisotropy = normalizeAnisotropy(settings.Anisotropy)
+	settings.MSAASamples = normalizeMSAASamples(settings.MSAASamples)
 	currentSettings = settings
 	return settings
 }

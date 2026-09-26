@@ -333,6 +333,9 @@ func (a *RenderAssets) buildAllMeshDataWithLight(heightMap *[chunkWidth][chunkWi
 
 				def := GetBlock(block)
 				textures := def.Textures
+				if block == blockChest || block == blockFurnace {
+					textures = orientedTextures(block, getMeta(wx, y, wz), textures)
+				}
 				if isCrop(block) {
 					textures.North = cropTexture(block, getMeta(wx, y, wz))
 				} else if block == blockFarmland && getMeta(wx, y, wz) != 0 {
@@ -347,6 +350,10 @@ func (a *RenderAssets) buildAllMeshDataWithLight(heightMap *[chunkWidth][chunkWi
 				if isFluid(block) {
 					fluidMeta = getMeta(wx, y, wz)
 					fluidTop = py - 0.5 + fluidSurfaceHeight(fluidMeta)
+				}
+				if isShapedBlock(block) {
+					a.emitShapedBlock(block, getMeta(wx, y, wz), wx, y, wz, textures, getBlock, getMeta, getLight, getBlockLight, getBuilder)
+					continue
 				}
 
 				// Torch geometry is centered inside its block and submitted through

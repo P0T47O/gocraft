@@ -402,13 +402,23 @@ func HandleInput(world *World, camera *gameCamera, state *InputState, client *Cl
 	}
 
 	if inputMousePressed(mouseRight) {
+		if hit.hit && isSlab(state.CurrentBlock) && world.BlockAt(hit.x, hit.y, hit.z) == state.CurrentBlock {
+			oldMeta := world.MetaAt(hit.x, hit.y, hit.z)
+			if oldMeta == 0 && hit.normal.Y > 0 || oldMeta == shapeUpper && hit.normal.Y < 0 {
+				world.SetMetaAt(hit.x, hit.y, hit.z, shapeDouble)
+				if client != nil {
+					client.Send(&PacketBlockChange{X: int32(hit.x), Y: int32(hit.y), Z: int32(hit.z), BlockID: state.CurrentBlock, Meta: shapeDouble})
+				}
+				return hit
+			}
+		}
 		// 1. Check for Block Interaction (Server Authoritative)
 		blockID := byte(0)
 		if hit.hit {
 			blockID = world.BlockAt(hit.x, hit.y, hit.z)
 		}
 		farmAction := (blockID == blockGrass || blockID == blockDirt) && GetItem(state.CurrentBlock).ToolType == ToolHoe || blockID == blockFarmland && cropForItem(state.CurrentBlock) != blockAir
-		if hit.hit && (blockID == blockCraftingTable || blockID == blockTNT || blockID == blockBed || containerSize(blockID) > 0 || farmAction) && !inputKeyDown(keyLeftShift) {
+		if hit.hit && (blockID == blockCraftingTable || blockID == blockTNT || blockID == blockBed || blockID == blockWoodDoor || containerSize(blockID) > 0 || farmAction) && !inputKeyDown(keyLeftShift) {
 			if client != nil {
 				client.Send(&PacketBlockInteract{
 					X:      int32(hit.x),
@@ -455,6 +465,13 @@ func HandleInput(world *World, camera *gameCamera, state *InputState, client *Cl
 		if canPlace {
 			px, py, pz, ok := world.PlaceAdjacent(hit, state.CurrentBlock)
 			if ok && client != nil {
+				upper := hit.normal.Y < 0
+				if hit.normal.Y == 0 {
+					upper = rayOrigin.Y+rayDirection.Y*hit.distance > float32(hit.y)
+				}
+				if isShapedBlock(state.CurrentBlock) || state.CurrentBlock == blockChest || state.CurrentBlock == blockFurnace {
+					world.SetMetaAt(px, py, pz, placementMeta(state.CurrentBlock, state.Yaw, upper))
+				}
 				client.Send(&PacketBlockChange{
 					X:       int32(px),
 					Y:       int32(py),

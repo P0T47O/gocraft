@@ -42,6 +42,13 @@ func (w *World) rayCast(originX, originY, originZ, dirX, dirY, dirZ, maxDist flo
 			}
 			return hitInfo{}
 		}
+		if isShapedBlock(block) {
+			exit := min(maxDist, tMaxX, tMaxY, tMaxZ)
+			if hitDist, hitNormal, ok := shapedRayHit(block, w.MetaAt(x, y, z), x, y, z, origin, direction, entry, exit, w.BlockAt, w.MetaAt); ok {
+				return hitInfo{x: x, y: y, z: z, normal: struct{ X, Y, Z float32 }{hitNormal.X, hitNormal.Y, hitNormal.Z}, distance: hitDist, hit: true}
+			}
+			return hitInfo{}
+		}
 		return hitInfo{x: x, y: y, z: z, normal: normal, distance: entry, hit: true}
 	}
 	if hit := checkVoxel(0); hit.hit {

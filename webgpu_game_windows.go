@@ -28,8 +28,14 @@ func webGPUFrameFromWindow() webGPUFrameContext {
 }
 
 func ensureExperimentalWebGPURenderer() error {
+	samples := uint32(normalizeMSAASamples(LoadSettings().MSAASamples))
 	if activeWebGPUWorldRenderer != nil {
-		return nil
+		if activeWebGPUWorldRenderer.worldSamples == samples || world != nil {
+			return nil
+		}
+		// The renderer survives returning to the main menu. Recreate it only
+		// after the previous world released its GPU meshes.
+		closeExperimentalWebGPURenderer()
 	}
 	if assets == nil {
 		return fmt.Errorf("render assets are not initialized")
@@ -39,7 +45,7 @@ func ensureExperimentalWebGPURenderer() error {
 		return fmt.Errorf("native WebGPU window is not initialized")
 	}
 	hwnd := nativeGameWindow.hwnd
-	renderer, err := newWebGPUWorldRenderer(hwnd, assets, frame.Width, frame.Height)
+	renderer, err := newWebGPUWorldRenderer(hwnd, assets, frame.Width, frame.Height, samples)
 	if err != nil {
 		return err
 	}

@@ -10,8 +10,8 @@ import (
 )
 
 // DrawGameplay is the live WebGPU gameplay presentation path. World geometry,
-// entities/effects, HUD, text, inventory and container screens are encoded into
-// one render pass. WebGPU exclusively owns presentation to the native HWND.
+// entities/effects use a multisampled world pass. The resolved image then gets
+// a single-sample UI pass, preserving sharp text and pixel-art HUD elements.
 func (r *webGPUWorldRenderer) DrawGameplay(world *World, frame webGPUFrameContext, state *InputState) (err error) {
 	defer func() { err = r.recoverOutdatedSurface(err) }()
 	if activeWebGPUHUDRenderer != nil {
@@ -67,14 +67,23 @@ func (r *webGPUWorldRenderer) DrawGameplay(world *World, frame webGPUFrameContex
 		r.surface.DiscardTexture()
 		return err
 	}
+	worldView := view
+	var resolveView *wgpu.TextureView
+	if r.worldSamples > 1 {
+		worldView, resolveView = r.msaaView, view
+	}
+	worldStore := gputypes.StoreOpStore
+	if resolveView != nil {
+		worldStore = gputypes.StoreOpDiscard // Only the resolved surface is needed.
+	}
 	pass, err := encoder.BeginRenderPass(&wgpu.RenderPassDescriptor{
-		Label: "GoCraft WebGPU gameplay pass",
+		Label: "GoCraft WebGPU world pass",
 		ColorAttachments: []wgpu.RenderPassColorAttachment{{
-			View: view, LoadOp: gputypes.LoadOpClear, StoreOp: gputypes.StoreOpStore,
+			View: worldView, ResolveTarget: resolveView, LoadOp: gputypes.LoadOpClear, StoreOp: worldStore,
 			ClearValue: gputypes.Color{R: float64(r.sceneSky[0]), G: float64(r.sceneSky[1]), B: float64(r.sceneSky[2]), A: 1},
 		}},
 		DepthStencilAttachment: &wgpu.RenderPassDepthStencilAttachment{
-			View: r.depthView, DepthLoadOp: gputypes.LoadOpClear, DepthStoreOp: gputypes.StoreOpStore,
+			View: r.depthView, DepthLoadOp: gputypes.LoadOpClear, DepthStoreOp: gputypes.StoreOpDiscard,
 			DepthClearValue: 0, DepthReadOnly: false,
 		},
 	})
@@ -128,57 +137,71 @@ func (r *webGPUWorldRenderer) DrawGameplay(world *World, frame webGPUFrameContex
 			return err
 		}
 	}
+	if err := pass.End(); err != nil {
+		r.surface.DiscardTexture()
+		return err
+	}
+	uiPass, err := encoder.BeginRenderPass(&wgpu.RenderPassDescriptor{
+		Label: "GoCraft WebGPU UI pass",
+		ColorAttachments: []wgpu.RenderPassColorAttachment{{
+			View: view, LoadOp: gputypes.LoadOpLoad, StoreOp: gputypes.StoreOpStore,
+		}},
+	})
+	if err != nil {
+		r.surface.DiscardTexture()
+		return err
+	}
 
 	if frame.HideHUD {
-		if err := nativeMenuCanvas.draw(pass, r); err != nil {
-			_ = pass.End()
+		if err := nativeMenuCanvas.draw(uiPass, r); err != nil {
+			_ = uiPass.End()
 			r.surface.DiscardTexture()
 			return err
 		}
 	} else {
 		hud, err := ensureWebGPUHUDRenderer(r)
 		if err != nil {
-			_ = pass.End()
+			_ = uiPass.End()
 			r.surface.DiscardTexture()
 			return err
 		}
-		if err := hud.Draw(pass, r.width, r.height, state); err != nil {
-			_ = pass.End()
+		if err := hud.Draw(uiPass, r.width, r.height, state); err != nil {
+			_ = uiPass.End()
 			r.surface.DiscardTexture()
 			return err
 		}
 		text, err := ensureWebGPUTextRenderer(r)
 		if err != nil {
-			_ = pass.End()
+			_ = uiPass.End()
 			r.surface.DiscardTexture()
 			return err
 		}
-		if err := text.Draw(pass, r.width, r.height, state); err != nil {
-			_ = pass.End()
+		if err := text.Draw(uiPass, r.width, r.height, state); err != nil {
+			_ = uiPass.End()
 			r.surface.DiscardTexture()
 			return err
 		}
-		if err := drawWebGPUInventoryOverlay(pass, r, state); err != nil {
-			_ = pass.End()
+		if err := drawWebGPUInventoryOverlay(uiPass, r, state); err != nil {
+			_ = uiPass.End()
 			r.surface.DiscardTexture()
 			return err
 		}
-		if err := drawWebGPUContainerOverlay(pass, r, state); err != nil {
-			_ = pass.End()
+		if err := drawWebGPUContainerOverlay(uiPass, r, state); err != nil {
+			_ = uiPass.End()
 			r.surface.DiscardTexture()
 			return err
 		}
 
 		if nativeWindowActive && (isPaused || state.isDead()) {
-			if err := nativeMenuCanvas.draw(pass, r); err != nil {
-				_ = pass.End()
+			if err := nativeMenuCanvas.draw(uiPass, r); err != nil {
+				_ = uiPass.End()
 				r.surface.DiscardTexture()
 				return err
 			}
 		}
 
 	}
-	if err := pass.End(); err != nil {
+	if err := uiPass.End(); err != nil {
 		r.surface.DiscardTexture()
 		return err
 	}

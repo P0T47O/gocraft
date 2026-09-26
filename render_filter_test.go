@@ -6,11 +6,11 @@ import (
 )
 
 func TestTextureFilterSettingsRoundTrip(t *testing.T) {
-	s := GameSettings{Mipmaps: true, Anisotropy: 8}
+	s := GameSettings{Mipmaps: true, Anisotropy: 8, MSAASamples: 4}
 	if err := json.Unmarshal([]byte(`{"PlayerName":"Old"}`), &s); err != nil {
 		t.Fatal(err)
 	}
-	if !s.Mipmaps || s.Anisotropy != 8 {
+	if !s.Mipmaps || s.Anisotropy != 8 || s.MSAASamples != 4 {
 		t.Fatal("missing fields lost defaults")
 	}
 	s.Mipmaps, s.Anisotropy = false, 16
@@ -22,8 +22,16 @@ func TestTextureFilterSettingsRoundTrip(t *testing.T) {
 	if err := json.Unmarshal(b, &restored); err != nil {
 		t.Fatal(err)
 	}
-	if restored.Mipmaps || restored.Anisotropy != 16 {
+	if restored.Mipmaps || restored.Anisotropy != 16 || restored.MSAASamples != 4 {
 		t.Fatal("filter settings lost")
+	}
+}
+
+func TestMSAASampleNormalization(t *testing.T) {
+	for input, expected := range map[int]int{-1: 4, 0: 4, 1: 1, 2: 4, 4: 4, 8: 4} {
+		if got := normalizeMSAASamples(input); got != expected {
+			t.Fatalf("%d samples: got %d, want %d", input, got, expected)
+		}
 	}
 }
 

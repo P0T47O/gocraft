@@ -28,6 +28,18 @@ func moveColliderCore(world *World, pos, delta gameVec3, shape Collider) gameVec
 				pos = target
 				continue
 			}
+			if axis != 1 && shape.StepHeight > 0 && colliderHitsCore(world, offsetAxis(pos, 1, -.06), shape) {
+				// Only auto-step partial blocks; the 1-block movement limit in
+				// legacy mob definitions must not make mobs climb full walls.
+				raised := offsetAxis(pos, 1, min(shape.StepHeight, .55))
+				if !colliderHitsCore(world, raised, shape) {
+					raisedTarget := offsetAxis(raised, axis, d)
+					if !colliderHitsCore(world, raisedTarget, shape) {
+						pos = raisedTarget
+						continue
+					}
+				}
+			}
 			low, high := float32(0), float32(1)
 			for j := 0; j < 10; j++ {
 				mid := (low + high) / 2
@@ -62,12 +74,22 @@ func colliderHitsCore(world *World, pos gameVec3, shape Collider) bool {
 	for x := minBX; x <= maxBX; x++ {
 		for y := minBY; y <= maxBY; y++ {
 			for z := minBZ; z <= maxBZ; z++ {
-				if isSolidBlock(world.BlockAt(x, y, z)) {
-					// Precise AABB check for centered blocks
-					bx, by, bz := float32(x), float32(y), float32(z)
-					if maxX > bx-0.5 && minX < bx+0.5 &&
-						maxY > by-0.5 && minY < by+0.5 &&
-						maxZ > bz-0.5 && minZ < bz+0.5 {
+				id := world.BlockAt(x, y, z)
+				if !isSolidBlock(id) {
+					continue
+				}
+				bx, by, bz := float32(x), float32(y), float32(z)
+				if !isShapedBlock(id) {
+					if maxX > bx-.5 && minX < bx+.5 && maxY > by-.5 && minY < by+.5 && maxZ > bz-.5 && minZ < bz+.5 {
+						return true
+					}
+					continue
+				}
+				boxes, count := shapeBoxesAt(id, world.MetaAt(x, y, z), x, y, z, world.BlockAt, world.MetaAt)
+				for _, box := range boxes[:count] {
+					if maxX > bx+box.minX && minX < bx+box.maxX &&
+						maxY > by+box.minY && minY < by+box.maxY &&
+						maxZ > bz+box.minZ && minZ < bz+box.maxZ {
 						return true
 					}
 				}

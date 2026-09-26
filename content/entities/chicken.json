@@ -1,0 +1,8 @@
+{
+  "id": "chicken", "health": 4, "speed": 1.0, "flee_speed": 2.2,
+  "collider": {"Width": 0.4, "Depth": 0.4, "Height": 0.7, "StepHeight": 1},
+  "model": "chicken", "animation": "quadruped", "behaviors": ["wander", "flee"],
+  "idle_ticks": 40, "walk_ticks": 60, "flee_ticks": 80,
+  "drops": [{"item": "feather", "min": 1, "max": 2}],
+  "spawn_limit": 8, "spawn_radius": 12
+}

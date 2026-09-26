@@ -105,6 +105,62 @@ func TestExplosionCoverBlocksDamage(t *testing.T) {
 	}
 }
 
+func TestExplosionRemovesDoorOutsideBlastWhenSupportFalls(t *testing.T) {
+	s, p := hostileTestServer(t)
+	s.World.SetBlockAt(8, 70, 8, blockStone)
+	s.World.SetBlockAt(8, 71, 8, blockWoodDoor)
+	s.World.SetMetaAt(8, 71, 8, faceNorth)
+	s.World.SetBlockAt(8, 72, 8, blockWoodDoor)
+	s.World.SetMetaAt(8, 72, 8, faceNorth|shapeUpper)
+	// The support is inside the radius; the door itself is outside it.
+	s.explode(8.5, 68.5, 8.5, 2.9, 0, "test")
+	for y := 70; y <= 72; y++ {
+		if got := s.World.BlockAt(8, y, 8); got != blockAir {
+			t.Fatalf("floating block at y=%d: %d", y, got)
+		}
+	}
+	var event *PacketExplosion
+	for len(s.Clients[p.UUID].Send) > 0 {
+		if packet, ok := (<-s.Clients[p.UUID].Send).(*PacketExplosion); ok {
+			event = packet
+		}
+	}
+	if event == nil {
+		t.Fatal("explosion event missing")
+	}
+	seen := make(map[BlockPos]bool)
+	for _, pos := range event.Removed {
+		if seen[pos] {
+			t.Fatalf("duplicate removed block: %+v", pos)
+		}
+		seen[pos] = true
+	}
+	for y := int32(70); y <= 72; y++ {
+		if !seen[BlockPos{8, y, 8}] {
+			t.Fatalf("client was not told to remove y=%d", y)
+		}
+	}
+	var wire bytes.Buffer
+	if err := WritePacket(&wire, event); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ReadPacket(&wire); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestExplosionPairsDoorWhenOnlyUpperHalfIsHit(t *testing.T) {
+	s, _ := hostileTestServer(t)
+	s.World.SetBlockAt(8, 70, 8, blockObsidian)
+	s.World.SetBlockAt(8, 71, 8, blockWoodDoor)
+	s.World.SetBlockAt(8, 72, 8, blockWoodDoor)
+	s.World.SetMetaAt(8, 72, 8, shapeUpper)
+	s.explode(8.5, 73.5, 8.5, 1.1, 0, "test")
+	if s.World.BlockAt(8, 71, 8) != blockAir || s.World.BlockAt(8, 72, 8) != blockAir || s.World.BlockAt(8, 70, 8) != blockObsidian {
+		t.Fatal("partial blast left a half-door or destroyed protected support")
+	}
+}
+
 func TestPrimedTNTPersistsFuse(t *testing.T) {
 	w := mobTestWorld(t)
 	w.entities = []Entity{&PrimedTNT{BaseEntity: BaseEntity{UUID: "fuse", Type: EntityPrimedTNT, X: 8.5, Y: 71.5, Z: 8.5}, Fuse: 27}}

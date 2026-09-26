@@ -34,7 +34,7 @@ func playerCollides(w *World, p gameVec3) bool {
 func resolvePlayerCollision(w *World, p, delta gameVec3) gameVec3 {
 	feet := p
 	feet.Y -= playerEyeY
-	result := moveColliderCore(w, feet, delta, Collider{Width: playerRadius * 2, Depth: playerRadius * 2, Height: playerHeight})
+	result := moveColliderCore(w, feet, delta, Collider{Width: playerRadius * 2, Depth: playerRadius * 2, Height: playerHeight, StepHeight: .55})
 	result.Y += playerEyeY
 	return result
 }

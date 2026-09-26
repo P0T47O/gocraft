@@ -24,6 +24,12 @@
 
 函数/方法：`init`、`RegisterBlock`、`GetBlock`、`initBlockRegistry`
 
+## [block_shapes.go](block_shapes.go)
+
+类型：`shapeBox`
+
+函数/方法：`isSlab`、`isStair`、`isShapedBlock`、`facingFromYaw`、`placementMeta`、`validPlacementMeta`、`shapeBoxes`、`faceOffset`、`shapeBoxesAt`、`slabDropCount`、`orientedTextures`、`shapedRayHit`
+
 ## [chunk_mesher.go](chunk_mesher.go)
 
 类型：`MeshBuildData`、`meshBuilder`
@@ -61,6 +67,10 @@
 类型：`BlockPos`、`BlockContainer`、`ContainerSession`
 
 函数/方法：`containerSize`、`smeltResult`、`fuelTicks`、`*BlockContainer.tick`、`*Server.containerReach`、`*Server.openContainer`、`*Server.sendContainer`、`*Server.syncContainer`、`*Server.closeContainer`、`acceptsContainerItem`、`*Server.clickContainer`、`*Server.tickContainers`、`*Server.breakContainer`、`*Server.saveContainers`、`*Server.loadContainers`、`*Server.sendContainerInventory`
+
+## [door.go](door.go)
+
+函数/方法：`doorOtherY`、`*World.canPlaceDoor`、`*Server.toggleDoor`、`*Server.removeOtherDoorHalf`、`*Server.removeUnsupportedDoorAbove`
 
 ## [entities.go](entities.go)
 
@@ -274,7 +284,7 @@
 
 ## [mob_breeding.go](mob_breeding.go)
 
-函数/方法：`breedingFood`、`*Server.feedMob`、`*Server.tickBreeding`
+函数/方法：`breedingFood`、`*Server.feedMob`、`*Server.shearMob`、`*Server.tickBreeding`
 
 ## [mob_content.go](mob_content.go)
 
@@ -606,11 +616,15 @@
 
 类型：`GameSettings`
 
-函数/方法：`renderDistance`、`clampRenderDistance`、`LoadSettings`、`SaveSettings`
+函数/方法：`normalizeMSAASamples`、`renderDistance`、`clampRenderDistance`、`LoadSettings`、`SaveSettings`
 
 ## [settings_window.go](settings_window.go)
 
 函数/方法：`ApplySettings`
+
+## [shape_mesher.go](shape_mesher.go)
+
+函数/方法：`*RenderAssets.emitShapedBlock`
 
 ## [sleep.go](sleep.go)
 
@@ -716,7 +730,7 @@
 
 类型：`webGPUHUDVertex`、`webGPUHUDRenderer`、`webGPUHUDBuilder`、`webGPUHUDIconTints`
 
-函数/方法：`ensureWebGPUHUDRenderer`、`closeWebGPUHUDRenderer`、`*webGPUHUDRenderer.Close`、`newWebGPUHUDBuilder`、`webGPUColorTint`、`webGPUItemTints`、`*webGPUHUDBuilder.point`、`*webGPUHUDBuilder.rect`、`*webGPUHUDBuilder.texturedRect`、`*webGPUHUDBuilder.texturedQuad`、`*webGPUHUDBuilder.border`、`webGPUHUDScale`、`*webGPUHUDBuilder.addCrosshair`、`webGPUHUDHotbarBlock`、`*webGPUHUDBuilder.addBlockIcon`、`*webGPUHUDBuilder.addCubeIcon`、`*webGPUHUDBuilder.addHotbar`、`*webGPUHUDBuilder.addVitals`、`*webGPUHUDRenderer.Draw`
+函数/方法：`ensureWebGPUHUDRenderer`、`closeWebGPUHUDRenderer`、`*webGPUHUDRenderer.Close`、`newWebGPUHUDBuilder`、`webGPUColorTint`、`webGPUItemTints`、`*webGPUHUDBuilder.point`、`*webGPUHUDBuilder.rect`、`*webGPUHUDBuilder.texturedRect`、`*webGPUHUDBuilder.texturedQuad`、`*webGPUHUDBuilder.border`、`webGPUHUDScale`、`*webGPUHUDBuilder.addCrosshair`、`webGPUHUDHotbarBlock`、`*webGPUHUDBuilder.addBlockIcon`、`*webGPUHUDBuilder.addShapedIcon`、`*webGPUHUDBuilder.addCubeIcon`、`*webGPUHUDBuilder.addHotbar`、`*webGPUHUDBuilder.addVitals`、`*webGPUHUDRenderer.Draw`
 
 ## [webgpu_inventory_windows.go](webgpu_inventory_windows.go)
 
@@ -788,7 +802,7 @@
 
 类型：`lightPos`、`lightChunkCache`、`lightUpdate`
 
-函数/方法：`isOpaqueBlock`、`lightEmission`、`emitsLight`、`lightPos.add`、`*World.LightAt`、`*World.LightSkyAt`、`*World.LightBlockAt`、`initializeChunkLighting`、`localLightPos`、`spreadLocalLight`、`newLightUpdate`、`*lightUpdate.chunk`、`*lightUpdate.at`、`*lightUpdate.level`、`*lightChunkCache.directSky`、`*lightUpdate.mark`、`*lightUpdate.set`、`*lightUpdate.flush`、`*lightUpdate.desired`、`*lightUpdate.settle`、`*World.stitchChunkLighting`、`*lightUpdate.stitch`、`*World.rebuildLightingForChunk`、`*World.updateBlockLight`、`*World.updateSkyLight`、`*World.setBlockLightAtInternal`、`*World.setSkyLightAtInternal`、`*World.setBlockLightAt`
+函数/方法：`isOpaqueBlock`、`lightOpaque`、`lightEmission`、`emitsLight`、`lightPos.add`、`*World.LightAt`、`*World.LightSkyAt`、`*World.LightBlockAt`、`initializeChunkLighting`、`localLightPos`、`spreadLocalLight`、`newLightUpdate`、`*lightUpdate.chunk`、`*lightUpdate.at`、`*lightUpdate.level`、`*lightChunkCache.directSky`、`*lightUpdate.mark`、`*lightUpdate.set`、`*lightUpdate.flush`、`*lightUpdate.desired`、`*lightUpdate.settle`、`*World.stitchChunkLighting`、`*lightUpdate.stitch`、`*World.rebuildLightingForChunk`、`*World.updateBlockLight`、`*World.updateSkyLight`、`*World.setBlockLightAtInternal`、`*World.setSkyLightAtInternal`、`*World.setBlockLightAt`
 
 ## [world_mesh.go](world_mesh.go)
 

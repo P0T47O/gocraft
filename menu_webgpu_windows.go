@@ -124,8 +124,7 @@ func (r *webGPUWorldRenderer) DrawMenu(p *gpuMenuPainter) (err error) {
 		return err
 	}
 	pass, err := encoder.BeginRenderPass(&wgpu.RenderPassDescriptor{
-		ColorAttachments:       []wgpu.RenderPassColorAttachment{{View: view, LoadOp: gputypes.LoadOpClear, StoreOp: gputypes.StoreOpStore, ClearValue: gputypes.Color{A: 1}}},
-		DepthStencilAttachment: &wgpu.RenderPassDepthStencilAttachment{View: r.depthView, DepthLoadOp: gputypes.LoadOpClear, DepthStoreOp: gputypes.StoreOpStore, DepthClearValue: 1},
+		ColorAttachments: []wgpu.RenderPassColorAttachment{{View: view, LoadOp: gputypes.LoadOpClear, StoreOp: gputypes.StoreOpStore, ClearValue: gputypes.Color{A: 1}}},
 	})
 	if err != nil {
 		return err

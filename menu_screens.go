@@ -257,6 +257,19 @@ func drawSettingsMenu(l SurvivalLayout, fromPause bool) {
 		}
 		SaveSettings()
 	}
+	aaLabel := "World AA: 4x"
+	if settings.MSAASamples == 1 {
+		aaLabel = "World AA: OFF"
+	}
+	if ui.DrawButton(l.Rect(28, 318, 294, 34), aaLabel, true) {
+		if settings.MSAASamples == 1 {
+			settings.MSAASamples = 4
+		} else {
+			settings.MSAASamples = 1
+		}
+		SaveSettings()
+	}
+	l.Text("Applies on next world load", 28, 365, 11, invMuted)
 	l.Text("PLAYER NAME", 354, 164, 12, invMuted)
 	ui.DrawTextField(l.Rect(354, 186, 600, 40), &settings.PlayerName, "player_name", 16, false)
 	l.Text("MOUSE SENSITIVITY", 354, 244, 12, invMuted)
@@ -273,7 +286,7 @@ func drawSettingsMenu(l SurvivalLayout, fromPause bool) {
 			return
 		}
 	}
-	l.Text("CONTROLS", 28, 328, 14, invAccent)
+	l.Text("CONTROLS", 28, 395, 14, invAccent)
 	l.Text(fmt.Sprintf("RENDER DISTANCE: %d CHUNKS (%d BLOCKS)", settings.RenderDistance, settings.RenderDistance*chunkWidth), 354, 494, 12, invMuted)
 	distance := float32(settings.RenderDistance)
 	ui.DrawSlider(l.Rect(354, 514, 600, 24), &distance, minRenderDistance, maxRenderDistance, "render_distance")
@@ -282,7 +295,7 @@ func drawSettingsMenu(l SurvivalLayout, fromPause bool) {
 		l.Text("EXTREME: HIGH RAM / VRAM USE", 354, 554, 12, invAccent)
 	}
 	for i, line := range []string{"WASD  Move", "Space  Jump / swim up", "Ctrl + W  Sprint", "Shift  Sneak / dive", "E  Inventory", "Esc  Pause / back"} {
-		l.Text(line, 28, 364+float32(i)*26, 14, invMuted)
+		l.Text(line, 28, 423+float32(i)*26, 14, invMuted)
 	}
 	if inputMouseReleased(mouseLeft) || inputKeyPressed(keyEnter) {
 		SaveSettings()

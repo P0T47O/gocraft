@@ -58,6 +58,50 @@ func (s *Server) feedMob(p *PlayerEntity, target string) bool {
 	return false
 }
 
+// Shearing uses the same short-range, unobstructed look check as feeding.
+// The cooldown makes wool renewable without letting one sheep duplicate it
+// on every packet; it is persisted with the mob.
+func (s *Server) shearMob(p *PlayerEntity, target string) bool {
+	if p == nil || p.dead() || p.SelectedSlot < 0 || p.SelectedSlot >= 9 {
+		return false
+	}
+	slot := &p.Inventory.Slots[p.SelectedSlot]
+	if slot.ID != int32(itemShears) || slot.Count <= 0 {
+		return false
+	}
+	for _, entity := range s.World.entities {
+		m, ok := entity.(*MobEntity)
+		if !ok || m.UUID != target || m.Kind != "sheep" || m.Health <= 0 || m.BabyTicks > 0 || m.Sheared {
+			continue
+		}
+		dx, dy, dz := p.X-m.X, p.Y-m.Y, p.Z-m.Z
+		if dx*dx+dy*dy+dz*dz > 16 {
+			return false
+		}
+		pitchCos := math.Cos(float64(p.Pitch))
+		lookX, lookY, lookZ := math.Sin(float64(p.Yaw))*pitchCos, math.Sin(float64(p.Pitch)), math.Cos(float64(p.Yaw))*pitchCos
+		wall := s.World.rayCast(float32(p.X), float32(p.Y), float32(p.Z), float32(lookX), float32(lookY), float32(lookZ), 4)
+		limit := 4.0
+		if wall.hit {
+			limit = float64(wall.distance)
+		}
+		c := mobContent.Definitions[m.Kind].Collider
+		if _, aimed := segmentBoxEntry(p.X, p.Y, p.Z, lookX, lookY, lookZ, limit,
+			m.X-float64(c.Width)/2, m.Y, m.Z-float64(c.Depth)/2,
+			m.X+float64(c.Width)/2, m.Y+float64(c.Height), m.Z+float64(c.Depth)/2); !aimed {
+			return false
+		}
+		m.Sheared, m.ShearCooldown = true, 1200
+		s.dropFarmItem(int(math.Floor(m.X)), int(math.Floor(m.Y)), int(math.Floor(m.Z)), blockWhiteWool, int32(1+m.random()%3))
+		if p.GameMode == ModeSurvival {
+			slot.Wear(1)
+			s.SendInventory(p)
+		}
+		return true
+	}
+	return false
+}
+
 // Pairing is bounded by the global mob cap and at most two births per tick.
 // Parenthood and cooldowns are server-owned; reconnecting cannot duplicate food.
 func (s *Server) tickBreeding() {
@@ -73,6 +117,12 @@ func (s *Server) tickBreeding() {
 			}
 			if m.BabyTicks > 0 {
 				m.BabyTicks--
+			}
+			if m.ShearCooldown > 0 {
+				m.ShearCooldown--
+				if m.ShearCooldown == 0 {
+					m.Sheared = false
+				}
 			}
 			mobs = append(mobs, m)
 		}

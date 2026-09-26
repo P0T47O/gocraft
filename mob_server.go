@@ -30,6 +30,9 @@ func (s *Server) updateMobs() {
 			d := mobContent.Definitions[m.Kind]
 			m.Dropped = true
 			for i, entry := range d.Drops {
+				if m.Sheared && entry.Item == "wool" {
+					continue
+				}
 				if entry.Chance > 0 && float64(m.random()%10000)/10000 >= entry.Chance {
 					continue
 				}
@@ -86,7 +89,13 @@ func (s *Server) spawnNearbyMobs() {
 	if len(names) == 0 {
 		return
 	}
-	sort.Strings(names)
+	sort.Slice(names, func(i, j int) bool {
+		a, b := mobContent.Definitions[names[i]], mobContent.Definitions[names[j]]
+		if a.Hostile != b.Hostile {
+			return a.Hostile
+		}
+		return names[i] < names[j]
+	})
 	kind := names[(s.MobSpawnTicks/200)%len(names)]
 	def := mobContent.Definitions[kind]
 	for _, e := range s.World.entities {

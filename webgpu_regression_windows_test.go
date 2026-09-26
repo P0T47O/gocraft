@@ -196,7 +196,7 @@ func TestWebGPUUIUploadIsolationGPU(t *testing.T) {
 	}
 	pass, err := enc.BeginRenderPass(&wgpu.RenderPassDescriptor{
 		ColorAttachments:       []wgpu.RenderPassColorAttachment{{View: view, LoadOp: gputypes.LoadOpClear, StoreOp: gputypes.StoreOpStore}},
-		DepthStencilAttachment: &wgpu.RenderPassDepthStencilAttachment{View: depthView, DepthLoadOp: gputypes.LoadOpClear, DepthStoreOp: gputypes.StoreOpStore, DepthClearValue: 1},
+		DepthStencilAttachment: &wgpu.RenderPassDepthStencilAttachment{View: depthView, DepthLoadOp: gputypes.LoadOpClear, DepthStoreOp: gputypes.StoreOpStore, DepthClearValue: 0},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -270,7 +270,7 @@ func TestWebGPUUIUploadIsolationGPU(t *testing.T) {
 	}
 	pass, err = enc.BeginRenderPass(&wgpu.RenderPassDescriptor{
 		ColorAttachments:       []wgpu.RenderPassColorAttachment{{View: view, LoadOp: gputypes.LoadOpClear, StoreOp: gputypes.StoreOpStore}},
-		DepthStencilAttachment: &wgpu.RenderPassDepthStencilAttachment{View: depthView, DepthLoadOp: gputypes.LoadOpClear, DepthStoreOp: gputypes.StoreOpStore, DepthClearValue: 1},
+		DepthStencilAttachment: &wgpu.RenderPassDepthStencilAttachment{View: depthView, DepthLoadOp: gputypes.LoadOpClear, DepthStoreOp: gputypes.StoreOpStore, DepthClearValue: 0},
 	})
 	if err != nil {
 		t.Fatal(err)
