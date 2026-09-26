@@ -1,6 +1,9 @@
 package main
 
-import "testing"
+import (
+	"strconv"
+	"testing"
+)
 
 func TestLODTileMatchesTerrainColumnsAndNeighbors(t *testing.T) {
 	for _, key := range []lodTileKey{{0, 0}, {-3, 2}, {7, -9}} {
@@ -13,8 +16,8 @@ func TestLODTileMatchesTerrainColumnsAndNeighbors(t *testing.T) {
 			for x := 0; x < side; x++ {
 				v := got.vertices[z*side+x]
 				wx, wz := key.X*lodTileSize+x*lodCellSize, key.Z*lodTileSize+z*lodCellSize
-				column := sampleTerrainColumn(1234511, wx, wz)
-				if v.Position[0] != float32(wx) || v.Position[2] != float32(wz) || v.Position[1] != float32(column.height)-.65 || v.Color != lodSurfaceColor(column.top) {
+				height, _, color := lodGridColumn(1234511, wx, wz, x == 0 || x == lodCellsPerTile || z == 0 || z == lodCellsPerTile, nil)
+				if v.Position[0] != float32(wx) || v.Position[2] != float32(wz) || v.Position[1] != height-.65 || v.Color != color {
 					t.Fatalf("%v vertex (%d,%d) does not match generator: %+v", key, x, z, v)
 				}
 			}
@@ -28,6 +31,33 @@ func TestLODTileMatchesTerrainColumnsAndNeighbors(t *testing.T) {
 		for _, index := range got.indices {
 			if int(index) >= len(got.vertices) {
 				t.Fatalf("%v: index %d outside %d vertices", key, index, len(got.vertices))
+			}
+		}
+	}
+}
+
+func TestLODMixedLevelEdgesStayOnTheSameLine(t *testing.T) {
+	const seed = uint32(1234511)
+	for _, left := range []lodTileKey{{0, 0}, {-5, 3}} {
+		fine := buildLODTileAtStep(seed, left, nil, lodNearCellSize)
+		coarse := buildLODTileAtStep(seed, lodTileKey{left.X + 1, left.Z}, nil, lodFarCellSize)
+		fineSide := lodTileSize/lodNearCellSize + 1
+		coarseSide := lodTileSize/lodFarCellSize + 1
+		for z := 0; z <= lodTileSize; z += lodNearCellSize {
+			v := fine.vertices[(z/lodNearCellSize)*fineSide+fineSide-1]
+			lo := coarse.vertices[(z/lodFarCellSize)*coarseSide]
+			hi := coarse.vertices[min(z/lodFarCellSize+1, coarseSide-1)*coarseSide]
+			fraction := float32(z%lodFarCellSize) / lodFarCellSize
+			wantY := lerp(lo.Position[1], hi.Position[1], fraction)
+			if abs(v.Position[1]-wantY) > .0001 || v.Position[0] != lo.Position[0] || v.Position[2] != float32(left.Z*lodTileSize+z) {
+				t.Fatalf("mixed 4/16 grid seam at %v z=%d: got=%v expected height=%v", left, z, v.Position, wantY)
+			}
+		}
+		for _, tile := range []lodTileData{fine, coarse} {
+			for _, index := range tile.indices {
+				if int(index) >= len(tile.vertices) {
+					t.Fatalf("mixed-level index %d outside %d vertices", index, len(tile.vertices))
+				}
 			}
 		}
 	}
@@ -121,5 +151,15 @@ func TestHorizonDistanceClamp(t *testing.T) {
 func BenchmarkLODTileBuild(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		buildLODTile(1234511, lodTileKey{i % 16, i / 16})
+	}
+}
+
+func BenchmarkLODTileLevels(b *testing.B) {
+	for _, step := range []int{lodNearCellSize, lodCellSize, lodFarCellSize} {
+		b.Run(strconv.Itoa(step), func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				buildLODTileAtStep(1234511, lodTileKey{i % 16, i / 16}, nil, step)
+			}
+		})
 	}
 }

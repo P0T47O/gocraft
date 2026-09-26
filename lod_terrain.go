@@ -2,11 +2,14 @@ package main
 
 import "gocraft/platform"
 
-// A tile spans eight chunks. Sixteen cells per side keep distant geometry
-// bounded independently of the number of full-detail chunks in the horizon.
+// A tile spans eight chunks. Its grid has 8, 16, or 32 cells per side;
+// distant geometry stays bounded independently of the full-chunk horizon.
 const lodTileSize = 128
 const lodCellSize = 8
 const lodCellsPerTile = lodTileSize / lodCellSize
+const lodNearCellSize = 4
+const lodFarCellSize = 16
+const lodBoundaryCellSize = lodFarCellSize
 
 type lodTileKey struct{ X, Z int }
 
@@ -52,47 +55,96 @@ func buildLODTile(seed uint32, key lodTileKey) lodTileData {
 }
 
 func buildLODTileWithColumns(seed uint32, key lodTileKey, overrides map[lodPoint]lodColumn) lodTileData {
-	const side = lodCellsPerTile + 1
-	data := lodTileData{
-		vertices: make([]platform.Vertex, 0, side*side+lodCellsPerTile*lodCellsPerTile*4),
-		indices:  make([]uint32, 0, lodCellsPerTile*lodCellsPerTile*12),
+	return buildLODTileAtStep(seed, key, overrides, lodCellSize)
+}
+
+func lodSampleColumn(seed uint32, x, z int, overrides map[lodPoint]lodColumn) lodColumn {
+	if changed, ok := overrides[lodPoint{x, z}]; ok {
+		return changed
 	}
-	var heights [side][side]int
-	var tops [side][side]byte
+	column := sampleTerrainColumn(seed, x, z)
+	return lodColumn{column.height, column.top}
+}
+
+// All detail levels follow the same 16-block line at tile borders. Extra
+// fine-grid edge vertices lie on that line, so adjacent 4/8/16-block tiles
+// cannot open a crack even when their interior triangulations differ.
+func lodGridColumn(seed uint32, x, z int, edge bool, overrides map[lodPoint]lodColumn) (float32, byte, [4]uint8) {
+	if !edge || (x%lodBoundaryCellSize == 0 && z%lodBoundaryCellSize == 0) {
+		c := lodSampleColumn(seed, x, z, overrides)
+		return float32(c.height), c.top, lodSurfaceColor(c.top)
+	}
+	if x%lodTileSize == 0 {
+		z0 := divFloor(z, lodBoundaryCellSize) * lodBoundaryCellSize
+		a := lodSampleColumn(seed, x, z0, overrides)
+		b := lodSampleColumn(seed, x, z0+lodBoundaryCellSize, overrides)
+		t := float32(z-z0) / lodBoundaryCellSize
+		return lerp(float32(a.height), float32(b.height), t), lodNearestTop(a.top, b.top, t), lodBlendColor(lodSurfaceColor(a.top), lodSurfaceColor(b.top), t)
+	}
+	x0 := divFloor(x, lodBoundaryCellSize) * lodBoundaryCellSize
+	a := lodSampleColumn(seed, x0, z, overrides)
+	b := lodSampleColumn(seed, x0+lodBoundaryCellSize, z, overrides)
+	t := float32(x-x0) / lodBoundaryCellSize
+	return lerp(float32(a.height), float32(b.height), t), lodNearestTop(a.top, b.top, t), lodBlendColor(lodSurfaceColor(a.top), lodSurfaceColor(b.top), t)
+}
+
+func lodNearestTop(a, b byte, t float32) byte {
+	if t < .5 {
+		return a
+	}
+	return b
+}
+
+func lodBlendColor(a, b [4]uint8, t float32) [4]uint8 {
+	return [4]uint8{
+		uint8(lerp(float32(a[0]), float32(b[0]), t)),
+		uint8(lerp(float32(a[1]), float32(b[1]), t)),
+		uint8(lerp(float32(a[2]), float32(b[2]), t)), 255,
+	}
+}
+
+func buildLODTileAtStep(seed uint32, key lodTileKey, overrides map[lodPoint]lodColumn, step int) lodTileData {
+	if step != lodNearCellSize && step != lodCellSize && step != lodFarCellSize {
+		panic("invalid distant terrain cell size")
+	}
+	cells := lodTileSize / step
+	side := cells + 1
+	data := lodTileData{
+		vertices: make([]platform.Vertex, 0, side*side+cells*cells*4),
+		indices:  make([]uint32, 0, cells*cells*12),
+	}
+	heights := make([]float32, side*side)
+	tops := make([]byte, side*side)
 	baseX, baseZ := key.X*lodTileSize, key.Z*lodTileSize
 	for z := 0; z < side; z++ {
 		for x := 0; x < side; x++ {
-			wx, wz := baseX+x*lodCellSize, baseZ+z*lodCellSize
-			column := sampleTerrainColumn(seed, wx, wz)
-			height, top := column.height, column.top
-			if changed, ok := overrides[lodPoint{wx, wz}]; ok {
-				height, top = changed.height, changed.top
-			}
-			heights[z][x], tops[z][x] = height, top
+			wx, wz := baseX+x*step, baseZ+z*step
+			height, top, color := lodGridColumn(seed, wx, wz, x == 0 || x == cells || z == 0 || z == cells, overrides)
+			heights[z*side+x], tops[z*side+x] = height, top
 			data.vertices = append(data.vertices, platform.Vertex{
-				Position: [3]float32{float32(wx), float32(height) - .65, float32(wz)},
-				Color:    lodSurfaceColor(top),
+				Position: [3]float32{float32(wx), height - .65, float32(wz)},
+				Color:    color,
 			})
 		}
 	}
-	for z := 0; z < lodCellsPerTile; z++ {
-		for x := 0; x < lodCellsPerTile; x++ {
+	for z := 0; z < cells; z++ {
+		for x := 0; x < cells; x++ {
 			a := uint32(z*side + x)
 			data.indices = append(data.indices, a, a+uint32(side), a+1, a+1, a+uint32(side), a+uint32(side)+1)
 			// Water is a separate horizontal layer. The terrain beneath remains
 			// available for shoreline interpolation, not a sloping blue quad.
-			if heights[z][x] >= seaLevel && heights[z][x+1] >= seaLevel &&
-				heights[z+1][x] >= seaLevel && heights[z+1][x+1] >= seaLevel {
+			if heights[z*side+x] >= seaLevel && heights[z*side+x+1] >= seaLevel &&
+				heights[(z+1)*side+x] >= seaLevel && heights[(z+1)*side+x+1] >= seaLevel {
 				continue
 			}
 			color := [4]uint8{65, 104, 157, 255}
-			if tops[z][x] == blockSnow {
+			if tops[z*side+x] == blockSnow {
 				color = lodSurfaceColor(blockIce)
 			}
 			base := uint32(len(data.vertices))
-			wx, wz := float32(baseX+x*lodCellSize), float32(baseZ+z*lodCellSize)
+			wx, wz := float32(baseX+x*step), float32(baseZ+z*step)
 			y := float32(seaLevel) - .6
-			for _, pos := range [4][3]float32{{wx, y, wz}, {wx + lodCellSize, y, wz}, {wx, y, wz + lodCellSize}, {wx + lodCellSize, y, wz + lodCellSize}} {
+			for _, pos := range [4][3]float32{{wx, y, wz}, {wx + float32(step), y, wz}, {wx, y, wz + float32(step)}, {wx + float32(step), y, wz + float32(step)}} {
 				data.vertices = append(data.vertices, platform.Vertex{Position: pos, Color: color})
 			}
 			data.indices = append(data.indices, base, base+2, base+1, base+1, base+2, base+3)

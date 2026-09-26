@@ -43,23 +43,48 @@ struct Output {
 }
 @fragment fn fs_main(input: Output) -> @location(0) vec4f {
     let horizontal = length(input.world_pos.xz - scene.eye_pos.xz);
-    // Approximate tree crowns must not poke through loaded full-detail trees.
-    if input.color.a < 0.999 && horizontal < scene.daylight.y { discard; }
+    let tree = input.color.a < 0.999;
+    if tree {
+        // Fade simplified crowns in across six chunks after full-detail trees
+        // end. Ordered coverage keeps this in the opaque depth-writing pass.
+        let fade = smoothstep(scene.daylight.y + 32.0, scene.daylight.y + 128.0, horizontal);
+        let bayer = array<f32, 16>(0.0, 8.0, 2.0, 10.0, 12.0, 4.0, 14.0, 6.0,
+                                   3.0, 11.0, 1.0, 9.0, 15.0, 7.0, 13.0, 5.0);
+        let pixel = vec2u(input.position.xy) & vec2u(3u, 3u);
+        if fade <= (bayer[pixel.y*4u + pixel.x] + 0.5) / 16.0 { discard; }
+    }
+    var color = input.color.rgb;
+    let water = color.b > color.r * 1.5 && color.b > color.g * 1.25;
+    if !tree && !water {
+        // A little stable block-scale variation makes the near LOD less like
+        // a uniformly painted sheet. It fades out before aliasing at range.
+        let block = floor(input.world_pos.xz);
+        let grain = fract(sin(dot(block, vec2f(127.1, 311.7))) * 43758.5453);
+        let amount = 0.035 * (1.0 - smoothstep(scene.daylight.y + 32.0, scene.daylight.y + 512.0, horizontal));
+        color *= 1.0 + amount * (grain * 2.0 - 1.0);
+    }
     let fog = smoothstep(scene.fog_range.x, scene.fog_range.y, horizontal);
-    return vec4f(mix(input.color.rgb * scene.daylight.x, scene.fog_color.rgb, fog), 1.0);
+    return vec4f(mix(color * scene.daylight.x, scene.fog_color.rgb, fog), 1.0);
 }
 `
 
 type lodBuildResult struct {
 	key     lodTileKey
 	version uint64
+	step    int
 	data    lodTileData
 }
 
 type lodBuildJob struct {
 	key       lodTileKey
 	version   uint64
+	step      int
 	overrides map[lodPoint]lodColumn
+}
+
+type lodBuildState struct {
+	version uint64
+	step    int
 }
 
 type webGPULODRenderer struct {
@@ -68,7 +93,8 @@ type webGPULODRenderer struct {
 	pipeline *wgpu.RenderPipeline
 	tiles    map[lodTileKey]platform.MeshHandle
 	versions map[lodTileKey]uint64
-	pending  map[lodTileKey]uint64
+	steps    map[lodTileKey]int
+	pending  map[lodTileKey]lodBuildState
 	jobs     chan lodBuildJob
 	results  chan lodBuildResult
 	stop     chan struct{}
@@ -79,7 +105,7 @@ type webGPULODRenderer struct {
 
 func newWebGPULODRenderer(r *webGPUWorldRenderer, seed uint32) (*webGPULODRenderer, error) {
 	lod := &webGPULODRenderer{
-		seed: seed, tiles: make(map[lodTileKey]platform.MeshHandle), versions: make(map[lodTileKey]uint64), pending: make(map[lodTileKey]uint64),
+		seed: seed, tiles: make(map[lodTileKey]platform.MeshHandle), versions: make(map[lodTileKey]uint64), steps: make(map[lodTileKey]int), pending: make(map[lodTileKey]lodBuildState),
 		jobs: make(chan lodBuildJob, 32), results: make(chan lodBuildResult, 8), stop: make(chan struct{}),
 	}
 	var err error
@@ -124,7 +150,7 @@ func (lod *webGPULODRenderer) buildLoop() {
 				return
 			default:
 			}
-			result := lodBuildResult{key: job.key, version: job.version, data: buildLODTileWithColumns(lod.seed, job.key, job.overrides)}
+			result := lodBuildResult{key: job.key, version: job.version, step: job.step, data: buildLODTileAtStep(lod.seed, job.key, job.overrides, job.step)}
 			select {
 			case lod.results <- result:
 			case <-lod.stop:
@@ -176,10 +202,42 @@ func lodTileInRange(key, center lodTileKey, radius int) bool {
 	return dx*dx+dz*dz <= (radius+1)*(radius+1)
 }
 
+// Hysteresis prevents repeated rebuilding when the camera hovers near a level
+// boundary. The full-detail radius is followed by 4, then 8, then 16 blocks
+// per cell; only the inner two bands pay for the finer terrain mesh.
+func lodStepForDistance(distance, fullRadius float32, previous int) int {
+	nearLimit := fullRadius + 8*chunkWidth
+	midLimit := fullRadius + 32*chunkWidth
+	const hysteresis = 48
+	switch previous {
+	case lodNearCellSize:
+		nearLimit += hysteresis
+	case lodCellSize:
+		nearLimit -= hysteresis
+		midLimit += hysteresis
+	case lodFarCellSize:
+		midLimit -= hysteresis
+	}
+	if distance < float32(nearLimit) {
+		return lodNearCellSize
+	}
+	if distance < float32(midLimit) {
+		return lodCellSize
+	}
+	return lodFarCellSize
+}
+
+func lodStepForTile(key lodTileKey, camera webGPUCamera, fullRadius float32, previous int) int {
+	x := float64(key.X*lodTileSize+lodTileSize/2) - float64(camera.Position.X)
+	z := float64(key.Z*lodTileSize+lodTileSize/2) - float64(camera.Position.Z)
+	return lodStepForDistance(float32(math.Hypot(x, z)), fullRadius, previous)
+}
+
 func (lod *webGPULODRenderer) draw(pass *wgpu.RenderPassEncoder, r *webGPUWorldRenderer, camera webGPUCamera, world *World) error {
 	cache := &world.render
 	center := lodTileKey{int(math.Floor(float64(camera.Position.X) / lodTileSize)), int(math.Floor(float64(camera.Position.Z) / lodTileSize))}
 	radius := (horizonDistance()*chunkWidth + lodTileSize - 1) / lodTileSize
+	fullRadius := float32(renderDistance() * chunkWidth)
 	projection, view, _ := webGPUCameraMatrices(camera, r.width, r.height)
 	frustum := ExtractFrustum(projection.Mul4(view))
 	for key, mesh := range lod.tiles {
@@ -187,15 +245,17 @@ func (lod *webGPULODRenderer) draw(pass *wgpu.RenderPassEncoder, r *webGPUWorldR
 			mesh.Unload()
 			delete(lod.tiles, key)
 			delete(lod.versions, key)
+			delete(lod.steps, key)
 		}
 	}
 	for i := 0; i < 4; i++ {
 		select {
 		case result := <-lod.results:
-			if pending, ok := lod.pending[result.key]; ok && pending == result.version {
+			if pending, ok := lod.pending[result.key]; ok && pending == (lodBuildState{result.version, result.step}) {
 				delete(lod.pending, result.key)
 			}
-			if !lodTileInRange(result.key, center, radius) || result.version != world.lodVersions[result.key] {
+			if !lodTileInRange(result.key, center, radius) || result.version != world.lodVersions[result.key] ||
+				result.step != lodStepForTile(result.key, camera, fullRadius, lod.steps[result.key]) {
 				continue
 			}
 			mesh, err := r.backend.UploadChecked(result.data.vertices, result.data.indices)
@@ -207,6 +267,7 @@ func (lod *webGPULODRenderer) draw(pass *wgpu.RenderPassEncoder, r *webGPUWorldR
 			}
 			lod.tiles[result.key] = mesh
 			lod.versions[result.key] = result.version
+			lod.steps[result.key] = result.step
 		default:
 			i = 4
 		}
@@ -221,21 +282,23 @@ func (lod *webGPULODRenderer) draw(pass *wgpu.RenderPassEncoder, r *webGPUWorldR
 		if !frustum.IntersectsAABB(min, max) {
 			continue
 		}
+		step := lodStepForTile(key, camera, fullRadius, lod.steps[key])
 		if mesh := lod.tiles[key]; mesh != nil {
 			if err := r.backend.DrawPass(pass, mesh); err != nil {
 				return err
 			}
 			cache.drawCalls++
 			cache.triangles += int(mesh.IndexCount()) / 3
-			if lod.versions[key] == world.lodVersions[key] {
+			if lod.versions[key] == world.lodVersions[key] && lod.steps[key] == step {
 				continue
 			}
 		}
 		version := world.lodVersions[key]
-		if pending, ok := lod.pending[key]; (!ok || pending != version) && scheduled < 16 {
+		state := lodBuildState{version, step}
+		if pending, ok := lod.pending[key]; (!ok || pending != state) && scheduled < 16 {
 			select {
-			case lod.jobs <- lodBuildJob{key: key, version: version, overrides: world.snapshotLODTile(key)}:
-				lod.pending[key] = version
+			case lod.jobs <- lodBuildJob{key: key, version: version, step: step, overrides: world.snapshotLODTile(key)}:
+				lod.pending[key] = state
 				scheduled++
 			default:
 			}

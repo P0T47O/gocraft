@@ -21,6 +21,28 @@ func TestLODTileRangeIncludesNearUnderlay(t *testing.T) {
 	}
 }
 
+func TestLODStepBandsAndHysteresis(t *testing.T) {
+	full := float32(16 * chunkWidth)
+	for _, tc := range []struct {
+		distance float32
+		previous int
+		want     int
+	}{
+		{300, 0, lodNearCellSize},
+		{500, 0, lodCellSize},
+		{900, 0, lodFarCellSize},
+		{400, lodNearCellSize, lodNearCellSize},
+		{400, lodCellSize, lodCellSize},
+		{740, lodCellSize, lodCellSize},
+		{740, lodFarCellSize, lodFarCellSize},
+		{650, lodFarCellSize, lodCellSize},
+	} {
+		if got := lodStepForDistance(tc.distance, full, tc.previous); got != tc.want {
+			t.Fatalf("distance %.0f previous=%d: got %d, want %d", tc.distance, tc.previous, got, tc.want)
+		}
+	}
+}
+
 func TestWebGPUDistantTerrainPreview(t *testing.T) {
 	if os.Getenv("GOCRAFT_WEBGPU_LOD_PREVIEW") != "1" {
 		t.Skip("set GOCRAFT_WEBGPU_LOD_PREVIEW=1")

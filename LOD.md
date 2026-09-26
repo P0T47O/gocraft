@@ -8,8 +8,12 @@ simplified, non-interactive terrain beyond it.
 
 ## Data and budget
 
-- A 128×128-block LOD tile uses an 8-block grid (16×16 cells) sampled directly
-  from the deterministic seed/terrain-column functions. It does not create or
+- A 128×128-block LOD tile uses a 4-, 8-, or 16-block grid, chosen by distance
+  from the camera beyond the full-chunk radius. The first eight chunks beyond
+  full detail use 4-block cells, the next 24 use 8-block cells, and the outer
+  horizon uses 16-block cells. A three-chunk hysteresis band prevents repeated
+  rebuilds while hovering near a level boundary. Tiles are sampled directly
+  from the deterministic seed/terrain-column functions. They do not create or
   retain `Chunk` objects, compute caves, light propagation or entities. A
   cheap hash prefilter rejects most tree positions, then the shared tree-anchor
   generator supplies exact tree positions, species and heights. The distant
@@ -19,7 +23,10 @@ simplified, non-interactive terrain beyond it.
   radius as a lowered underlay, so lagging chunk delivery does not leave an
   empty ring. Approximate trees are hidden inside that radius; real chunks
   render over the underlay. A 128-block-wide height transition avoids a hard
-  step where the full-detail radius ends.
+  step where the full-detail radius ends. Simplified tree silhouettes gain
+  coverage gradually after the full radius, and a subtle block-scale color
+  variation fades with distance. Adjacent levels share an interpolated
+  16-block edge profile, so different cell sizes do not leave open seams.
 - Two CPU workers generate tiles. A bounded queue and at most four GPU uploads
   per frame prevent a long single-frame stall. Visible tiles are requested
   nearest-first; meshes outside the radius are unloaded. GPU creation, upload
@@ -29,24 +36,25 @@ simplified, non-interactive terrain beyond it.
   differ from the procedural seed. Decorations, natural tree leaves/logs and
   liquids are ignored for this comparison. Subsequent edits at sampled points
   refresh those columns; stale worker results are rejected by per-tile version
-  numbers. A tile is rebuilt in the background while its previous mesh stays
-  visible. Chunks first loaded while the horizon was disabled are sampled
+  and detail level. A tile is rebuilt in the background while its previous mesh
+  stays visible. Chunks first loaded while the horizon was disabled are sampled
   before unloading if the horizon has since been enabled. These sparse deltas
   survive ordinary chunk unloads but are cleared on world-seed change.
 - The view projection and boundary fog follow the larger of full and distant
   radii. The settings page cycles the horizon through Off/64/96/128 chunks;
   default is 96, independently of the 24-chunk full-detail default.
 
-`BenchmarkLODTileBuild` on an i7-14700HX measured roughly 1.65 ms per tile
-with exact tree anchors (200 iterations; the prior approximate-tree version
-measured about 1.39 ms and bare-ground about 0.70 ms). This is a CPU-only tile
-microbenchmark, not a gameplay FPS or full-horizon completion measurement.
+`BenchmarkLODTileLevels` on an i7-14700HX measured roughly 4.10 / 1.87 /
+1.21 ms per 4 / 8 / 16-block tile. The finer level is restricted to the
+inner band; the outer horizon is cheaper than the former fixed 8-block grid.
+This is a CPU-only tile microbenchmark, not a gameplay FPS or full-horizon
+completion measurement.
 
 ## Checks
 
-- `go test . -run '^TestLODTile|^TestHorizonDistanceClamp'` verifies seed
-  determinism, exact sampled heights/surface colors, negative coordinates,
-  neighbor seams and index bounds.
+- `go test . -run '^TestLOD|^TestHorizonDistanceClamp'` verifies seed
+  determinism, sampled heights/surface colors, negative coordinates, mixed
+  4/16-level neighbor seams, level hysteresis and index bounds.
 - `GOCRAFT_WEBGPU_LOD_PREVIEW=1 go test . -run TestWebGPUDistantTerrainPreview -v`
   exercises native WebGPU gameplay, captures `work/lod-terrain.png`, and checks
   world-seed change and horizon-off cleanup.
@@ -63,8 +71,14 @@ microbenchmark, not a gameplay FPS or full-horizon completion measurement.
   Natural logs/leaves are excluded from surface sampling, so log-only player
   structures are also not yet represented. Unvisited distant edits cannot be
   known without a separate server LOD protocol.
-- One 8-block grid resolution is used throughout the far view. There is no
-  multi-level quadtree, LOD disk cache or distant structure representation.
+- The three fixed-distance bands are not a multi-level quadtree or a smooth
+  geometric morph. Camera movement across a band boundary may still change
+  terrain silhouette slightly; hysteresis prevents rapid oscillation, not all
+  popping. There is no LOD disk cache or distant structure representation.
+- Sparse authoritative edits are sampled on the 8-block lattice. Edits lying
+  between 16-block outer vertices or between 4-block inner vertices are not
+  fully represented. Coarse water-cell classifications can also differ at a
+  mixed-level shoreline even though the ground edges share a height profile.
 - Biome colors are a small palette rather than averaged atlas textures. Water
   is an opaque, flat color, and transitions at shorelines/near-full meshes
   still need visual inspection in live play. The offscreen preview deliberately
@@ -73,5 +87,6 @@ microbenchmark, not a gameplay FPS or full-horizon completion measurement.
 - Full `RenderDistance=128` still requests complete chunks. For the intended
   experiment, keep full distance around 16–32 and use `Horizon=96/128`.
 
-The next version should prioritize overlap/occlusion checks in live terrain,
-then synchronize saved edits and add at least one coarser outer LOD level.
+The next version should prioritize a live full-chunk/LOD overlap screenshot,
+then a geometric morph or terrain-texture strategy if the handoff remains
+visibly abrupt, followed by persistent edit/structure synchronization.
