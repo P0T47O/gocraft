@@ -236,7 +236,7 @@
 
 类型：`lodTileKey`、`lodTileData`
 
-函数/方法：`lodSurfaceColor`、`buildLODTile`、`appendLODTreeCandidate`
+函数/方法：`lodSurfaceColor`、`buildLODTile`、`appendLODTree`
 
 ## [main.go](main.go)
 

@@ -74,6 +74,42 @@ func TestLODTreeSilhouettesAreBoundedAndTagged(t *testing.T) {
 	}
 }
 
+func TestLODTreePositionsMatchFullGenerator(t *testing.T) {
+	const seed = uint32(1234511)
+	key := lodTileKey{0, 0}
+	tile := buildLODTile(seed, key)
+	actual := make(map[[3]int]bool)
+	treeStart := -1
+	for i, v := range tile.vertices {
+		if v.Color[3] != 254 {
+			continue
+		}
+		if treeStart < 0 {
+			treeStart = i
+		}
+		if (i-treeStart)%17 == 0 {
+			// Each tree starts with the trunk's bottom south-west corner.
+			actual[[3]int{int(v.Position[0] + .35), int(v.Position[1] + .5), int(v.Position[2] + .35)}] = true
+		}
+	}
+	expected := make(map[[3]int]bool)
+	for z := key.Z * lodTileSize; z < (key.Z+1)*lodTileSize; z++ {
+		for x := key.X * lodTileSize; x < (key.X+1)*lodTileSize; x++ {
+			if tree, ok := sampleTreeAnchor(seed, x, z); ok {
+				expected[[3]int{tree.x, tree.y, tree.z}] = true
+			}
+		}
+	}
+	if len(expected) == 0 || len(actual) != len(expected) {
+		t.Fatalf("LOD tree count=%d, full generator=%d", len(actual), len(expected))
+	}
+	for pos := range expected {
+		if !actual[pos] {
+			t.Fatalf("missing exact full-generator tree at %v", pos)
+		}
+	}
+}
+
 func TestHorizonDistanceClamp(t *testing.T) {
 	for _, tc := range [][2]int{{-1, 0}, {0, 0}, {1, 32}, {64, 64}, {200, 128}} {
 		if got := clampHorizonDistance(tc[0]); got != tc[1] {

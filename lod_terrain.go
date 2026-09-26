@@ -80,48 +80,33 @@ func buildLODTile(seed uint32, key lodTileKey) lodTileData {
 			data.indices = append(data.indices, base, base+2, base+1, base+1, base+2, base+3)
 		}
 	}
-	// One deterministic candidate per cell is a cheap distant silhouette,
-	// not a second pass over every block where a real tree might grow.
-	for z := 0; z < lodCellsPerTile; z++ {
-		for x := 0; x < lodCellsPerTile; x++ {
-			appendLODTreeCandidate(&data, seed, baseX+x*lodCellSize, baseZ+z*lodCellSize)
+	// The actual generator's random draw must be below its maximum chance.
+	// Hash-filter first; only rare candidate coordinates pay for a terrain
+	// sample. Every emitted silhouette now has a matching full-detail tree.
+	for z := baseZ; z < baseZ+lodTileSize; z++ {
+		for x := baseX; x < baseX+lodTileSize; x++ {
+			if (hash2(seed+1, x, z)+1)*.5 >= maxTreeAnchorChance {
+				continue
+			}
+			if anchor, ok := sampleTreeAnchor(seed, x, z); ok {
+				appendLODTree(&data, anchor)
+			}
 		}
 	}
 	return data
 }
 
-func appendLODTreeCandidate(data *lodTileData, seed uint32, cellX, cellZ int) {
-	x := cellX + int((hash2(seed+0x71a9, cellX, cellZ)+1)*.5*lodCellSize)%lodCellSize
-	z := cellZ + int((hash2(seed+0x72a9, cellX, cellZ)+1)*.5*lodCellSize)%lodCellSize
-	c := sampleTerrainColumn(seed, x, z)
-	if c.height < seaLevel || c.height >= chunkHeight-20 || isOceanBiome(c.biomeID) ||
-		(c.top != blockGrass && c.top != blockDirt && c.top != blockSnow) {
-		return
-	}
-	w := c.environment.weights
-	chance := (.0005*w[regionPlains] + .012*w[regionForest] + .015*w[regionTaiga] + .001*w[regionMountain]) *
-		(1 - smoothstep(.25, .65, c.slope)) * (lodCellSize * lodCellSize)
-	density := fbm2(seed+99, float32(x)*.02, float32(z)*.02)
-	if density < -.1 {
-		return
-	}
-	if density > .4 {
-		chance *= 1.5
-	}
-	if (hash2(seed+0x73a9, cellX, cellZ)+1)*.5 >= chance {
-		return
-	}
-	spruce := w[regionTaiga] > w[regionForest]+w[regionPlains]
-	height := float32(5)
-	if spruce {
-		height = 7
-	}
+func appendLODTree(data *lodTileData, anchor treeAnchor) {
+	height := float32(anchor.height)
 	// Compact solid silhouettes remain visible after a tree has shrunk below
 	// a texel. Deliberately omit individual leaves, branches and atlas reads.
-	centerX, centerZ := float32(x), float32(z)
-	ground := float32(c.height) - .5
+	centerX, centerZ := float32(anchor.x), float32(anchor.z)
+	ground := float32(anchor.y) - .5
 	trunkBase := uint32(len(data.vertices))
 	trunk := [4]uint8{94, 72, 48, 254}
+	if anchor.log == blockLogBirch {
+		trunk = [4]uint8{192, 188, 174, 254}
+	}
 	for _, y := range [2]float32{ground, ground + height*.52} {
 		for _, p := range [4][2]float32{{-.35, -.35}, {.35, -.35}, {-.35, .35}, {.35, .35}} {
 			data.vertices = append(data.vertices, platform.Vertex{Position: [3]float32{centerX + p[0], y, centerZ + p[1]}, Color: trunk})
@@ -132,13 +117,15 @@ func appendLODTreeCandidate(data *lodTileData, seed uint32, cellX, cellZ int) {
 	}
 	base := uint32(len(data.vertices))
 	radius := float32(2.4)
-	if spruce {
+	if anchor.spruce {
 		radius = 2
 	}
 	// Alpha 254 marks LOD-only vegetation for the near-field shader mask.
 	leaf := [4]uint8{48, 91, 45, 254}
-	if spruce {
+	if anchor.spruce {
 		leaf = [4]uint8{40, 72, 57, 254}
+	} else if anchor.leaves == blockLeavesBirch {
+		leaf = [4]uint8{66, 105, 45, 254}
 	}
 	// Two stacked square rings plus an apex form a low-cost, tapered crown.
 	for ring, y := range []float32{ground + height*.45, ground + height*.83} {
@@ -150,7 +137,7 @@ func appendLODTreeCandidate(data *lodTileData, seed uint32, cellX, cellZ int) {
 			data.vertices = append(data.vertices, platform.Vertex{Position: [3]float32{centerX + p[0], y, centerZ + p[1]}, Color: leaf})
 		}
 	}
-	data.vertices = append(data.vertices, platform.Vertex{Position: [3]float32{centerX, ground + height + hash2(seed+0x74a9, x, z) + 1, centerZ}, Color: leaf})
+	data.vertices = append(data.vertices, platform.Vertex{Position: [3]float32{centerX, ground + height + 1, centerZ}, Color: leaf})
 	// Both sides are visible from above, including the crown's underside.
 	for _, face := range [][3]uint32{{0, 2, 4}, {2, 6, 4}, {1, 5, 3}, {3, 5, 7}, {0, 4, 1}, {1, 4, 5}, {2, 3, 6}, {3, 7, 6}, {4, 6, 8}, {6, 7, 8}, {7, 5, 8}, {5, 4, 8}} {
 		data.indices = append(data.indices, base+face[0], base+face[1], base+face[2])

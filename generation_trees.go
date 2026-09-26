@@ -1,6 +1,11 @@
 package main
 
 const treeRadius = 2
+const treeTaigaChance = .015
+const treeDensityBoost = 1.5
+// The region weights sum to one, and slope can only reduce the probability.
+// LOD uses this bound to skip terrain samples without losing real trees.
+const maxTreeAnchorChance = treeTaigaChance * treeDensityBoost
 
 type treeAnchor struct {
 	x, y, z, height int
@@ -21,7 +26,7 @@ func treeAnchorFromColumn(seed uint32, x, z int, c terrainColumn) (treeAnchor, b
 		return a, false
 	}
 	w := c.environment.weights
-	chance := (.0005*w[regionPlains] + .012*w[regionForest] + .015*w[regionTaiga] + .001*w[regionMountain]) * (1 - smoothstep(.25, .65, c.slope))
+	chance := (.0005*w[regionPlains] + .012*w[regionForest] + treeTaigaChance*w[regionTaiga] + .001*w[regionMountain]) * (1 - smoothstep(.25, .65, c.slope))
 	if w[regionTaiga] > w[regionForest]+w[regionPlains] {
 		a.log, a.leaves, a.spruce = blockLogSpruce, blockLeavesSpruce, true
 	}
@@ -30,7 +35,7 @@ func treeAnchorFromColumn(seed uint32, x, z int, c terrainColumn) (treeAnchor, b
 		return a, false
 	}
 	if density > 0.4 {
-		chance *= 1.5
+		chance *= treeDensityBoost
 	}
 	r := (hash2(seed+1, x, z) + 1) * 0.5
 	if r >= chance {
