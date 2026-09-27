@@ -64,6 +64,14 @@ completion measurement.
 - `GOCRAFT_WEBGPU_LOD_PREVIEW=1 go test . -run TestWebGPUDistantTerrainPreview -v`
   exercises native WebGPU gameplay, captures `work/lod-terrain.png`, and checks
   world-seed change and horizon-off cleanup.
+- `GOCRAFT_WEBGPU_STRUCTURE_PREVIEW=1 go test . -run TestWebGPUDistantStructuresAtThreeDistances -v`
+  builds a diagnostic 64×64 cuboid, square pyramid, and horizontal ring from
+  captured surface columns, then captures `work/lod-structures-{near,middle,far}.png`
+  on native WebGPU at 4/8/16-block detail. The fixture does not place whole
+  voxel buildings into a save; it supplies the same column summaries that a
+  received, edited client chunk would provide. The CPU test also verifies
+  all three shapes' sampled top blocks and that an unvisited structure remains
+  unknown to the distant renderer.
 - The existing native-window integration test covers two real TCP game
   sessions and returning to the menu.
 
@@ -85,6 +93,14 @@ completion measurement.
   between 16-block outer vertices or between 4-block inner vertices are not
   fully represented. Coarse water-cell classifications can also differ at a
   mixed-level shoreline even though the ground edges share a height profile.
+- The three-building preview exposes a larger architectural limit: the cuboid
+  acquires sloped skirts and the ring looks like a solid mound or wall from a
+  side view. A single top height and color per column cannot preserve vertical
+  building walls, overhangs or a vertical ring's opening. The 4-block level
+  can make these slopes especially sharp. Geometry morphing does not fix this;
+  a separate distant structure/occupancy representation is needed. Before a
+  chunk has ever been received, even a giant player-built shape is invisible
+  because the client has no authoritative distant structure data.
 - Biome colors are a small palette rather than averaged atlas textures. Water
   is an opaque, flat color, and transitions at shorelines/near-full meshes
   still need visual inspection in live play. The offscreen preview deliberately
