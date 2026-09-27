@@ -21,7 +21,7 @@ struct Scene {
     fog_color: vec4f, daylight: vec4f,
 }
 @group(0) @binding(0) var<uniform> scene: Scene;
-struct Input { @location(0) position: vec3f, @location(3) color: vec4f, }
+struct Input { @location(0) position: vec3f, @location(1) detail: vec2f, @location(3) color: vec4f, }
 struct Output {
     @builtin(position) position: vec4f,
     @location(0) world_pos: vec3f,
@@ -30,6 +30,16 @@ struct Output {
 @vertex fn vs_main(input: Input) -> Output {
     var out: Output;
     var pos = input.position;
+    if input.detail.y > 0.0 && input.detail.y < 16.0 {
+        // Morph against the same tile-center distance used by the CPU level
+        // selector. At the switch, both meshes describe the same terrain.
+        let center = (floor(pos.xz / 128.0) + vec2f(0.5)) * 128.0;
+        let distance = length(center - scene.eye_pos.xz);
+        let full_radius = scene.daylight.y + 32.0;
+        let boundary = select(full_radius + 512.0, full_radius + 128.0, input.detail.y < 6.0);
+        let blend = smoothstep(boundary - 128.0, boundary - 16.0, distance);
+        pos.y = mix(pos.y, input.detail.x, blend);
+    }
     let horizontal = length(pos.xz - scene.eye_pos.xz);
     // Keep a shallow underlay beneath real terrain, but retain it when the
     // full chunk stream has not caught up. Fade the offset across the seam.
@@ -119,6 +129,7 @@ func newWebGPULODRenderer(r *webGPUWorldRenderer, seed uint32) (*webGPULODRender
 			ArrayStride: uint64(unsafe.Sizeof(platform.CompactVertex{})), StepMode: gputypes.VertexStepModeVertex,
 			Attributes: []gputypes.VertexAttribute{
 				{Format: gputypes.VertexFormatFloat32x3, Offset: 0, ShaderLocation: 0},
+				{Format: gputypes.VertexFormatFloat32x2, Offset: 12, ShaderLocation: 1},
 				{Format: gputypes.VertexFormatUnorm8x4, Offset: 20, ShaderLocation: 3},
 			},
 		}}},
@@ -208,7 +219,7 @@ func lodTileInRange(key, center lodTileKey, radius int) bool {
 func lodStepForDistance(distance, fullRadius float32, previous int) int {
 	nearLimit := fullRadius + 8*chunkWidth
 	midLimit := fullRadius + 32*chunkWidth
-	const hysteresis = 48
+	const hysteresis = 16
 	switch previous {
 	case lodNearCellSize:
 		nearLimit += hysteresis

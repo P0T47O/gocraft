@@ -242,7 +242,7 @@
 
 类型：`lodTileKey`、`lodTileData`
 
-函数/方法：`lodSurfaceColor`、`buildLODTile`、`buildLODTileWithColumns`、`lodSampleColumn`、`lodGridColumn`、`lodNearestTop`、`lodBlendColor`、`buildLODTileAtStep`、`appendLODTree`
+函数/方法：`lodSurfaceColor`、`buildLODTile`、`buildLODTileWithColumns`、`lodSampleColumn`、`lodGridColumn`、`lodNearestTop`、`lodBlendColor`、`lodParentHeight`、`buildLODTileAtStep`、`appendLODTree`
 
 ## [main.go](main.go)
 

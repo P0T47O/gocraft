@@ -31,10 +31,11 @@ func TestLODStepBandsAndHysteresis(t *testing.T) {
 		{300, 0, lodNearCellSize},
 		{500, 0, lodCellSize},
 		{900, 0, lodFarCellSize},
-		{400, lodNearCellSize, lodNearCellSize},
+		{400, lodNearCellSize, lodCellSize},
 		{400, lodCellSize, lodCellSize},
 		{740, lodCellSize, lodCellSize},
-		{740, lodFarCellSize, lodFarCellSize},
+		{740, lodFarCellSize, lodCellSize},
+		{760, lodFarCellSize, lodFarCellSize},
 		{650, lodFarCellSize, lodCellSize},
 	} {
 		if got := lodStepForDistance(tc.distance, full, tc.previous); got != tc.want {

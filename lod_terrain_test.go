@@ -63,6 +63,39 @@ func TestLODMixedLevelEdgesStayOnTheSameLine(t *testing.T) {
 	}
 }
 
+func TestLODParentMorphMatchesNextLevel(t *testing.T) {
+	const seed = uint32(1234511)
+	for _, step := range []int{lodNearCellSize, lodCellSize} {
+		for _, key := range []lodTileKey{{0, 0}, {-5, 3}} {
+			fine := buildLODTileAtStep(seed, key, nil, step)
+			coarse := buildLODTileAtStep(seed, key, nil, step*2)
+			fineSide := lodTileSize/step + 1
+			coarseSide := lodTileSize/(step*2) + 1
+			for z := 0; z < fineSide; z++ {
+				for x := 0; x < fineSide; x++ {
+					got := fine.vertices[z*fineSide+x]
+					if got.Texcoord[1] != float32(step) {
+						t.Fatalf("step %d tile %v (%d,%d): missing morph level", step, key, x, z)
+					}
+					cx, cz := x/2, z/2
+					v := func(px, pz int) float32 { return coarse.vertices[pz*coarseSide+px].Position[1] }
+					want := v(cx, cz)
+					if x%2 != 0 && z%2 != 0 {
+						want = (v(cx+1, cz) + v(cx, cz+1)) * .5
+					} else if x%2 != 0 {
+						want = (want + v(cx+1, cz)) * .5
+					} else if z%2 != 0 {
+						want = (want + v(cx, cz+1)) * .5
+					}
+					if abs(got.Texcoord[0]-want) > .0001 {
+						t.Fatalf("step %d tile %v (%d,%d): target=%v parent=%v", step, key, x, z, got.Texcoord[0], want)
+					}
+				}
+			}
+		}
+	}
+}
+
 func TestLODTileDeterministicAndNoWorldMutation(t *testing.T) {
 	key := lodTileKey{-5, -4}
 	a, b := buildLODTile(42, key), buildLODTile(42, key)

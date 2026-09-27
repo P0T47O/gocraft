@@ -103,6 +103,29 @@ func lodBlendColor(a, b [4]uint8, t float32) [4]uint8 {
 	}
 }
 
+// The two triangles in each parent cell share a bottom-left to top-right
+// diagonal. Match that plane exactly so a fine tile can morph into its parent
+// level before its mesh is replaced. Parent vertices are already in heights.
+func lodParentHeight(heights []float32, side, x, z int) float32 {
+	px, pz := x/2*2, z/2*2
+	if px+2 >= side || pz+2 >= side {
+		return heights[z*side+x]
+	}
+	a := heights[pz*side+px]
+	if x%2 == 0 && z%2 == 0 {
+		return a
+	}
+	b := heights[pz*side+px+2]
+	c := heights[(pz+2)*side+px]
+	if x%2 == 0 {
+		return (a + c) * .5
+	}
+	if z%2 == 0 {
+		return (a + b) * .5
+	}
+	return (b + c) * .5
+}
+
 func buildLODTileAtStep(seed uint32, key lodTileKey, overrides map[lodPoint]lodColumn, step int) lodTileData {
 	if step != lodNearCellSize && step != lodCellSize && step != lodFarCellSize {
 		panic("invalid distant terrain cell size")
@@ -125,6 +148,14 @@ func buildLODTileAtStep(seed uint32, key lodTileKey, overrides map[lodPoint]lodC
 				Position: [3]float32{float32(wx), height - .65, float32(wz)},
 				Color:    color,
 			})
+		}
+	}
+	if step < lodFarCellSize {
+		for z := 0; z < side; z++ {
+			for x := 0; x < side; x++ {
+				v := &data.vertices[z*side+x]
+				v.Texcoord = [2]float32{lodParentHeight(heights, side, x, z) - .65, float32(step)}
+			}
 		}
 	}
 	for z := 0; z < cells; z++ {

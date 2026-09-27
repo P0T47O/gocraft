@@ -11,8 +11,12 @@ simplified, non-interactive terrain beyond it.
 - A 128×128-block LOD tile uses a 4-, 8-, or 16-block grid, chosen by distance
   from the camera beyond the full-chunk radius. The first eight chunks beyond
   full detail use 4-block cells, the next 24 use 8-block cells, and the outer
-  horizon uses 16-block cells. A three-chunk hysteresis band prevents repeated
-  rebuilds while hovering near a level boundary. Tiles are sampled directly
+  horizon uses 16-block cells. A one-chunk hysteresis band prevents repeated
+  rebuilds while hovering near a level boundary. The 4- and 8-block terrain
+  vertices also carry the height of their next-coarser triangulation. During
+  the last 112 blocks before a level boundary, the GPU gradually morphs each
+  tile toward that height; the two levels match when the mesh is swapped.
+  Tiles are sampled directly
   from the deterministic seed/terrain-column functions. They do not create or
   retain `Chunk` objects, compute caves, light propagation or entities. A
   cheap hash prefilter rejects most tree positions, then the shared tree-anchor
@@ -26,7 +30,8 @@ simplified, non-interactive terrain beyond it.
   step where the full-detail radius ends. Simplified tree silhouettes gain
   coverage gradually after the full radius, and a subtle block-scale color
   variation fades with distance. Adjacent levels share an interpolated
-  16-block edge profile, so different cell sizes do not leave open seams.
+  16-block edge profile, so different cell sizes do not leave open seams. The
+  morph uses tile-center distance, matching the CPU level selector.
 - Two CPU workers generate tiles. A bounded queue and at most four GPU uploads
   per frame prevent a long single-frame stall. Visible tiles are requested
   nearest-first; meshes outside the radius are unloaded. GPU creation, upload
@@ -54,7 +59,8 @@ completion measurement.
 
 - `go test . -run '^TestLOD|^TestHorizonDistanceClamp'` verifies seed
   determinism, sampled heights/surface colors, negative coordinates, mixed
-  4/16-level neighbor seams, level hysteresis and index bounds.
+  4/16-level neighbor seams, parent-level morph heights, level hysteresis and
+  index bounds.
 - `GOCRAFT_WEBGPU_LOD_PREVIEW=1 go test . -run TestWebGPUDistantTerrainPreview -v`
   exercises native WebGPU gameplay, captures `work/lod-terrain.png`, and checks
   world-seed change and horizon-off cleanup.
@@ -71,10 +77,10 @@ completion measurement.
   Natural logs/leaves are excluded from surface sampling, so log-only player
   structures are also not yet represented. Unvisited distant edits cannot be
   known without a separate server LOD protocol.
-- The three fixed-distance bands are not a multi-level quadtree or a smooth
-  geometric morph. Camera movement across a band boundary may still change
-  terrain silhouette slightly; hysteresis prevents rapid oscillation, not all
-  popping. There is no LOD disk cache or distant structure representation.
+- The three fixed-distance bands are not a multi-level quadtree. Terrain
+  heights now morph between adjacent grid levels, but color variation, water
+  cell boundaries and simplified tree silhouettes can still change at a mesh
+  swap. There is no LOD disk cache or distant structure representation.
 - Sparse authoritative edits are sampled on the 8-block lattice. Edits lying
   between 16-block outer vertices or between 4-block inner vertices are not
   fully represented. Coarse water-cell classifications can also differ at a
@@ -88,5 +94,5 @@ completion measurement.
   experiment, keep full distance around 16–32 and use `Horizon=96/128`.
 
 The next version should prioritize a live full-chunk/LOD overlap screenshot,
-then a geometric morph or terrain-texture strategy if the handoff remains
-visibly abrupt, followed by persistent edit/structure synchronization.
+then a terrain-texture and water-shore strategy if the handoff remains visibly
+abrupt, followed by persistent edit/structure synchronization.
