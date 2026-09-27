@@ -81,6 +81,14 @@ skip it entirely.
   received, edited client chunk would provide. The CPU test also verifies
   all three shapes' sampled top blocks and that an unvisited structure remains
   unknown to the distant renderer.
+- `GOCRAFT_WEBGPU_STRUCTURE_PREVIEW=1 go test . -run TestWebGPUDistantVerticalAndFloatingStructures -v`
+  creates a real-voxel vertical obsidian ring (empty center) and an unsupported
+  iron platform (air beneath) in temporary in-memory chunks. Their captured
+  columns are rendered at 4/8/16-block detail and saved as
+  `work/lod-vertical-{near,middle,far}.png`. The result confirms that both
+  collapse into ground-connected solid prisms at every distance. This test
+  documents the current failure; passing it does **not** mean those two shapes
+  render correctly.
 - The existing native-window integration test covers two real TCP game
   sessions and returning to the menu.
 
@@ -114,6 +122,13 @@ skip it entirely.
   has not yet been validated against *simultaneously loaded* full-detail chunk
   meshes, so overlap or temporary double drawing at the near boundary remains
   a possible visual issue.
+- The in-memory voxel regression confirms the occupancy limit directly: a
+  vertical ring has an empty center at mid-height, yet its top arch becomes a
+  solid distant column; a floating platform has air beneath, yet its distant
+  counterpart extends to the ground. Finer grid cells do not recover the lost
+  vertical intervals. Capturing one or more occupied Y-ranges per X/Z sample,
+  and meshing their exposed top/bottom/side surfaces, is the next structural
+  design step if these shapes should appear in the horizon.
 - Biome colors are a small palette rather than averaged atlas textures. Water
   is an opaque, flat color, and transitions at shorelines/near-full meshes
   still need visual inspection in live play. The offscreen preview deliberately
