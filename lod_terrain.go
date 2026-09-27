@@ -58,11 +58,14 @@ func buildLODTileWithColumns(seed uint32, key lodTileKey, overrides map[lodPoint
 	return buildLODTileAtStep(seed, key, overrides, lodCellSize)
 }
 
+// Raised player edits are geometry, not terrain-height samples: interpolating
+// them into the ground turns buildings into sharp hills. Digging and material
+// changes at the existing surface still belong to the terrain grid.
 func lodSampleColumn(seed uint32, x, z int, overrides map[lodPoint]lodColumn) lodColumn {
-	if changed, ok := overrides[lodPoint{x, z}]; ok {
+	column := sampleTerrainColumn(seed, x, z)
+	if changed, ok := overrides[lodPoint{x, z}]; ok && changed.height <= column.height {
 		return changed
 	}
-	column := sampleTerrainColumn(seed, x, z)
 	return lodColumn{column.height, column.top}
 }
 
@@ -181,6 +184,7 @@ func buildLODTileAtStep(seed uint32, key lodTileKey, overrides map[lodPoint]lodC
 			data.indices = append(data.indices, base, base+2, base+1, base+1, base+2, base+3)
 		}
 	}
+	appendLODRaisedColumns(&data, seed, key, overrides)
 	// The actual generator's random draw must be below its maximum chance.
 	// Hash-filter first; only rare candidate coordinates pay for a terrain
 	// sample. Every emitted silhouette now has a matching full-detail tree.

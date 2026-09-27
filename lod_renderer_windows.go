@@ -53,7 +53,8 @@ struct Output {
 }
 @fragment fn fs_main(input: Output) -> @location(0) vec4f {
     let horizontal = length(input.world_pos.xz - scene.eye_pos.xz);
-    let tree = input.color.a < 0.999;
+    let tree = input.color.a > 0.994 && input.color.a < 0.999;
+    let structure = input.color.a < 0.994;
     if tree {
         // Fade simplified crowns in across six chunks after full-detail trees
         // end. Ordered coverage keeps this in the opaque depth-writing pass.
@@ -65,7 +66,7 @@ struct Output {
     }
     var color = input.color.rgb;
     let water = color.b > color.r * 1.5 && color.b > color.g * 1.25;
-    if !tree && !water {
+    if !tree && !structure && !water {
         // A little stable block-scale variation makes the near LOD less like
         // a uniformly painted sheet. It fades out before aliasing at range.
         let block = floor(input.world_pos.xz);

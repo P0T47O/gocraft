@@ -80,4 +80,44 @@ func TestWebGPUDistantStructuresAtThreeDistances(t *testing.T) {
 		saveNativePreview(t, img, path)
 		t.Logf("%s: %d-block cells, %s", view.name, view.step, path)
 	}
+	// A high angle checks the ring's ground opening; its front wall hides the
+	// hole in the three distance views even when the geometry is correct.
+	overhead := webGPUFrameContext{
+		Camera: webGPUCamera{
+			Position: webGPUVec3{128, 330, 960},
+			Target:   webGPUVec3{128, 90, 1024},
+			Up:       webGPUVec3{0, 1, 0},
+			Fovy:     70,
+		},
+		Width: 1280, Height: 720,
+	}
+	deadline := time.Now().Add(8 * time.Second)
+	ready := 0
+	for time.Now().Before(deadline) {
+		if err := r.DrawGameplay(w, overhead, state); err != nil {
+			t.Fatal(err)
+		}
+		ready = 0
+		for _, z := range []int{7, 8} {
+			for _, x := range []int{0, 1} {
+				key := lodTileKey{x, z}
+				if r.lod.tiles[key] != nil && r.lod.steps[key] == lodNearCellSize {
+					ready++
+				}
+			}
+		}
+		if ready == 4 {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if ready != 4 {
+		t.Fatalf("ring overhead: only %d of 4 tiles ready", ready)
+	}
+	img := captureNativePreview(t, r, overhead.Width, overhead.Height, func(pass *wgpu.RenderPassEncoder) error {
+		return r.lod.draw(pass, r, overhead.Camera, w)
+	})
+	path := filepath.Join("work", "lod-structures-ring-overhead.png")
+	saveNativePreview(t, img, path)
+	t.Logf("ring overhead: %s", path)
 }

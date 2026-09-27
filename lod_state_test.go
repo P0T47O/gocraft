@@ -40,8 +40,18 @@ func TestLODSparseChunkSnapshotAndEdits(t *testing.T) {
 	}
 	snapshot := w.snapshotLODTile(lodTileKey{0, 0})
 	tile := buildLODTileWithColumns(seed, lodTileKey{0, 0}, snapshot)
-	if tile.vertices[0].Position[1] != float32(y+1)-.65 || tile.vertices[0].Color != lodSurfaceColor(blockCobblestone) {
-		t.Fatalf("mesh did not use authoritative surface sample: %+v", tile.vertices[0])
+	if tile.vertices[0].Position[1] != float32(base.height)-.65 {
+		t.Fatalf("raised block incorrectly pulled up terrain: %+v", tile.vertices[0])
+	}
+	found := false
+	for _, v := range tile.vertices {
+		if v.Position == ([3]float32{0, float32(y+1) - .65, 0}) && v.Color == lodStructureColor(blockCobblestone, 1) {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("raised block did not produce a separate structure cap")
 	}
 	chunk.blocks.Set(0, y, 0, old)
 	chunk.heightMap[0][0] = oldHeight
@@ -66,6 +76,22 @@ func TestLODSnapshotSkipsTreeAndDecoration(t *testing.T) {
 	chunk.heightMap[0][0] = 74
 	if got := snapshotLODColumn(&chunk, 0, 0); got != (lodColumn{71, blockGrass}) {
 		t.Fatalf("tree/decorations changed terrain surface: %+v", got)
+	}
+}
+
+func TestLODRaisedColumnInvalidatesNeighborHalo(t *testing.T) {
+	const seed = uint32(1234511)
+	w := &World{seed: seed, IsClient: true}
+	var chunk Chunk
+	x, z := lodTileSize-lodCellSize, lodCellSize
+	chunk.blocks.Set(modFloor(x, chunkWidth), 189, modFloor(z, chunkWidth), blockIronBlock)
+	chunk.heightMap[modFloor(x, chunkWidth)][modFloor(z, chunkWidth)] = 190
+	w.recordLODColumn(&chunk, x, z)
+	if w.lodVersions[lodTileKey{0, 0}] == 0 || w.lodVersions[lodTileKey{1, 0}] == 0 {
+		t.Fatal("editing the last structure cell did not invalidate both tiles")
+	}
+	if _, ok := w.snapshotLODTile(lodTileKey{1, 0})[lodPoint{x, z}]; !ok {
+		t.Fatal("neighbor tile did not receive the structure halo")
 	}
 }
 

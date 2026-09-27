@@ -16,9 +16,9 @@ simplified, non-interactive terrain beyond it.
   vertices also carry the height of their next-coarser triangulation. During
   the last 112 blocks before a level boundary, the GPU gradually morphs each
   tile toward that height; the two levels match when the mesh is swapped.
-  Tiles are sampled directly
-  from the deterministic seed/terrain-column functions. They do not create or
-  retain `Chunk` objects, compute caves, light propagation or entities. A
+  Tiles are sampled directly from the deterministic seed/terrain-column
+  functions. They do not create or retain `Chunk` objects, compute caves, light
+  propagation or entities. A
   cheap hash prefilter rejects most tree positions, then the shared tree-anchor
   generator supplies exact tree positions, species and heights. The distant
   trunk/crown meshes remain simplified representations of those trees.
@@ -39,10 +39,15 @@ simplified, non-interactive terrain beyond it.
   meshes/workers even though the menu keeps the main renderer alive.
 - Incoming client chunks contribute only the 8-block-grid surface samples that
   differ from the procedural seed. Decorations, natural tree leaves/logs and
-  liquids are ignored for this comparison. Subsequent edits at sampled points
-  refresh those columns; stale worker results are rejected by per-tile version
-  and detail level. A tile is rebuilt in the background while its previous mesh
-  stays visible. Chunks first loaded while the horizon was disabled are sampled
+  liquids are ignored for this comparison. Samples raised above their
+  procedural ground height now form separate sparse 8×8 prisms: a top face and
+  exposed vertical sides. The ground beneath uses its original height, so
+  artificial buildings do not become terrain spikes. A one-sample snapshot
+  halo supplies the neighbor heights needed for walls across tile borders.
+  Subsequent edits at sampled points refresh those columns; stale worker
+  results are rejected by per-tile version and detail level. A tile is rebuilt
+  in the background while its previous mesh stays visible. Chunks first loaded
+  while the horizon was disabled are sampled
   before unloading if the horizon has since been enabled. These sparse deltas
   survive ordinary chunk unloads but are cleared on world-seed change.
 - The view projection and boundary fog follow the larger of full and distant
@@ -53,7 +58,10 @@ simplified, non-interactive terrain beyond it.
 1.21 ms per 4 / 8 / 16-block tile. The finer level is restricted to the
 inner band; the outer horizon is cheaper than the former fixed 8-block grid.
 This is a CPU-only tile microbenchmark, not a gameplay FPS or full-horizon
-completion measurement.
+completion measurement. `BenchmarkLODStructureTile` with a pyramid and half a
+ring measured roughly 4.27 / 2.09 / 1.41 ms after deduplicating neighboring
+column lookups. Structure geometry has a local per-tile cost, but empty tiles
+skip it entirely.
 
 ## Checks
 
@@ -67,7 +75,8 @@ completion measurement.
 - `GOCRAFT_WEBGPU_STRUCTURE_PREVIEW=1 go test . -run TestWebGPUDistantStructuresAtThreeDistances -v`
   builds a diagnostic 64×64 cuboid, square pyramid, and horizontal ring from
   captured surface columns, then captures `work/lod-structures-{near,middle,far}.png`
-  on native WebGPU at 4/8/16-block detail. The fixture does not place whole
+  plus `work/lod-structures-ring-overhead.png` on native WebGPU at 4/8/16-block
+  detail. The fixture does not place whole
   voxel buildings into a save; it supplies the same column summaries that a
   received, edited client chunk would provide. The CPU test also verifies
   all three shapes' sampled top blocks and that an unvisited structure remains
@@ -77,8 +86,9 @@ completion measurement.
 
 ## Deliberate limits before considering a main-branch merge
 
-- Distant terrain is a sampled heightfield, not a full chunk or structure
-  mesh. Server-sent edits at its grid points appear after the corresponding
+- Distant terrain remains a sampled heightfield with a sparse 2.5D prism layer,
+  not a full chunk or voxel-accurate structure mesh. Server-sent edits at its
+  grid points appear after the corresponding
   chunk has been received, but details between those points, underground
   caves, doors, vegetation edits and entities remain absent. Tree silhouettes
   occupy real generated tree positions but do not reproduce every leaf block.
@@ -88,19 +98,22 @@ completion measurement.
 - The three fixed-distance bands are not a multi-level quadtree. Terrain
   heights now morph between adjacent grid levels, but color variation, water
   cell boundaries and simplified tree silhouettes can still change at a mesh
-  swap. There is no LOD disk cache or distant structure representation.
+  swap. There is no LOD disk cache or full distant occupancy representation.
 - Sparse authoritative edits are sampled on the 8-block lattice. Edits lying
   between 16-block outer vertices or between 4-block inner vertices are not
   fully represented. Coarse water-cell classifications can also differ at a
   mixed-level shoreline even though the ground edges share a height profile.
-- The three-building preview exposes a larger architectural limit: the cuboid
-  acquires sloped skirts and the ring looks like a solid mound or wall from a
-  side view. A single top height and color per column cannot preserve vertical
-  building walls, overhangs or a vertical ring's opening. The 4-block level
-  can make these slopes especially sharp. Geometry morphing does not fix this;
-  a separate distant structure/occupancy representation is needed. Before a
-  chunk has ever been received, even a giant player-built shape is invisible
-  because the client has no authoritative distant structure data.
+- The three-building regression initially exposed long sloped skirts. The
+  separate prism layer now preserves the cuboid's vertical sides, stepped
+  pyramid and horizontal ring's inner wall at all three distances. It still
+  stores only the highest captured surface block in each 8×8 column: windows,
+  arches, overhangs, vertical rings and underground rooms cannot be represented.
+  A genuine voxel/occupancy LOD would be required for those. Before a chunk
+  has ever been received, even a giant player-built shape is invisible because
+  the client has no authoritative distant structure data. The structure layer
+  has not yet been validated against *simultaneously loaded* full-detail chunk
+  meshes, so overlap or temporary double drawing at the near boundary remains
+  a possible visual issue.
 - Biome colors are a small palette rather than averaged atlas textures. Water
   is an opaque, flat color, and transitions at shorelines/near-full meshes
   still need visual inspection in live play. The offscreen preview deliberately

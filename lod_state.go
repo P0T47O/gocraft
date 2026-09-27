@@ -70,6 +70,17 @@ func (w *World) recordLODColumn(chunk *Chunk, x, z int) {
 			w.lodVersions[lodTileKey{baseX - dx, baseZ - dz}]++
 		}
 	}
+	// A raised prism at the last sample of a tile also controls the first
+	// side wall in the next tile, whose worker snapshot includes a one-cell halo.
+	if x%lodTileSize == lodTileSize-lodCellSize {
+		w.lodVersions[lodTileKey{baseX + 1, baseZ}]++
+	}
+	if z%lodTileSize == lodTileSize-lodCellSize {
+		w.lodVersions[lodTileKey{baseX, baseZ + 1}]++
+	}
+	if x%lodTileSize == lodTileSize-lodCellSize && z%lodTileSize == lodTileSize-lodCellSize {
+		w.lodVersions[lodTileKey{baseX + 1, baseZ + 1}]++
+	}
 }
 
 func (w *World) recordChunkLODColumns(chunk *Chunk, cx, cz int) {
@@ -96,8 +107,8 @@ func (w *World) resetLODState() {
 
 func (w *World) snapshotLODTile(key lodTileKey) map[lodPoint]lodColumn {
 	var result map[lodPoint]lodColumn
-	for z := 0; z <= lodCellsPerTile; z++ {
-		for x := 0; x <= lodCellsPerTile; x++ {
+	for z := -1; z <= lodCellsPerTile; z++ {
+		for x := -1; x <= lodCellsPerTile; x++ {
 			point := lodPoint{key.X*lodTileSize + x*lodCellSize, key.Z*lodTileSize + z*lodCellSize}
 			if column, ok := w.lodColumns[point]; ok {
 				if result == nil {

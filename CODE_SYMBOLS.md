@@ -238,6 +238,10 @@
 
 函数/方法：`lodSurfaceBlock`、`snapshotLODColumn`、`*World.recordLODColumn`、`*World.recordChunkLODColumns`、`*World.resetLODState`、`*World.snapshotLODTile`
 
+## [lod_structures.go](lod_structures.go)
+
+函数/方法：`appendLODRaisedColumns`、`lodStructureColor`、`appendLODStructureQuad`
+
 ## [lod_terrain.go](lod_terrain.go)
 
 类型：`lodTileKey`、`lodTileData`
