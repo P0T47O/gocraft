@@ -27,7 +27,7 @@ func TestLODSparseChunkSnapshotAndEdits(t *testing.T) {
 	chunk.heightMap[0][0] = int16(y + 1)
 	w.recordLODColumn(&chunk, point.X, point.Z)
 	got, ok := w.lodColumns[point]
-	if !ok || got != (lodColumn{y + 1, blockCobblestone}) {
+	if !ok || got != (lodColumn{height: y + 1, top: blockCobblestone}) {
 		t.Fatalf("placed tower not captured: %+v, present=%t", got, ok)
 	}
 	if got.height <= base.height {
@@ -40,7 +40,7 @@ func TestLODSparseChunkSnapshotAndEdits(t *testing.T) {
 	}
 	snapshot := w.snapshotLODTile(lodTileKey{0, 0})
 	tile := buildLODTileWithColumns(seed, lodTileKey{0, 0}, snapshot)
-	if tile.vertices[0].Position[1] != float32(base.height)-.65 {
+	if tile.vertices[0].Position[1] != float32(base.height)-.5 {
 		t.Fatalf("raised block incorrectly pulled up terrain: %+v", tile.vertices[0])
 	}
 	found := false
@@ -59,7 +59,7 @@ func TestLODSparseChunkSnapshotAndEdits(t *testing.T) {
 	if _, ok := w.lodColumns[point]; ok {
 		t.Fatal("restored procedural column retained an override")
 	}
-	if snapshot[point] != (lodColumn{y + 1, blockCobblestone}) {
+	if snapshot[point] != (lodColumn{height: y + 1, top: blockCobblestone}) {
 		t.Fatal("worker snapshot was mutated by a later world edit")
 	}
 	if w.lodVersions[lodTileKey{-1, -1}] != 2 {
@@ -74,7 +74,7 @@ func TestLODSnapshotSkipsTreeAndDecoration(t *testing.T) {
 	chunk.blocks.Set(0, 72, 0, blockLeaves)
 	chunk.blocks.Set(0, 73, 0, blockRose)
 	chunk.heightMap[0][0] = 74
-	if got := snapshotLODColumn(&chunk, 0, 0); got != (lodColumn{71, blockGrass}) {
+	if got := snapshotLODColumn(&chunk, 0, 0); got != (lodColumn{height: 71, top: blockGrass}) {
 		t.Fatalf("tree/decorations changed terrain surface: %+v", got)
 	}
 }
@@ -132,7 +132,7 @@ func TestLODChunkPacketAndBlockChange(t *testing.T) {
 		t.Fatal("server chunk snapshot rejected")
 	}
 	point := lodPoint{8, 8}
-	if w.lodColumns[point] != (lodColumn{y + 1, blockCobblestone}) || !w.chunks[chunkKey{}].lodCaptured {
+	if w.lodColumns[point] != (lodColumn{height: y + 1, top: blockCobblestone}) || !w.chunks[chunkKey{}].lodCaptured {
 		t.Fatalf("server-edited column not captured: %+v", w.lodColumns[point])
 	}
 	before := w.lodVersions[lodTileKey{}]

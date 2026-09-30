@@ -97,40 +97,11 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 			s.SendChunksAround(p.Username, client.LastChunkX, client.LastChunkZ, 16)
 		}
 
-		// 3. Send Existing Entities
-		s.World.entitiesMu.RLock()
-		for _, e := range s.World.entities {
-			if e.GetUUID() == p.Username {
-				continue
-			} // Skip self if represented as entity
-			ex, ey, ez := e.GetPosition()
-			eyaw, epitch := e.GetRotation()
-
-			meta := int32(0)
-			if item, ok := e.(*ItemEntity); ok {
-				meta = item.ID | (item.Count << 8) | (item.Damage << 16)
-			}
-
-			s.ClientsMu.RLock()
-			client, ok := s.Clients[p.Username]
-			s.ClientsMu.RUnlock()
-			if ok {
-				client.enqueue(&PacketEntitySpawn{
-					EntityID: e.GetUUID(),
-					Type:     e.GetType(),
-					X:        ex,
-					Y:        ey,
-					Z:        ez,
-					Yaw:      eyaw,
-					Pitch:    epitch,
-					Metadata: meta,
-				})
-				if m, ok := e.(*MobEntity); ok {
-					client.enqueue(m.snapshot())
-				}
-			}
+		// 3. Replay existing entities gradually after login. A saved world can
+		// contain more entities than the reliable socket queue can hold.
+		if ok {
+			s.queueExistingEntities(client)
 		}
-		s.World.entitiesMu.RUnlock()
 
 		// 4. Register new player as entity and broadcast to others
 		// Check if entity already exists (rejoining)

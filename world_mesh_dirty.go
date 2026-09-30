@@ -10,6 +10,9 @@ func (c *Chunk) invalidateMeshSection(sec int) {
 	}
 	c.sectionDirty[sec] = true
 	c.meshVersion[sec]++
+	if c.meshCancel[sec] != nil {
+		c.meshCancel[sec].Store(true)
+	}
 	c.meshRetries[sec] = 0
 }
 

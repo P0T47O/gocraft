@@ -4,34 +4,38 @@ import (
 	"math"
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
 type World struct {
-	render       worldRenderCache
-	chunks       map[chunkKey]*Chunk
-	chunksMu     sync.RWMutex // Protects the chunks map
-	dirty        bool
-	seed         uint32
-	TimeTicks    float64 // Server-authoritative; client advances between sync packets.
-	genQueue     chan chunkGenJob
-	genResults   chan chunkGenResult
-	pending      map[chunkKey]bool
-	meshJobs     chan meshJob
-	meshResults  chan meshResult
-	immediate    map[sectionKey]bool
-	chunkPool    *ChunkPool
-	IsClient     bool   // True if this is a client-side world (rendering only)
-	SavePath     string // Path to save directory (for loading saved chunks)
-	done         chan struct{}
-	stopOnce     sync.Once
-	workers      sync.WaitGroup
-	nextChunkID  uint64
-	nextMeshID   uint64
-	lightChanged map[chunkKey]bool
-	pendingEdits map[chunkKey][]blockEdit
-	lodColumns   map[lodPoint]lodColumn // Client-owned sparse deviations from seed terrain.
-	lodVersions  map[lodTileKey]uint64
+	render            worldRenderCache
+	chunks            map[chunkKey]*Chunk
+	chunksMu          sync.RWMutex // Protects the chunks map
+	dirty             bool
+	seed              uint32
+	TimeTicks         float64 // Server-authoritative; client advances between sync packets.
+	genQueue          chan chunkGenJob
+	genResults        chan chunkGenResult
+	pending           map[chunkKey]bool
+	meshJobs          chan meshJob
+	meshResults       chan meshResult
+	urgentMeshJobs    chan meshJob
+	urgentMeshResults chan meshResult
+	immediate         map[sectionKey]bool
+	chunkPool         *ChunkPool
+	IsClient          bool   // True if this is a client-side world (rendering only)
+	SavePath          string // Path to save directory (for loading saved chunks)
+	done              chan struct{}
+	stopOnce          sync.Once
+	workers           sync.WaitGroup
+	nextChunkID       uint64
+	nextMeshID        uint64
+	lightChanged      map[chunkKey]bool
+	pendingEdits      map[chunkKey][]blockEdit
+	lodColumns        map[lodPoint]lodColumn // Client-owned sparse deviations from seed terrain.
+	lodVersions       map[lodTileKey]uint64
+	lodOccupancyTiles map[lodTileKey]map[lodPoint]*lodOccupancy
 
 	// Entity System
 	entities   []Entity
@@ -70,6 +74,7 @@ type Chunk struct {
 	torches              []blockPos
 	tints                *meshTintCache
 	meshRequest          [sectionCount]uint64
+	meshCancel           [sectionCount]*atomic.Bool
 	meshSubmittedVersion [sectionCount]uint32
 	blocks               chunkPlane
 	meta                 chunkPlane
@@ -84,6 +89,7 @@ type Chunk struct {
 	dirty                bool
 	generated            bool
 	lodCaptured          bool // Client snapshot taken for the current seed.
+	lodOccludes          bool // A real terrain mesh has owned this chunk column.
 	sectionDirty         []bool
 	pendingOpaque        []bool
 	pendingWater         []bool
@@ -95,18 +101,20 @@ type Chunk struct {
 
 func NewFlatWorld() *World {
 	w := &World{
-		chunks:       make(map[chunkKey]*Chunk),
-		seed:         uint32(time.Now().UnixNano()),
-		TimeTicks:    initialWorldTime,
-		genQueue:     make(chan chunkGenJob, 256),
-		genResults:   make(chan chunkGenResult, 32),
-		pending:      make(map[chunkKey]bool),
-		meshJobs:     make(chan meshJob, 32),
-		meshResults:  make(chan meshResult, 32),
-		immediate:    make(map[sectionKey]bool),
-		chunkPool:    NewChunkPool(1024),
-		done:         make(chan struct{}),
-		lightChanged: make(map[chunkKey]bool),
+		chunks:            make(map[chunkKey]*Chunk),
+		seed:              uint32(time.Now().UnixNano()),
+		TimeTicks:         initialWorldTime,
+		genQueue:          make(chan chunkGenJob, 256),
+		genResults:        make(chan chunkGenResult, 32),
+		pending:           make(map[chunkKey]bool),
+		meshJobs:          make(chan meshJob, 32),
+		meshResults:       make(chan meshResult, 32),
+		urgentMeshJobs:    make(chan meshJob, 8),
+		urgentMeshResults: make(chan meshResult, 8),
+		immediate:         make(map[sectionKey]bool),
+		chunkPool:         NewChunkPool(1024),
+		done:              make(chan struct{}),
+		lightChanged:      make(map[chunkKey]bool),
 	}
 	return w
 }
@@ -128,19 +136,21 @@ func (w *World) StartBackend() {
 
 func NewClientWorld() *World {
 	world := &World{
-		chunks:       map[chunkKey]*Chunk{},
-		seed:         uint32(time.Now().UnixNano()),
-		TimeTicks:    initialWorldTime,
-		genQueue:     make(chan chunkGenJob, 256),
-		genResults:   make(chan chunkGenResult, 32),
-		pending:      map[chunkKey]bool{},
-		meshJobs:     make(chan meshJob, 32),
-		meshResults:  make(chan meshResult, 32),
-		immediate:    map[sectionKey]bool{},
-		chunkPool:    NewChunkPool(1024),
-		IsClient:     true,
-		done:         make(chan struct{}),
-		lightChanged: make(map[chunkKey]bool),
+		chunks:            map[chunkKey]*Chunk{},
+		seed:              uint32(time.Now().UnixNano()),
+		TimeTicks:         initialWorldTime,
+		genQueue:          make(chan chunkGenJob, 256),
+		genResults:        make(chan chunkGenResult, 32),
+		pending:           map[chunkKey]bool{},
+		meshJobs:          make(chan meshJob, 32),
+		meshResults:       make(chan meshResult, 32),
+		urgentMeshJobs:    make(chan meshJob, 8),
+		urgentMeshResults: make(chan meshResult, 8),
+		immediate:         map[sectionKey]bool{},
+		chunkPool:         NewChunkPool(1024),
+		IsClient:          true,
+		done:              make(chan struct{}),
+		lightChanged:      make(map[chunkKey]bool),
 	}
 	// Client world does not spawn generation workers.
 	// It relies on receiving chunk data from the server.
@@ -387,8 +397,11 @@ func (w *World) SetBlockAt(x, y, z int, block byte) {
 	sec := sectionIndexForY(y)
 	chunk.invalidateMeshSection(sec)
 	chunk.mu.Unlock()
-	if w.IsClient && (chunk.lodCaptured || horizonDistance() > renderDistance()) && x%lodCellSize == 0 && z%lodCellSize == 0 {
-		w.recordLODColumn(chunk, x, z)
+	if w.IsClient && (chunk.lodCaptured || horizonDistance() > renderDistance()) {
+		if x%lodCellSize == 0 && z%lodCellSize == 0 {
+			w.recordLODColumn(chunk, x, z)
+		}
+		w.recordLODOccupancy(chunk, x, z)
 	}
 	opacityChanged := lightOpaque(oldBlock, oldMeta) != lightOpaque(block, 0)
 	if emitsLight(oldBlock) || emitsLight(block) || opacityChanged {

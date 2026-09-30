@@ -43,6 +43,39 @@ func TestChunkRequestPlan(t *testing.T) {
 	}
 }
 
+func TestChunkRequestPlanTurnsTowardMissingChunks(t *testing.T) {
+	var p chunkRequestPlan
+	now := time.Unix(100, 0)
+	center := chunkKey{}
+	index := func(key chunkKey) int {
+		for i, candidate := range p.keys {
+			if candidate == key {
+				return i
+			}
+		}
+		return -1
+	}
+	p.prepareFacing(center, 16, 0, now)
+	if p.keys[0] != center || index(chunkKey{0, 6}) >= index(chunkKey{0, -6}) {
+		t.Fatal("forward chunks were not prioritized after the near ring")
+	}
+	p.next = 25
+	p.prepareFacing(center, 16, 4, now)
+	if p.next != 0 || index(chunkKey{0, -6}) >= index(chunkKey{0, 6}) {
+		t.Fatal("turn did not reprioritize pending traversal")
+	}
+	seenFar := false
+	for _, key := range p.keys {
+		distance := key.X*key.X + key.Z*key.Z
+		if distance > 16 {
+			seenFar = true
+		}
+		if seenFar && distance <= 16 {
+			t.Fatal("near omnidirectional ring was delayed")
+		}
+	}
+}
+
 func TestChunkStreamingBackpressure(t *testing.T) {
 	oldClient, oldWorld, oldPlan := client, world, chunkRequests
 	oldPending, oldStarts := pendingChunkRequests, chunkLoadStarts

@@ -34,7 +34,7 @@
 
 类型：`MeshBuildData`、`meshBuilder`
 
-函数/方法：`*meshBuilder.addFace`、`*meshBuilder.addFaceSmooth`、`*MeshBuildData.Reset`、`*RenderAssets.isTransparent`、`*RenderAssets.getBiomeBaseColor`、`*RenderAssets.getClimateColor`、`*RenderAssets.shouldDrawFace`、`*RenderAssets.shouldDrawVoxelFace`、`*RenderAssets.applyAO`、`*RenderAssets.buildAllMeshData`、`*RenderAssets.buildAllMeshDataWithLight`、`allocFloat32`、`allocUint8`、`allocUint16`
+函数/方法：`*meshBuilder.addFace`、`*meshBuilder.addFaceSmooth`、`*MeshBuildData.Reset`、`*RenderAssets.isTransparent`、`*RenderAssets.getBiomeBaseColor`、`biomeBaseColor`、`*RenderAssets.getClimateColor`、`climateColor`、`*RenderAssets.shouldDrawFace`、`*RenderAssets.shouldDrawVoxelFace`、`*RenderAssets.applyAO`、`*RenderAssets.buildAllMeshData`、`*RenderAssets.buildAllMeshDataWithLight`、`allocFloat32`、`allocUint8`、`allocUint16`
 
 ## [chunk_storage.go](chunk_storage.go)
 
@@ -150,7 +150,7 @@
 
 类型：`chunkRequestPlan`
 
-函数/方法：`*chunkRequestPlan.prepare`、`*chunkRequestPlan.contains`、`requestMissingChunks`、`requestMissingChunksAt`
+函数/方法：`*chunkRequestPlan.prepare`、`*chunkRequestPlan.prepareFacing`、`*chunkRequestPlan.contains`、`requestMissingChunks`、`requestMissingChunksFacing`、`requestMissingChunksAt`、`requestMissingChunksFacingAt`、`requestMissingChunksWithFacing`
 
 ## [game_update.go](game_update.go)
 
@@ -226,11 +226,23 @@
 
 函数/方法：`GetItem`、`initBlockItems`、`configureTools`、`GetItemVisual`、`MoveStack`、`StackLimit`、`CanStack`、`*ItemStack.Wear`、`validStack`、`*PlayerEntity.claimPendingItems`、`migratePlayerItems`、`initItemRegistry`
 
+## [lod_colors.go](lod_colors.go)
+
+类型：`lodMaterialPalette`
+
+函数/方法：`lodTextureAverage`、`publishLODMaterialPalette`
+
+## [lod_occupancy.go](lod_occupancy.go)
+
+类型：`lodSpan`、`lodOccupancy`
+
+函数/方法：`*World.recordLODOccupancy`、`appendLODOccupancy`、`lodOccupiedAt`
+
 ## [lod_renderer_windows.go](lod_renderer_windows.go)
 
 类型：`lodBuildResult`、`lodBuildJob`、`lodBuildState`、`webGPULODRenderer`
 
-函数/方法：`newWebGPULODRenderer`、`*webGPULODRenderer.buildLoop`、`*webGPULODRenderer.close`、`*webGPULODRenderer.radiusOffsets`、`lodTileInRange`、`lodStepForDistance`、`lodStepForTile`、`*webGPULODRenderer.draw`、`*webGPUWorldRenderer.drawDistantTerrain`
+函数/方法：`newWebGPULODRenderer`、`*webGPULODRenderer.buildLoop`、`*webGPULODRenderer.close`、`*webGPULODRenderer.radiusOffsets`、`lodTileInRange`、`lodStepForDistance`、`lodStepForTile`、`*webGPULODRenderer.draw`、`*webGPULODRenderer.drawWater`、`*webGPULODRenderer.drawPreview`、`*webGPUWorldRenderer.drawDistantTerrain`
 
 ## [lod_state.go](lod_state.go)
 
@@ -246,7 +258,7 @@
 
 类型：`lodTileKey`、`lodTileData`
 
-函数/方法：`lodSurfaceColor`、`buildLODTile`、`buildLODTileWithColumns`、`lodSampleColumn`、`lodGridColumn`、`lodNearestTop`、`lodBlendColor`、`lodParentHeight`、`buildLODTileAtStep`、`appendLODTree`
+函数/方法：`lodSurfaceColor`、`lodSurfaceColorAt`、`lodWaterColor`、`buildLODTile`、`buildLODTileWithColumns`、`lodSampleColumn`、`lodGridColumn`、`lodNearestTop`、`lodBlendColor`、`lodParentHeight`、`buildLODTileAtStep`、`lodGridVertexAt`、`appendLODChunkBoundaryStrips`、`appendLODTree`
 
 ## [main.go](main.go)
 
@@ -596,7 +608,7 @@
 
 ## [server_entities.go](server_entities.go)
 
-函数/方法：`*Server.SendInventory`、`*Server.UpdateEntities`、`*Server.SpawnEntity`、`*Server.findPlayerEntity`
+函数/方法：`*Server.queueExistingEntities`、`*Server.flushExistingEntities`、`*Server.SendInventory`、`*Server.UpdateEntities`、`*Server.SpawnEntity`、`*Server.findPlayerEntity`
 
 ## [server_mining.go](server_mining.go)
 
@@ -712,7 +724,7 @@
 
 ## [webgpu_camera_windows.go](webgpu_camera_windows.go)
 
-函数/方法：`webGPUCameraMatrices`、`*webGPUWorldRenderer.updateSceneCamera`、`*webGPUWorldRenderer.updateSceneCameraAtTime`、`*webGPUWorldRenderer.collectVisibleCamera`
+函数/方法：`webGPUCameraMatrices`、`*webGPUWorldRenderer.updateSceneCamera`、`*webGPUWorldRenderer.updateSceneCameraAtTime`、`lodChunkMask`、`*webGPUWorldRenderer.updateLODChunkMask`、`*webGPUWorldRenderer.collectVisibleCamera`
 
 ## [webgpu_container_windows.go](webgpu_container_windows.go)
 
@@ -830,7 +842,7 @@
 
 类型：`meshKind`、`meshSnapshot`、`meshJob`、`meshResult`
 
-函数/方法：`*meshSnapshot.index`、`*meshSnapshot.blockAt`、`*meshSnapshot.lightAt`、`*meshSnapshot.blockLightAt`、`*meshSnapshot.metaAt`、`*meshSnapshot.Release`、`releaseMeshResults`、`*World.StartMeshWorkers`、`buildMeshSnapshotFromNeighbors`、`*World.markChunkSectionDirty`、`*World.markNeighborsDirty`、`*World.requestImmediateMesh`、`*World.requestImmediateAllSections`、`unloadMeshPass`、`clearSectionMeshes`、`setMeshPending`、`*World.submitMesh`、`*World.ProcessImmediateMeshes`、`*World.acceptsMesh`、`*World.ProcessMeshResults`
+函数/方法：`*meshSnapshot.index`、`*meshSnapshot.blockAt`、`*meshSnapshot.lightAt`、`*meshSnapshot.blockLightAt`、`*meshSnapshot.metaAt`、`*meshSnapshot.Release`、`releaseMeshResults`、`*World.StartMeshWorkers`、`buildMeshSnapshotFromNeighbors`、`*World.markChunkSectionDirty`、`*World.markNeighborsDirty`、`*World.requestImmediateMesh`、`*World.requestImmediateAllSections`、`unloadMeshPass`、`clearSectionMeshes`、`claimLODColumnIfReady`、`setMeshPending`、`*World.submitMesh`、`*World.ProcessImmediateMeshes`、`*World.acceptsMesh`、`*World.ProcessMeshResults`
 
 ## [world_mesh_dirty.go](world_mesh_dirty.go)
 

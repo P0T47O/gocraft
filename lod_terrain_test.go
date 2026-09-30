@@ -17,7 +17,7 @@ func TestLODTileMatchesTerrainColumnsAndNeighbors(t *testing.T) {
 				v := got.vertices[z*side+x]
 				wx, wz := key.X*lodTileSize+x*lodCellSize, key.Z*lodTileSize+z*lodCellSize
 				height, _, color := lodGridColumn(1234511, wx, wz, x == 0 || x == lodCellsPerTile || z == 0 || z == lodCellsPerTile, nil)
-				if v.Position[0] != float32(wx) || v.Position[2] != float32(wz) || v.Position[1] != height-.65 || v.Color != color {
+				if v.Position[0] != float32(wx)-.5 || v.Position[2] != float32(wz)-.5 || v.Position[1] != height-.5 || v.Color != color {
 					t.Fatalf("%v vertex (%d,%d) does not match generator: %+v", key, x, z, v)
 				}
 			}
@@ -36,6 +36,106 @@ func TestLODTileMatchesTerrainColumnsAndNeighbors(t *testing.T) {
 	}
 }
 
+func TestLODHandoffSamplesEveryVoxelOnRealChunkEdge(t *testing.T) {
+	const seed uint32 = 1234511
+	tile := buildLODTileAtStep(seed, lodTileKey{0, 0}, nil, lodNearCellSize)
+	for _, edge := range []struct {
+		marker float32
+		x, z   int
+		innerX int
+		shift  float32
+	}{
+		{-1, 0, 7, -1, -.35},
+		{-3, 16, 7, 16, .35},
+	} {
+		want := float32(lodSampleColumn(seed, edge.innerX, edge.z, nil).height) - .52
+		found := false
+		for _, vertex := range tile.vertices {
+			if vertex.Texcoord[1] == edge.marker && vertex.Position[0] == float32(edge.x)-.5+edge.shift && vertex.Position[2] == float32(edge.z)-.5 {
+				if vertex.Position[1] != want {
+					t.Fatalf("edge %v at z=%d: height %.2f, want %.2f", edge.marker, edge.z, vertex.Position[1], want)
+				}
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("edge %v missed odd voxel z=%d", edge.marker, edge.z)
+		}
+	}
+}
+
+func TestLODHandoffUsesClimateGrassAndSeparateWater(t *testing.T) {
+	const seed = uint32(1234511)
+	climate := climateColor(seed, 128, 256)
+	grass := lodSurfaceColorAt(seed, 128, 256, blockGrass)
+	if grass != [4]uint8{uint8(float32(climate.R) * (147.0 / 255.0)), uint8(float32(climate.G) * (147.0 / 255.0)), uint8(float32(climate.B) * (147.0 / 255.0)), 255} {
+		t.Fatalf("LOD grass lost full-detail climate tint: %v", grass)
+	}
+	foundWater := false
+	for z := -2; z <= 2 && !foundWater; z++ {
+		for x := -2; x <= 2 && !foundWater; x++ {
+			tile := buildLODTileAtStep(seed, lodTileKey{x, z}, nil, lodFarCellSize)
+			if len(tile.waterIndices) == 0 {
+				continue
+			}
+			foundWater = true
+			for _, index := range tile.waterIndices {
+				if int(index) >= len(tile.waterVertices) {
+					t.Fatalf("water index %d outside %d vertices", index, len(tile.waterVertices))
+				}
+			}
+			for _, vertex := range tile.waterVertices {
+				if vertex.Color[3] != 200 {
+					t.Fatalf("LOD water must match full-detail surface alpha: %v", vertex.Color)
+				}
+			}
+		}
+	}
+	if !foundWater {
+		t.Fatal("fixture did not exercise a water tile")
+	}
+}
+
+func TestLODBoundaryStripJoinsRealColumnWithoutChangingUnmaskedGrid(t *testing.T) {
+	const seed = uint32(1234511)
+	tile := buildLODTileAtStep(seed, lodTileKey{0, 0}, nil, lodNearCellSize)
+	wantX := float32(lodSampleColumn(seed, 15, 0, nil).height) - .52
+	wantZ := float32(lodSampleColumn(seed, 0, 15, nil).height) - .52
+	wantEast := float32(lodSampleColumn(seed, 16, 0, nil).height) - .52
+	wantSouth := float32(lodSampleColumn(seed, 0, 16, nil).height) - .52
+	foundX, foundZ, foundEast, foundSouth := false, false, false, false
+	for _, v := range tile.vertices {
+		if v.Texcoord[1] == -1 && v.Position[0] == 15.5-.35 && v.Position[2] == -.5 {
+			foundX = true
+			if v.Position[1] != wantX {
+				t.Fatalf("X handoff misses last real column: got %v, want %v", v.Position[1], wantX)
+			}
+		}
+		if v.Texcoord[1] == -2 && v.Position[0] == -.5 && v.Position[2] == 15.5-.35 {
+			foundZ = true
+			if v.Position[1] != wantZ {
+				t.Fatalf("Z handoff misses last real column: got %v, want %v", v.Position[1], wantZ)
+			}
+		}
+		if v.Texcoord[1] == -3 && v.Position[0] == 15.5+.35 && v.Position[2] == -.5 {
+			foundEast = true
+			if v.Position[1] != wantEast {
+				t.Fatalf("east handoff misses first real column: got %v, want %v", v.Position[1], wantEast)
+			}
+		}
+		if v.Texcoord[1] == -4 && v.Position[0] == -.5 && v.Position[2] == 15.5+.35 {
+			foundSouth = true
+			if v.Position[1] != wantSouth {
+				t.Fatalf("south handoff misses first real column: got %v, want %v", v.Position[1], wantSouth)
+			}
+		}
+	}
+	if !foundX || !foundZ || !foundEast || !foundSouth {
+		t.Fatalf("missing chunk-edge transition: X=%t Z=%t east=%t south=%t", foundX, foundZ, foundEast, foundSouth)
+	}
+}
+
 func TestLODMixedLevelEdgesStayOnTheSameLine(t *testing.T) {
 	const seed = uint32(1234511)
 	for _, left := range []lodTileKey{{0, 0}, {-5, 3}} {
@@ -49,7 +149,7 @@ func TestLODMixedLevelEdgesStayOnTheSameLine(t *testing.T) {
 			hi := coarse.vertices[min(z/lodFarCellSize+1, coarseSide-1)*coarseSide]
 			fraction := float32(z%lodFarCellSize) / lodFarCellSize
 			wantY := lerp(lo.Position[1], hi.Position[1], fraction)
-			if abs(v.Position[1]-wantY) > .0001 || v.Position[0] != lo.Position[0] || v.Position[2] != float32(left.Z*lodTileSize+z) {
+			if abs(v.Position[1]-wantY) > .0001 || v.Position[0] != lo.Position[0] || v.Position[2] != float32(left.Z*lodTileSize+z)-.5 {
 				t.Fatalf("mixed 4/16 grid seam at %v z=%d: got=%v expected height=%v", left, z, v.Position, wantY)
 			}
 		}
@@ -65,7 +165,7 @@ func TestLODMixedLevelEdgesStayOnTheSameLine(t *testing.T) {
 
 func TestLODParentMorphMatchesNextLevel(t *testing.T) {
 	const seed = uint32(1234511)
-	for _, step := range []int{lodNearCellSize, lodCellSize} {
+	for _, step := range []int{lodNearCellSize, lodTransitionCellSize, lodCellSize} {
 		for _, key := range []lodTileKey{{0, 0}, {-5, 3}} {
 			fine := buildLODTileAtStep(seed, key, nil, step)
 			coarse := buildLODTileAtStep(seed, key, nil, step*2)

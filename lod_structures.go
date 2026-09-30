@@ -2,14 +2,14 @@ package main
 
 import "gocraft/platform"
 
-// The ordinary LOD grid remains a sampled landscape. Raised, authoritative
-// columns are rendered as sparse 8×8 prisms instead: a roof and any exposed
-// sides. This keeps square buildings and horizontal holes out of the terrain
-// interpolator without allocating complete distant chunks.
+// Structures stay separate from the sampled landscape. Live received chunks
+// supply voxel occupancy runs; older top-only summaries retain the 8×8 prism
+// fallback used by diagnostic fixtures.
 func appendLODRaisedColumns(data *lodTileData, seed uint32, key lodTileKey, overrides map[lodPoint]lodColumn) {
 	if len(overrides) == 0 {
 		return
 	}
+	appendLODOccupancy(data, key, overrides)
 	// Adjacent prisms repeatedly inspect the same ground and neighbor columns.
 	// Cache just those touched by this sparse tile instead of resampling the
 	// deterministic terrain for every one of the four wall decisions.
@@ -33,7 +33,7 @@ func appendLODRaisedColumns(data *lodTileData, seed uint32, key lodTileKey, over
 	for z := baseZ; z < baseZ+lodTileSize; z += lodCellSize {
 		for x := baseX; x < baseX+lodTileSize; x += lodCellSize {
 			column, ok := overrides[lodPoint{x, z}]
-			if !ok {
+			if !ok || column.occupancy != nil {
 				continue
 			}
 			base := columnAt(x, z).ground

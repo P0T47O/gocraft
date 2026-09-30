@@ -74,7 +74,7 @@ func TestWebGPUDistantStructuresAtThreeDistances(t *testing.T) {
 			}
 		}
 		img := captureNativePreview(t, r, frame.Width, frame.Height, func(pass *wgpu.RenderPassEncoder) error {
-			return r.lod.draw(pass, r, frame.Camera, w)
+			return r.lod.drawPreview(pass, r, frame.Camera, w)
 		})
 		path := filepath.Join("work", "lod-structures-"+view.name+".png")
 		saveNativePreview(t, img, path)
@@ -115,7 +115,7 @@ func TestWebGPUDistantStructuresAtThreeDistances(t *testing.T) {
 		t.Fatalf("ring overhead: only %d of 4 tiles ready", ready)
 	}
 	img := captureNativePreview(t, r, overhead.Width, overhead.Height, func(pass *wgpu.RenderPassEncoder) error {
-		return r.lod.draw(pass, r, overhead.Camera, w)
+		return r.lod.drawPreview(pass, r, overhead.Camera, w)
 	})
 	path := filepath.Join("work", "lod-structures-ring-overhead.png")
 	saveNativePreview(t, img, path)

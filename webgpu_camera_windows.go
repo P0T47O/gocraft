@@ -69,6 +69,43 @@ func (r *webGPUWorldRenderer) updateSceneCameraAtTime(camera webGPUCamera, ticks
 	return r.queue.WriteBuffer(r.sceneBuffer, 0, bytes)
 }
 
+// Covers the entire legal 128-chunk render radius, including its positive edge.
+const lodChunkMaskSide = 2*maxRenderDistance + 2
+const lodChunkMaskWords = (lodChunkMaskSide*lodChunkMaskSide + 127) / 128
+
+// Keep the fallback only in chunk columns whose real opaque mesh is not ready.
+// The mask follows the camera and covers the playable near field, including
+// newly excavated holes. Cached chunks outside the real draw disk never own LOD.
+func lodChunkMask(world *World, camera webGPUCamera) [16 + lodChunkMaskWords*16]byte {
+	var data [16 + lodChunkMaskWords*16]byte
+	centerX := int(math.Floor(float64(camera.Position.X) / chunkWidth))
+	centerZ := int(math.Floor(float64(camera.Position.Z) / chunkWidth))
+	originX := centerX - lodChunkMaskSide/2
+	originZ := centerZ - lodChunkMaskSide/2
+	radius := renderDistance()
+	binary.LittleEndian.PutUint32(data[0:], uint32(int32(originX)))
+	binary.LittleEndian.PutUint32(data[4:], uint32(int32(originZ)))
+	world.chunksMu.RLock()
+	defer world.chunksMu.RUnlock()
+	for key, chunk := range world.chunks {
+		x, z := key.X-originX, key.Z-originZ
+		dx, dz := key.X-centerX, key.Z-centerZ
+		if x < 0 || z < 0 || x >= lodChunkMaskSide || z >= lodChunkMaskSide || dx*dx+dz*dz > radius*radius || !chunk.generated {
+			continue
+		}
+		if chunk.lodOccludes {
+			bit := z*lodChunkMaskSide + x
+			data[16+bit/8] |= 1 << (bit % 8)
+		}
+	}
+	return data
+}
+
+func (r *webGPUWorldRenderer) updateLODChunkMask(world *World, camera webGPUCamera) error {
+	data := lodChunkMask(world, camera)
+	return r.queue.WriteBuffer(r.sceneBuffer, 128, data[:])
+}
+
 func (r *webGPUWorldRenderer) collectVisibleCamera(world *World, camera webGPUCamera) {
 	projection, view, camPos := webGPUCameraMatrices(camera, r.width, r.height)
 	frustum := ExtractFrustum(projection.Mul4(view))
@@ -95,10 +132,10 @@ func (r *webGPUWorldRenderer) collectVisibleCamera(world *World, camera webGPUCa
 		}
 	}
 
-	deadline := time.Now().Add(time.Millisecond)
+	deadline := time.Now().Add(2 * time.Millisecond)
 	submissions := 0
 	for _, section := range cache.visible {
-		if submissions == 8 || !time.Now().Before(deadline) {
+		if submissions == 16 || !time.Now().Before(deadline) {
 			break
 		}
 		if section.chunk.meshRetries[section.sec] <= 5 && world.submitMesh(section.cx, section.cz, section.sec, assets) {

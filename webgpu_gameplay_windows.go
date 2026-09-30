@@ -38,6 +38,9 @@ func (r *webGPUWorldRenderer) DrawGameplay(world *World, frame webGPUFrameContex
 		return fmt.Errorf("update WebGPU gameplay scene: %w", err)
 	}
 	r.collectVisibleCamera(world, frame.Camera)
+	if err := r.updateLODChunkMask(world, frame.Camera); err != nil {
+		return fmt.Errorf("update distant terrain chunk mask: %w", err)
+	}
 	cache := &world.render
 	defer func() {
 		clear(cache.visible)
@@ -127,6 +130,13 @@ func (r *webGPUWorldRenderer) DrawGameplay(world *World, frame webGPUFrameContex
 		r.surface.DiscardTexture()
 		return err
 	}
+	if r.lod != nil {
+		if err := r.lod.drawWater(pass, r, frame.Camera, cache); err != nil {
+			_ = pass.End()
+			r.surface.DiscardTexture()
+			return err
+		}
+	}
 
 	pass.SetPipeline(r.translucentPipeline)
 	pass.SetBindGroup(0, r.bindGroup, nil)
@@ -135,6 +145,9 @@ func (r *webGPUWorldRenderer) DrawGameplay(world *World, frame webGPUFrameContex
 		meshes := section.chunk.waterMeshes[section.sec]
 		if item.glass {
 			meshes = section.chunk.glassMeshes[section.sec]
+			pass.SetPipeline(r.translucentPipeline)
+		} else {
+			pass.SetPipeline(r.waterPipeline)
 		}
 		if err := r.drawMeshMap(pass, meshes, cache); err != nil {
 			_ = pass.End()

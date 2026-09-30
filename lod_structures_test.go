@@ -55,7 +55,7 @@ func TestLODArtificialStructuresAtAllLevels(t *testing.T) {
 	for _, step := range []int{lodNearCellSize, lodCellSize, lodFarCellSize} {
 		unseenKey := lodTileKey{-1, 8}
 		unseen := buildLODTileAtStep(seed, unseenKey, nil, step)
-		if v := unseen.vertices[0]; v.Position[1] != float32(sampleTerrainColumn(seed, -128, 1024).height)-.65 {
+		if v := unseen.vertices[0]; v.Position[1] != float32(sampleTerrainColumn(seed, -128, 1024).height)-.5 {
 			t.Fatalf("unvisited structure unexpectedly appeared at cell size %d", step)
 		}
 		for _, sample := range []struct {

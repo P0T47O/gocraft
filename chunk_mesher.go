@@ -74,6 +74,10 @@ func (a *RenderAssets) isTransparent(b byte) bool {
 
 // getBiomeBaseColor returns the raw color for a specific biome.
 func (a *RenderAssets) getBiomeBaseColor(biomeID int, isWater bool) (float32, float32, float32) {
+	return biomeBaseColor(biomeID, isWater)
+}
+
+func biomeBaseColor(biomeID int, isWater bool) (float32, float32, float32) {
 	// Water Colors
 	if isWater {
 		switch biomeID {
@@ -111,6 +115,10 @@ func (a *RenderAssets) getBiomeBaseColor(biomeID int, isWater bool) (float32, fl
 }
 
 func (a *RenderAssets) getClimateColor(seed uint32, x, z int) color.RGBA {
+	return climateColor(seed, x, z)
+}
+
+func climateColor(seed uint32, x, z int) color.RGBA {
 	temp, hum := getClimate(seed, x, z)
 
 	// Normalize roughly -1..1 to 0..1

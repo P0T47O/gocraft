@@ -41,6 +41,8 @@ func (w *World) Close() {
 		w.workers.Wait()
 		for {
 			select {
+			case job := <-w.urgentMeshJobs:
+				job.snapshot.Release()
 			case job := <-w.meshJobs:
 				job.snapshot.Release()
 			default:
@@ -50,6 +52,8 @@ func (w *World) Close() {
 	results:
 		for {
 			select {
+			case res := <-w.urgentMeshResults:
+				releaseMeshResults(res.results)
 			case res := <-w.meshResults:
 				releaseMeshResults(res.results)
 			default:

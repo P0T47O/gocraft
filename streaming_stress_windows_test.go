@@ -146,7 +146,7 @@ func runStreamingProbe(t *testing.T, radius int, duration time.Duration) {
 			visible, ready := world.render.visibleSections, world.render.readySections
 			_, _ = fmt.Fprintf(progress, "%.1f,%d,%d,%d,%d,%d,%d,%d,%.2f,%.2f,%.0f\n", time.Since(start).Seconds(), received, target, visible, ready, len(pendingChunkRequests), len(client.Incoming), world.render.drawCalls, perfMon.Metrics.FrameP95, perfMon.Metrics.FrameP99, float64(mem.HeapAlloc)/(1<<20))
 			t.Logf("%.1fs radius=%d received=%d/%d visible-ready=%d/%d draws=%d heap=%.0fMiB queue=%d pending=%d", time.Since(start).Seconds(), radius, received, target, ready, visible, world.render.drawCalls, float64(mem.HeapAlloc)/(1<<20), len(client.Incoming), len(pendingChunkRequests))
-			if target > 0 && received == target && ready == visible && len(world.meshJobs) == 0 && len(world.meshResults) == 0 {
+			if target > 0 && received == target && ready == visible && len(world.meshJobs) == 0 && len(world.meshResults) == 0 && len(world.urgentMeshJobs) == 0 && len(world.urgentMeshResults) == 0 {
 				readyAt = time.Since(start)
 				break
 			}

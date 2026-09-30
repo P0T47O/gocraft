@@ -74,7 +74,7 @@ func TestLODVerticalRingAndFloatingPlatformLimits(t *testing.T) {
 		{"ring center", -96, 1024, blockObsidian, 191},
 		{"platform center", 96, 1024, blockIronBlock, 182},
 	} {
-		if got := w.lodColumns[lodPoint{tc.x, tc.z}]; got != (lodColumn{tc.height, tc.block}) {
+		if got := w.lodColumns[lodPoint{tc.x, tc.z}]; got != (lodColumn{height: tc.height, top: tc.block}) {
 			t.Fatalf("%s: top-only capture=%+v", tc.name, got)
 		}
 		for _, step := range []int{lodNearCellSize, lodCellSize, lodFarCellSize} {

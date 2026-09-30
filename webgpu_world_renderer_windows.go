@@ -12,7 +12,7 @@ import (
 	"gocraft/platform"
 )
 
-const webGPUWorldSceneBytes = 128
+const webGPUWorldSceneBytes = 128 + 16 + lodChunkMaskWords*16
 const webGPUWorldDepthFormat = gputypes.TextureFormatDepth32Float
 
 const webGPUWorldShader = `
@@ -104,6 +104,15 @@ fn fs_translucent(in: VertexOutput) -> @location(0) vec4f {
     let rgb = fogged(texel.rgb * in.color.rgb * scene.daylight.x, in.world_pos);
     return vec4f(rgb, alpha);
 }
+
+@fragment
+fn fs_water(in: VertexOutput) -> @location(0) vec4f {
+    let texel = sample_atlas(in.uv);
+    let alpha = texel.a * in.color.a;
+    if alpha < 0.01 { discard; }
+    let rgb = fogged(texel.rgb * in.color.rgb * scene.daylight.x, in.world_pos);
+    return vec4f(rgb, alpha);
+}
 `
 
 type webGPUWorldRenderer struct {
@@ -118,6 +127,7 @@ type webGPUWorldRenderer struct {
 	opaquePipeline          *wgpu.RenderPipeline
 	solidPipeline           *wgpu.RenderPipeline
 	translucentPipeline     *wgpu.RenderPipeline
+	waterPipeline           *wgpu.RenderPipeline
 	bindGroup               *wgpu.BindGroup
 	sceneBuffer             *wgpu.Buffer
 	shader                  *wgpu.ShaderModule
@@ -202,6 +212,7 @@ func newWebGPUWorldRenderer(hwnd uintptr, assets *RenderAssets, width, height ui
 		assets.atlas = &TextureAtlas{}
 	}
 	assets.atlas.UVs = atlas.uvs
+	publishLODMaterialPalette(atlas.averages)
 
 	if err := r.configureSurface(); err != nil {
 		return fail(err)
@@ -359,6 +370,16 @@ func (r *webGPUWorldRenderer) createPipelineResources(atlas *webGPUBlockAtlas) e
 	if err != nil {
 		return fmt.Errorf("create translucent world pipeline: %w", err)
 	}
+	r.waterPipeline, err = r.device.CreateRenderPipeline(&wgpu.RenderPipelineDescriptor{
+		Label: "GoCraft near water fade pipeline", Layout: r.layout,
+		Vertex: vertexState, Primitive: primitive,
+		DepthStencil: &wgpu.DepthStencilState{Format: webGPUWorldDepthFormat, DepthWriteEnabled: false, DepthCompare: gputypes.CompareFunctionGreater},
+		Multisample:  multisample,
+		Fragment:     &wgpu.FragmentState{Module: r.shader, EntryPoint: "fs_water", Targets: []gputypes.ColorTargetState{{Format: r.format, Blend: blend, WriteMask: gputypes.ColorWriteMaskAll}}},
+	})
+	if err != nil {
+		return fmt.Errorf("create near water pipeline: %w", err)
+	}
 	return nil
 }
 
@@ -477,6 +498,10 @@ func (r *webGPUWorldRenderer) closeResources(resetBackend bool) {
 	if r.translucentPipeline != nil {
 		r.translucentPipeline.Release()
 		r.translucentPipeline = nil
+	}
+	if r.waterPipeline != nil {
+		r.waterPipeline.Release()
+		r.waterPipeline = nil
 	}
 	if r.opaquePipeline != nil {
 		r.opaquePipeline.Release()

@@ -11,6 +11,7 @@ import (
 type chunkRequestPlan struct {
 	center  chunkKey
 	radius  int
+	facing  int
 	valid   bool
 	keys    []chunkKey
 	next    int
@@ -21,13 +22,19 @@ var chunkRequests chunkRequestPlan
 
 // Bound outstanding requests, not just packets waiting in the socket queue.
 // Receipt frees a slot; retries reuse their existing slot.
-const maxPendingChunkRequests = 512
+const maxPendingChunkRequests = 64
 
 func (p *chunkRequestPlan) prepare(center chunkKey, radius int, now time.Time) {
-	if !p.valid || p.center != center || p.radius != radius {
+	p.prepareFacing(center, radius, -1, now)
+}
+
+// Keep nearby chunks omnidirectional, then favor the viewed half of each
+// distance band. Re-sort only after a substantial turn, not every frame.
+func (p *chunkRequestPlan) prepareFacing(center chunkKey, radius, facing int, now time.Time) {
+	if !p.valid || p.center != center || p.radius != radius || p.facing != facing {
 		// Translation preserves distance order. Walking across a chunk boundary
 		// must not sort thousands of coordinates again at the same view radius.
-		if p.valid && p.radius == radius {
+		if p.valid && p.radius == radius && p.facing == facing {
 			dx, dz := center.X-p.center.X, center.Z-p.center.Z
 			for i := range p.keys {
 				p.keys[i].X += dx
@@ -38,7 +45,7 @@ func (p *chunkRequestPlan) prepare(center chunkKey, radius int, now time.Time) {
 			p.refresh = now.Add(time.Second)
 			return
 		}
-		p.center, p.radius, p.valid = center, radius, true
+		p.center, p.radius, p.facing, p.valid = center, radius, facing, true
 		p.keys = p.keys[:0]
 		for x := -radius; x <= radius; x++ {
 			for z := -radius; z <= radius; z++ {
@@ -47,10 +54,32 @@ func (p *chunkRequestPlan) prepare(center chunkKey, radius int, now time.Time) {
 				}
 			}
 		}
+		forwardX, forwardZ := 0.0, 0.0
+		if facing >= 0 {
+			angle := float64(facing) * math.Pi / 4
+			forwardX, forwardZ = math.Sin(angle), math.Cos(angle)
+		}
 		sort.SliceStable(p.keys, func(i, j int) bool {
 			a, b := p.keys[i], p.keys[j]
 			ax, az, bx, bz := a.X-center.X, a.Z-center.Z, b.X-center.X, b.Z-center.Z
-			return ax*ax+az*az < bx*bx+bz*bz
+			ad, bd := ax*ax+az*az, bx*bx+bz*bz
+			if facing >= 0 && (ad > 16 || bd > 16) {
+				priority := func(x, z, distance int) int {
+					if distance <= 16 {
+						return 0
+					}
+					band := int(math.Sqrt(float64(distance))-1) / 4
+					behind := 0
+					if float64(x)*forwardX+float64(z)*forwardZ < 0 {
+						behind = 1
+					}
+					return 1 + band*2 + behind
+				}
+				if ap, bp := priority(ax, az, ad), priority(bx, bz, bd); ap != bp {
+					return ap < bp
+				}
+			}
+			return ad < bd
 		})
 		p.next = 0
 		p.refresh = now.Add(time.Second)
@@ -69,14 +98,27 @@ func requestMissingChunks(pos gameVec3) {
 	requestMissingChunksAt(pos, time.Now())
 }
 
+func requestMissingChunksFacing(pos gameVec3, yaw float32) {
+	requestMissingChunksFacingAt(pos, yaw, time.Now())
+}
+
 // Explicit clock keeps retry and teleport regressions deterministic.
 func requestMissingChunksAt(pos gameVec3, now time.Time) {
+	requestMissingChunksWithFacing(pos, -1, now)
+}
+
+func requestMissingChunksFacingAt(pos gameVec3, yaw float32, now time.Time) {
+	facing := int(math.Round(float64(yaw)/(math.Pi/4))) & 7
+	requestMissingChunksWithFacing(pos, facing, now)
+}
+
+func requestMissingChunksWithFacing(pos gameVec3, facing int, now time.Time) {
 	if client == nil || world == nil {
 		return
 	}
 	center := chunkKey{int(math.Floor(float64(pos.X) / 16)), int(math.Floor(float64(pos.Z) / 16))}
-	changed := !chunkRequests.valid || chunkRequests.center != center || chunkRequests.radius != renderDistance()
-	chunkRequests.prepare(center, renderDistance(), now)
+	changed := !chunkRequests.valid || chunkRequests.center != center || chunkRequests.radius != renderDistance() || chunkRequests.facing != facing
+	chunkRequests.prepareFacing(center, renderDistance(), facing, now)
 	if changed {
 		for key := range pendingChunkRequests {
 			if !chunkRequests.contains(key) {

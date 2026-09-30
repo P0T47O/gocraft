@@ -65,7 +65,7 @@ func TestWebGPUDistantVerticalAndFloatingStructures(t *testing.T) {
 			t.Fatalf("%s: only %d of 4 structure tiles reached %d-block detail", view.name, ready, view.step)
 		}
 		img := captureNativePreview(t, r, frame.Width, frame.Height, func(pass *wgpu.RenderPassEncoder) error {
-			return r.lod.draw(pass, r, frame.Camera, w)
+			return r.lod.drawPreview(pass, r, frame.Camera, w)
 		})
 		path := filepath.Join("work", "lod-vertical-"+view.name+".png")
 		saveNativePreview(t, img, path)

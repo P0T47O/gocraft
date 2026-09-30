@@ -2,6 +2,7 @@ package main
 
 import (
 	"sync"
+	"sync/atomic"
 )
 
 // ChunkPool manages a pool of reusable Chunk objects to reduce GC pressure
@@ -40,11 +41,13 @@ func (p *ChunkPool) Put(c *Chunk) {
 func (c *Chunk) Reset() {
 	c.lightDirtySections = 0
 	c.lodCaptured = false
+	c.lodOccludes = false
 	c.instance = 0
 	c.sectionBlocks = [sectionCount]uint16{}
 	c.torches = c.torches[:0]
 	c.tints = nil
 	c.meshRequest = [sectionCount]uint64{}
+	c.meshCancel = [sectionCount]*atomic.Bool{}
 	c.meshSubmittedVersion = [sectionCount]uint32{}
 	c.meshRetries = [sectionCount]byte{}
 	// Re-initialize arrays to zero

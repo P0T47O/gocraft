@@ -10,6 +10,15 @@ func (s *Server) processChunkStreaming() {
 	}
 	s.World.ProcessGenResults()
 	s.processPendingChunks()
+	s.ClientsMu.RLock()
+	clients := make([]*ClientConnection, 0, len(s.Clients))
+	for _, c := range s.Clients {
+		clients = append(clients, c)
+	}
+	s.ClientsMu.RUnlock()
+	for _, c := range clients {
+		s.flushExistingEntities(c)
+	}
 	if perfMon != nil {
 		perfMon.genQueued.Store(int64(len(s.World.genQueue)))
 		perfMon.genReady.Store(int64(len(s.World.genResults)))

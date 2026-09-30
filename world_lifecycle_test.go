@@ -115,6 +115,26 @@ func TestWorldCloseUnblocksFullWorkerQueues(t *testing.T) {
 	}
 }
 
+func TestUrgentMeshWorkerAndResultBypassBackgroundBacklog(t *testing.T) {
+	initBlockRegistry()
+	w := NewClientWorld()
+	w.meshResults = make(chan meshResult, 1)
+	w.meshResults <- meshResult{}
+	w.StartMeshWorkers(&RenderAssets{}, 2)
+	defer w.Close()
+	w.urgentMeshJobs <- meshJob{urgent: true, snapshot: &meshSnapshot{}, yMax: 0}
+	select {
+	case <-w.urgentMeshResults:
+	case <-time.After(3 * time.Second):
+		t.Fatal("urgent worker was blocked by the full background result queue")
+	}
+	w.urgentMeshResults <- meshResult{}
+	w.ProcessMeshResults(&RenderAssets{}, 1)
+	if len(w.urgentMeshResults) != 0 || len(w.meshResults) != 1 {
+		t.Fatal("background result was uploaded before the urgent result")
+	}
+}
+
 func TestGenerationRejectsOldInstanceAndAppliesDeferredEdit(t *testing.T) {
 	initBlockRegistry()
 	w := NewFlatWorld()

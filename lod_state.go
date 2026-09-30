@@ -1,11 +1,13 @@
 package main
 
-// Only samples on the LOD vertex grid are retained. The client world owns
-// these maps; render jobs receive private copies and never read live chunks.
+// Terrain deviations retain grid samples; structures retain every occupied
+// above-ground column. The client owns both maps; jobs receive private maps
+// and immutable occupancy records, never live chunks.
 type lodPoint struct{ X, Z int }
 type lodColumn struct {
-	height int
-	top    byte
+	height    int
+	top       byte
+	occupancy *lodOccupancy // Immutable authoritative above-ground voxel runs.
 }
 
 func lodSurfaceBlock(block byte) bool {
@@ -28,7 +30,7 @@ func snapshotLODColumn(chunk *Chunk, x, z int) lodColumn {
 	for y := int(chunk.heightMap[lx][lz]) - 1; y >= 0; y-- {
 		block := chunk.blocks.Get(lx, y, lz)
 		if lodSurfaceBlock(block) {
-			return lodColumn{y + 1, block}
+			return lodColumn{height: y + 1, top: block}
 		}
 	}
 	return lodColumn{}
@@ -38,7 +40,7 @@ func (w *World) recordLODColumn(chunk *Chunk, x, z int) {
 	point := lodPoint{x, z}
 	actual := snapshotLODColumn(chunk, x, z)
 	baseline := sampleTerrainColumn(w.seed, x, z)
-	want := lodColumn{baseline.height, baseline.top}
+	want := lodColumn{height: baseline.height, top: baseline.top}
 	old, had := w.lodColumns[point]
 	if actual == want {
 		if !had {
@@ -92,12 +94,18 @@ func (w *World) recordChunkLODColumns(chunk *Chunk, cx, cz int) {
 			w.recordLODColumn(chunk, cx*chunkWidth+x, cz*chunkWidth+z)
 		}
 	}
+	for z := 0; z < chunkWidth; z++ {
+		for x := 0; x < chunkWidth; x++ {
+			w.recordLODOccupancy(chunk, cx*chunkWidth+x, cz*chunkWidth+z)
+		}
+	}
 	chunk.lodCaptured = true
 }
 
 func (w *World) resetLODState() {
 	w.lodColumns = nil
 	w.lodVersions = nil
+	w.lodOccupancyTiles = nil
 	w.chunksMu.RLock()
 	for _, chunk := range w.chunks {
 		chunk.lodCaptured = false
@@ -114,6 +122,26 @@ func (w *World) snapshotLODTile(key lodTileKey) map[lodPoint]lodColumn {
 				if result == nil {
 					result = make(map[lodPoint]lodColumn)
 				}
+				result[point] = column
+			}
+		}
+	}
+	// Tile buckets keep this lookup proportional to nearby structures, rather
+	// than scanning every building visited during the session.
+	for dz := -1; dz <= 1; dz++ {
+		for dx := -1; dx <= 1; dx++ {
+			for point, occupancy := range w.lodOccupancyTiles[lodTileKey{key.X + dx, key.Z + dz}] {
+				if point.X < key.X*lodTileSize-1 || point.X > (key.X+1)*lodTileSize || point.Z < key.Z*lodTileSize-1 || point.Z > (key.Z+1)*lodTileSize {
+					continue
+				}
+				if result == nil {
+					result = make(map[lodPoint]lodColumn)
+				}
+				column, ok := result[point]
+				if !ok {
+					column = lodColumn{height: occupancy.ground, top: occupancy.surface}
+				}
+				column.occupancy = occupancy
 				result[point] = column
 			}
 		}

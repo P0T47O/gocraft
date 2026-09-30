@@ -25,6 +25,7 @@ type webGPUBlockAtlas struct {
 	width, height int
 	uvs           map[string]AtlasRect
 	animations    []webGPUAtlasAnimation
+	averages      map[string][4]uint8
 }
 
 // The experimental renderer is a single active instance. Keep its CPU-side
@@ -197,6 +198,7 @@ func buildWebGPUBlockAtlas() (*webGPUBlockAtlas, error) {
 	pixels := make([]byte, width*height*4)
 	uvs := make(map[string]AtlasRect, len(paths))
 	animations := make([]webGPUAtlasAnimation, 0, 4)
+	averages := make(map[string][4]uint8, len(paths))
 
 	for i, path := range paths {
 		file, err := os.Open(path)
@@ -210,6 +212,7 @@ func buildWebGPUBlockAtlas() (*webGPUBlockAtlas, error) {
 		}
 
 		tile, tileW, tileH, animationFrames, animationBytesPerRow, frameSeconds := webGPUAtlasTile(path, img)
+		averages[path] = lodTextureAverage(tile)
 		col := i % side
 		row := i / side
 		for py := 0; py < atlasCellSize; py++ {
@@ -248,5 +251,5 @@ func buildWebGPUBlockAtlas() (*webGPUBlockAtlas, error) {
 	}
 
 	activeWebGPUAtlasAnimations = animations
-	return &webGPUBlockAtlas{pixels: pixels, width: width, height: height, uvs: uvs, animations: animations}, nil
+	return &webGPUBlockAtlas{pixels: pixels, width: width, height: height, uvs: uvs, animations: animations, averages: averages}, nil
 }

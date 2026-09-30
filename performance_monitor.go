@@ -147,8 +147,8 @@ func (pm *PerformanceMonitor) logMetrics() {
 	pm.frames = pm.frames[:0]
 	pm.Metrics.ServerTickMS = float64(pm.tickNanos.Load()) / float64(time.Millisecond)
 	if world != nil {
-		pm.Metrics.MeshJobs = len(world.meshJobs)
-		pm.Metrics.MeshResults = len(world.meshResults)
+		pm.Metrics.MeshJobs = len(world.meshJobs) + len(world.urgentMeshJobs)
+		pm.Metrics.MeshResults = len(world.meshResults) + len(world.urgentMeshResults)
 		pm.Metrics.LoadedChunks = len(world.chunks)
 		pm.Metrics.DrawCalls = world.render.drawCalls
 		pm.Metrics.Triangles = world.render.triangles

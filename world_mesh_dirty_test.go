@@ -73,3 +73,38 @@ func TestInteriorChunkRefreshLeavesNeighborsAlone(t *testing.T) {
 		}
 	}
 }
+
+func TestImmediateMeshBypassesBackgroundQueueAndSupersedesOldSnapshot(t *testing.T) {
+	initBlockRegistry()
+	w := NewClientWorld()
+	defer w.Close()
+	c := lifecycleChunk(w, chunkKey{})
+	c.blocks.Set(8, 1, 8, blockStone)
+	c.sectionBlocks[0] = 1
+	c.tints = &meshTintCache{}
+	c.invalidateMeshSection(0)
+	for len(w.meshJobs) < cap(w.meshJobs) {
+		w.meshJobs <- meshJob{snapshot: &meshSnapshot{}}
+	}
+	w.requestImmediateMesh(0, 0, 0)
+	w.ProcessImmediateMeshes(&RenderAssets{}, 1)
+	if len(w.urgentMeshJobs) != 1 || c.meshRequest[0] == 0 {
+		t.Fatal("background queue blocked the first immediate mesh")
+	}
+	oldRequest := c.meshRequest[0]
+	oldVersion := c.meshVersion[0]
+	c.invalidateMeshSection(0)
+	w.requestImmediateMesh(0, 0, 0)
+	w.ProcessImmediateMeshes(&RenderAssets{}, 1)
+	if len(w.urgentMeshJobs) != 2 || c.meshRequest[0] == oldRequest {
+		t.Fatal("obsolete pending snapshot blocked the edited mesh")
+	}
+	oldJob := <-w.urgentMeshJobs
+	if oldJob.cancelled == nil || !oldJob.cancelled.Load() {
+		t.Fatal("obsolete queued snapshot was not cancelled")
+	}
+	oldJob.snapshot.Release()
+	if w.acceptsMesh(meshResult{key: chunkKey{}, section: 0, instance: c.instance, request: oldRequest, version: oldVersion}) != nil || !c.pendingOpaque[0] {
+		t.Fatal("obsolete result cleared the newer pending request")
+	}
+}

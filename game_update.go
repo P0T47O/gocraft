@@ -138,20 +138,20 @@ Loop:
 			input.RespawnLast = 0
 		}
 		input.updateRespawnRequest(client)
-		requestMissingChunks(camera.Position)
+		requestMissingChunksFacing(camera.Position, input.Yaw)
 		return
 	}
 	if input.AwaitingTerrain {
 		cx := divFloor(blockIndexFromCoord(camera.Position.X), chunkWidth)
 		cz := divFloor(blockIndexFromCoord(camera.Position.Z), chunkWidth)
 		if world.getChunkIfGenerated(cx, cz) == nil {
-			requestMissingChunks(camera.Position)
+			requestMissingChunksFacing(camera.Position, input.Yaw)
 			return
 		}
 		input.AwaitingTerrain = false
 	}
 	if !input.VitalsReady {
-		requestMissingChunks(camera.Position)
+		requestMissingChunksFacing(camera.Position, input.Yaw)
 		return
 	}
 	input.HurtFlash = max(float32(0), input.HurtFlash-dt)
@@ -161,7 +161,7 @@ Loop:
 	clear(world.lightChanged) // Only the server publishes authoritative light updates.
 
 	// Client-Pull: Request any missing chunks
-	requestMissingChunks(camera.Position)
+	requestMissingChunksFacing(camera.Position, input.Yaw)
 
 	client.Update(camera.Position.X, camera.Position.Y, camera.Position.Z, input.Yaw, input.Pitch)
 

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -67,6 +68,9 @@ func (s *meshSnapshot) metaAt(wx, wy, wz int) byte {
 }
 
 type meshJob struct {
+	urgent            bool
+	cancelled         *atomic.Bool
+	seed              uint32
 	snapshot          *meshSnapshot
 	tints             *meshTintCache
 	instance, request uint64
@@ -138,15 +142,29 @@ func (w *World) StartMeshWorkers(assets *RenderAssets, workers int) {
 		workers = 1
 	}
 	for i := 0; i < workers; i++ {
+		dedicatedUrgent := i == 0 && workers > 1
 		w.workers.Add(1)
 		go func() {
 			defer w.workers.Done()
 			for {
 				var job meshJob
-				select {
-				case <-w.done:
-					return
-				case job = <-w.meshJobs:
+				if dedicatedUrgent {
+					select {
+					case <-w.done:
+						return
+					case job = <-w.urgentMeshJobs:
+					}
+				} else {
+					select {
+					case job = <-w.urgentMeshJobs:
+					default:
+						select {
+						case <-w.done:
+							return
+						case job = <-w.urgentMeshJobs:
+						case job = <-w.meshJobs:
+						}
+					}
 				}
 				res := meshResult{key: job.key, section: job.section, version: job.version, instance: job.instance, request: job.request}
 				func() {
@@ -161,12 +179,22 @@ func (w *World) StartMeshWorkers(assets *RenderAssets, workers int) {
 						return
 					default:
 					}
-					start := time.Now()
-					res.results = assets.buildAllMeshDataWithLight(&job.heightMap, job.baseX, job.baseZ, job.yMin, job.yMax, job.snapshot.blockAt, job.snapshot.lightAt, job.snapshot.blockLightAt, job.snapshot.metaAt, w.seed, job.tints)
-					perfMon.recordLoading(phaseMeshCPU, start)
+					if job.cancelled == nil || !job.cancelled.Load() {
+						start := time.Now()
+						res.results = assets.buildAllMeshDataWithLight(&job.heightMap, job.baseX, job.baseZ, job.yMin, job.yMax, job.snapshot.blockAt, job.snapshot.lightAt, job.snapshot.blockLightAt, job.snapshot.metaAt, w.seed, job.tints)
+						perfMon.recordLoading(phaseMeshCPU, start)
+					}
+					if job.cancelled != nil && job.cancelled.Load() {
+						releaseMeshResults(res.results)
+						res.results = nil
+					}
 				}()
+				results := w.meshResults
+				if job.urgent {
+					results = w.urgentMeshResults
+				}
 				select {
-				case w.meshResults <- res:
+				case results <- res:
 				case <-w.done:
 					releaseMeshResults(res.results)
 					return
@@ -243,6 +271,17 @@ func buildMeshSnapshotFromNeighbors(job meshJob) *meshSnapshot {
 			}
 			chunk := job.neighbors[ddx+1][ddz+1]
 			if chunk == nil {
+				// An unloaded neighbor is not necessarily air. Preserve the
+				// generator's water/ice in the one-column halo so a shoreline
+				// mesh cannot expose a vertical water wall while streaming.
+				// A loaded neighbor (including player edits) always wins below.
+				if (ix == -1 || ix == chunkWidth || iz == -1 || iz == chunkWidth) && snapYMin < seaLevel {
+					column := sampleTerrainColumn(job.seed, wx, wz)
+					idx := (ix+1)*sizeY*sizeZ + iz + 1
+					for y := max(snapYMin, column.height); y < min(snapYMax, seaLevel); y++ {
+						blocks[idx+(y-snapYMin)*sizeZ] = column.blockAt(job.seed, wx, y, wz)
+					}
+				}
 				continue
 			}
 			lx := modFloor(wx, chunkWidth)
@@ -338,6 +377,36 @@ func clearSectionMeshes(c *Chunk, sec int) {
 	c.cutoutMeshes[sec] = nil
 	c.glassMeshes[sec] = nil
 }
+
+// Claim the simplified terrain once the occupied surface range has complete
+// real meshes. Keep ownership through later edits, including excavations.
+func claimLODColumnIfReady(c *Chunk) {
+	if c.lodOccludes || !c.generated {
+		return
+	}
+	low, high := sectionCount, -1
+	for x := range c.heightMap {
+		for _, h := range c.heightMap[x] {
+			if h > 0 {
+				low = min(low, (int(h)-1)/sectionHeight)
+				high = max(high, (int(h)-1)/sectionHeight)
+			}
+		}
+	}
+	if high < 0 {
+		return
+	}
+	for sec := low; sec <= high; sec++ {
+		if c.sectionBlocks[sec] == 0 {
+			continue
+		}
+		if len(c.sectionDirty) <= sec || c.sectionDirty[sec] ||
+			len(c.opaqueMeshes[sec]) == 0 && len(c.cutoutMeshes[sec]) == 0 && len(c.waterMeshes[sec]) == 0 {
+			return
+		}
+	}
+	c.lodOccludes = true
+}
 func setMeshPending(c *Chunk, sec int, pending bool) {
 	c.pendingOpaque[sec] = pending
 	c.pendingWater[sec] = pending
@@ -346,21 +415,27 @@ func setMeshPending(c *Chunk, sec int, pending bool) {
 }
 
 // Capture mutable voxel data on the owner thread; workers never retain live chunks.
-func (w *World) submitMesh(cx, cz, sec int, assets *RenderAssets) bool {
+func (w *World) submitMesh(cx, cz, sec int, assets *RenderAssets, urgent ...bool) bool {
 	c := w.getChunkIfGenerated(cx, cz)
 	if c == nil || sec < 0 || sec >= sectionCount {
 		return false
 	}
 	ensureChunkSections(c)
-	if !c.sectionDirty[sec] || c.pendingOpaque[sec] || c.meshRetries[sec] > 5 {
+	highPriority := len(urgent) > 0 && urgent[0]
+	if !c.sectionDirty[sec] || c.pendingOpaque[sec] && (!highPriority || c.meshSubmittedVersion[sec] == c.meshVersion[sec]) || c.meshRetries[sec] > 5 {
 		return false
 	}
 	if c.sectionBlocks[sec] == 0 {
 		clearSectionMeshes(c, sec)
 		c.sectionDirty[sec] = false
+		claimLODColumnIfReady(c)
 		return false
 	}
-	if len(w.meshJobs) == cap(w.meshJobs) {
+	jobs := w.meshJobs
+	if highPriority {
+		jobs = w.urgentMeshJobs
+	}
+	if len(jobs) == cap(jobs) {
 		return false
 	}
 	select {
@@ -371,7 +446,8 @@ func (w *World) submitMesh(cx, cz, sec int, assets *RenderAssets) bool {
 	if c.tints == nil {
 		c.tints = assets.buildMeshTintCache(w.seed, cx*chunkWidth, cz*chunkWidth)
 	}
-	job := meshJob{key: chunkKey{cx, cz}, baseX: cx * chunkWidth, baseZ: cz * chunkWidth, heightMap: c.heightMap, centerCX: cx, centerCZ: cz,
+	cancel := &atomic.Bool{}
+	job := meshJob{urgent: highPriority, cancelled: cancel, seed: w.seed, key: chunkKey{cx, cz}, baseX: cx * chunkWidth, baseZ: cz * chunkWidth, heightMap: c.heightMap, centerCX: cx, centerCZ: cz,
 		section: sec, yMin: sec * sectionHeight, yMax: (sec + 1) * sectionHeight, version: c.meshVersion[sec], instance: c.instance, tints: c.tints}
 	for dx := -1; dx <= 1; dx++ {
 		for dz := -1; dz <= 1; dz++ {
@@ -383,7 +459,11 @@ func (w *World) submitMesh(cx, cz, sec int, assets *RenderAssets) bool {
 	w.nextMeshID++
 	job.request = w.nextMeshID
 	select {
-	case w.meshJobs <- job:
+	case jobs <- job:
+		if old := c.meshCancel[sec]; old != nil {
+			old.Store(true)
+		}
+		c.meshCancel[sec] = cancel
 		c.meshSubmittedVersion[sec] = job.version
 		c.meshRequest[sec] = job.request
 		setMeshPending(c, sec, true)
@@ -419,7 +499,7 @@ func (w *World) ProcessImmediateMeshes(assets *RenderAssets, max int) {
 			delete(w.immediate, key)
 			continue
 		}
-		if w.submitMesh(key.X, key.Z, key.Section, assets) {
+		if w.submitMesh(key.X, key.Z, key.Section, assets, true) {
 			count++
 			delete(w.immediate, key)
 		}
@@ -435,6 +515,7 @@ func (w *World) acceptsMesh(res meshResult) *Chunk {
 		return nil
 	}
 	setMeshPending(c, res.section, false)
+	c.meshCancel[res.section] = nil
 	if c.meshVersion[res.section] != res.version {
 		return nil
 	}
@@ -443,14 +524,27 @@ func (w *World) acceptsMesh(res meshResult) *Chunk {
 
 // Budget includes stale results, packing and GPU upload. One result is indivisible.
 func (w *World) ProcessMeshResults(assets *RenderAssets, maxPerFrame int) {
-	deadline := time.Now().Add(2 * time.Millisecond)
+	deadline := time.Now().Add(3 * time.Millisecond)
 	bytes := 0
 	for processed := 0; processed < maxPerFrame; processed++ {
-		if processed > 0 && (time.Now().After(deadline) || bytes >= 4<<20) {
+		if processed > 0 && (time.Now().After(deadline) || bytes >= 8<<20) {
 			return
 		}
+		var res meshResult
+		ready := false
 		select {
-		case res := <-w.meshResults:
+		case res = <-w.urgentMeshResults:
+			ready = true
+		default:
+			select {
+			case res = <-w.urgentMeshResults:
+				ready = true
+			case res = <-w.meshResults:
+				ready = true
+			default:
+			}
+		}
+		if ready {
 			c := w.acceptsMesh(res)
 			if c == nil {
 				if perfMon != nil {
@@ -480,11 +574,12 @@ func (w *World) ProcessMeshResults(assets *RenderAssets, maxPerFrame int) {
 			perfMon.recordLoading(phaseUpload, uploadStart)
 			c.meshRetries[sec] = 0
 			c.sectionDirty[sec] = false
+			claimLODColumnIfReady(c)
 			if w == world {
 				recordChunkReady(res.key, c)
 			}
 			perfMon.IncrementMeshBuild()
-		default:
+		} else {
 			return
 		}
 	}
