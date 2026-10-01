@@ -19,10 +19,12 @@ const (
 	phaseClientApply
 	phaseMeshCPU
 	phaseUpload
+	phaseLODSnapshot
+	phaseLODBuild
 	loadingPhaseCount
 )
 
-var loadingPhaseNames = [...]string{"DiskLoad", "Generation", "LightInit", "LightStitch", "Snapshot", "NetworkWrite", "ClientApply", "MeshCPU", "Upload"}
+var loadingPhaseNames = [...]string{"DiskLoad", "Generation", "LightInit", "LightStitch", "Snapshot", "NetworkWrite", "ClientApply", "MeshCPU", "Upload", "LODSnapshot", "LODBuild"}
 
 type loadingPhaseCounter struct{ nanos, calls atomic.Int64 }
 

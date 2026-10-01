@@ -61,6 +61,7 @@ func TestWebGPUMipStabilityGPU(t *testing.T) {
 		}
 	}
 	activeWebGPUAtlasAnimations = []webGPUAtlasAnimation{{frames: [][]byte{frameA, frameB}, width: 16, height: 16, bytesPerRow: 256, atlasX: 256 + atlasPadding, atlasY: atlasPadding, frameSeconds: .1}}
+	prepareWebGPUAnimationMips(activeWebGPUAtlasAnimations, 32<<20)
 	const size = 64
 	target, err := device.CreateTexture(&wgpu.TextureDescriptor{Size: wgpu.Extent3D{Width: size, Height: size, DepthOrArrayLayers: 1}, MipLevelCount: 1, SampleCount: 1, Dimension: gputypes.TextureDimension2D, Format: r.format, Usage: gputypes.TextureUsageRenderAttachment | gputypes.TextureUsageCopySrc})
 	check(err)
@@ -77,6 +78,12 @@ func TestWebGPUMipStabilityGPU(t *testing.T) {
 	defer readback.Release()
 	backend := platform.EnableExperimentalWebGPU(device)
 	defer platform.SetMeshBackend(nil)
+	// Keep another allocation alive so the tested quad uses nonzero vertex
+	// and index offsets. Recycle it while the quad is still live below.
+	spacerVertices := []platform.Vertex{{Position: [3]float32{4, 4, .5}}, {Position: [3]float32{5, 4, .5}}, {Position: [3]float32{4, 5, .5}}}
+	spacer, err := backend.UploadChecked(spacerVertices, []uint32{0, 1, 2})
+	check(err)
+	defer func() { spacer.Unload() }()
 	mesh, err := backend.UploadChecked([]platform.Vertex{
 		{Position: [3]float32{-1, -1, .5}, Texcoord: [2]float32{112. / 512, 128. / 256}, Color: [4]byte{255, 255, 255, 255}},
 		{Position: [3]float32{1, -1, .5}, Texcoord: [2]float32{128. / 512, 128. / 256}, Color: [4]byte{255, 255, 255, 255}},
@@ -86,6 +93,11 @@ func TestWebGPUMipStabilityGPU(t *testing.T) {
 	check(err)
 	defer mesh.Unload()
 	for frame := 0; frame < 11; frame++ {
+		if frame == 4 {
+			spacer.Unload()
+			spacer, err = backend.UploadChecked(spacerVertices, []uint32{0, 1, 2})
+			check(err)
+		}
 		if frame == 8 {
 			// Color-code levels: minification must choose blue mip levels when
 			// enabled, but red base level when disabled, then blue on re-enable.
@@ -129,7 +141,15 @@ func TestWebGPUMipStabilityGPU(t *testing.T) {
 		check(err)
 		pass.SetPipeline(r.solidPipeline)
 		pass.SetBindGroup(0, r.bindGroup, nil)
-		check(backend.DrawPass(pass, mesh))
+		if frame%2 == 0 {
+			draws, triangles, err := backend.DrawGrouped(pass, []platform.MeshHandle{mesh, spacer})
+			check(err)
+			if draws != 2 || triangles != 3 {
+				t.Fatal("incorrect grouped draw counts", draws, triangles)
+			}
+		} else {
+			check(backend.DrawPass(pass, mesh))
+		}
 		check(pass.End())
 		cb, err := encoder.Finish()
 		check(err)

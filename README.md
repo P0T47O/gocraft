@@ -225,6 +225,11 @@ This project is licensed under the GNU General Public License v3.0 - see the [LI
 - **klauspost/compress**: Licensed under the BSD-3-Clause / Apache 2.0 License.
 # Render distance
 
+Distant LOD is experimental and disabled by default. Enable **Experimental LOD**
+in Settings, then choose its **LOD distance** (64/96/128 chunks). Existing settings
+files also require explicit opt-in. Seams, color differences and performance
+limitations remain; disabling the feature stops its generation/cache workers.
+
 Settings includes a render-distance slider (8–32 chunks, default 24). Changes
 are saved in settings.json and applied to client chunk requests, visibility,
 fog and client unloading. The server accepts bounded requests through the

@@ -4,7 +4,7 @@ import "testing"
 
 func TestLODBuildingSurvivesChunkUnloadAndReload(t *testing.T) {
 	previous := currentSettings
-	currentSettings = &GameSettings{RenderDistance: 8, HorizonDistance: 64}
+	currentSettings = &GameSettings{RenderDistance: 8, ExperimentalLOD: true, HorizonDistance: 64}
 	defer func() { currentSettings = previous }()
 	const seed = uint32(1234511)
 	w := NewClientWorld()
@@ -68,7 +68,7 @@ func TestLODBuildingSurvivesChunkUnloadAndReload(t *testing.T) {
 		t.Fatal("demolition did not invalidate LOD")
 	}
 	for x := 3; x <= 6; x++ {
-		if w.snapshotLODTile(key)[lodPoint{x, 5}].occupancy != nil {
+		if lodOccupiedAt(w.snapshotLODTile(key)[lodPoint{x, 5}].occupancy, y) {
 			t.Fatal("demolished roof persisted")
 		}
 		if !lodOccupiedAt(snapshot[lodPoint{x, 5}].occupancy, y) {
@@ -79,7 +79,7 @@ func TestLODBuildingSurvivesChunkUnloadAndReload(t *testing.T) {
 
 func TestLODOccupancyNaturalChunksRemainSparse(t *testing.T) {
 	previous := currentSettings
-	currentSettings = &GameSettings{RenderDistance: 8, HorizonDistance: 64}
+	currentSettings = &GameSettings{RenderDistance: 8, ExperimentalLOD: true, HorizonDistance: 64}
 	defer func() { currentSettings = previous }()
 	w := &World{seed: 1234511, IsClient: true}
 	for _, key := range []chunkKey{{0, 0}, {-12, -12}, {14, -7}, {30, 22}, {100, 100}} {
@@ -122,7 +122,7 @@ func TestLODOccupancyCrossTileSidesAndVerticalGaps(t *testing.T) {
 
 func BenchmarkLODCaptureLoadedChunk(b *testing.B) {
 	previous := currentSettings
-	currentSettings = &GameSettings{RenderDistance: 8, HorizonDistance: 64}
+	currentSettings = &GameSettings{RenderDistance: 8, ExperimentalLOD: true, HorizonDistance: 64}
 	defer func() { currentSettings = previous }()
 	var chunk Chunk
 	generateChunkData(1234511, 0, 0, &chunk)

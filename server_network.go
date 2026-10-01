@@ -81,19 +81,7 @@ func (c *ClientConnection) close() {
 // shallow queue so a slow chunk consumer cannot occupy every slot needed by
 // authoritative inventory/block/container transitions.
 func (c *ClientConnection) enqueue(p Packet) bool {
-	select {
-	case <-c.done:
-		return false
-	default:
-	}
-	select {
-	case c.Send <- p:
-		return true
-	default:
-		fmt.Printf("Disconnecting %s: outbound queue saturated (%d/%d), packet=%d\n", c.Name, len(c.Send), cap(c.Send), p.ID())
-		c.close()
-		return false
-	}
+	return c.enqueueReliable(p)
 }
 
 func (s *Server) handleNewConnection(conn net.Conn) {
@@ -130,6 +118,7 @@ func (s *Server) handleNewConnection(conn net.Conn) {
 		defer cc.close()
 
 		write := func(p Packet) bool {
+			cc.refillOutbound()
 			start := time.Now()
 			err := WritePacket(conn, p)
 			if p.ID() == IDChunkData || p.ID() == IDChunkLight {
@@ -204,10 +193,7 @@ func (s *Server) Broadcast(p Packet) {
 	bestEffort := p.ID() == IDPlayerMove || p.ID() == IDEntityMove || p.ID() == IDUnloadChunk || p.ID() == IDWorldTime || p.ID() == 0x1D
 	for _, c := range s.Clients {
 		if bestEffort {
-			select {
-			case c.Send <- p:
-			default:
-			}
+			c.enqueueSnapshot(p)
 			continue
 		}
 		c.enqueue(p)

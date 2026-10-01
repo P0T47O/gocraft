@@ -114,7 +114,7 @@ func TestLODUnmodifiedBiomesRemainSparse(t *testing.T) {
 
 func TestLODChunkPacketAndBlockChange(t *testing.T) {
 	previous := currentSettings
-	currentSettings = &GameSettings{RenderDistance: 24, HorizonDistance: 96}
+	currentSettings = &GameSettings{RenderDistance: 24, ExperimentalLOD: true, HorizonDistance: 96}
 	defer func() { currentSettings = previous }()
 	const seed = uint32(1234511)
 	var source Chunk

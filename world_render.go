@@ -36,6 +36,7 @@ type worldRenderCache struct {
 	visible                        []visibleSection
 	translucent                    []translucentDraw
 	paths                          []string
+	prewarm                        meshPrewarmSchedule
 }
 
 type visibleSection struct {

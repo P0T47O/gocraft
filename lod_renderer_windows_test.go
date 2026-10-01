@@ -12,6 +12,30 @@ import (
 	"github.com/gogpu/wgpu"
 )
 
+func TestLODFullyCoveredRequiresReadyHaloAndDrawRadius(t *testing.T) {
+	old := currentSettings
+	defer func() { currentSettings = old }()
+	currentSettings = &GameSettings{RenderDistance: 32}
+	w := &World{chunks: make(map[chunkKey]*Chunk)}
+	for z := -1; z <= 8; z++ {
+		for x := -1; x <= 8; x++ {
+			w.chunks[chunkKey{x, z}] = &Chunk{generated: true, lodOccludes: true}
+		}
+	}
+	if !lodTileFullyCovered(w, lodTileKey{}, webGPUCamera{}) {
+		t.Fatal("complete ready tile not culled")
+	}
+	w.chunks[chunkKey{-1, 0}].lodOccludes = false
+	if lodTileFullyCovered(w, lodTileKey{}, webGPUCamera{}) {
+		t.Fatal("missing halo lost fallback")
+	}
+	w.chunks[chunkKey{-1, 0}].lodOccludes = true
+	currentSettings.RenderDistance = 8
+	if lodTileFullyCovered(w, lodTileKey{}, webGPUCamera{}) {
+		t.Fatal("cached chunks outside draw radius hid LOD")
+	}
+}
+
 func TestLODChunkMaskKeepsFallbackOnlyForUnmeshedChunks(t *testing.T) {
 	ready := &Chunk{generated: true}
 	ensureChunkSections(ready)
@@ -45,7 +69,7 @@ func TestLODChunkMaskKeepsFallbackOnlyForUnmeshedChunks(t *testing.T) {
 
 func TestLODChunkMaskWaitsForSurfaceAndClipsCachedChunks(t *testing.T) {
 	previous := currentSettings
-	currentSettings = &GameSettings{RenderDistance: 32, HorizonDistance: 96}
+	currentSettings = &GameSettings{RenderDistance: 32, ExperimentalLOD: true, HorizonDistance: 96}
 	defer func() { currentSettings = previous }()
 	partial := &Chunk{generated: true}
 	ensureChunkSections(partial)
@@ -122,6 +146,7 @@ func TestWebGPUDistantTerrainPreview(t *testing.T) {
 	r, cleanup := nativePreviewFixture(t, 4)
 	defer cleanup()
 	currentSettings.RenderDistance = 8
+	currentSettings.ExperimentalLOD = true
 	currentSettings.HorizonDistance = 64
 	world := &World{seed: 1234511, TimeTicks: 6000}
 	frame := webGPUFrameContext{
@@ -166,11 +191,25 @@ func TestWebGPUDistantTerrainPreview(t *testing.T) {
 	if r.lod == nil || r.lod.seed != 42 {
 		t.Fatal("old-seed LOD cache survived a world change")
 	}
-	currentSettings.HorizonDistance = 0
+	currentSettings.ExperimentalLOD = false
 	if err := r.DrawGameplay(world, frame, state); err != nil {
 		t.Fatal(err)
 	}
 	if r.lod != nil {
-		t.Fatal("disabling the horizon retained GPU meshes or workers")
+		t.Fatal("disabling experimental LOD retained GPU meshes or workers")
+	}
+	currentSettings.ExperimentalLOD = true
+	if err := r.DrawGameplay(world, frame, state); err != nil {
+		t.Fatal(err)
+	}
+	if r.lod == nil {
+		t.Fatal("re-enabling experimental LOD did not restart rendering")
+	}
+	currentSettings.ExperimentalLOD = false
+	if err := r.DrawGameplay(world, frame, state); err != nil {
+		t.Fatal(err)
+	}
+	if r.lod != nil {
+		t.Fatal("second disable retained GPU state")
 	}
 }

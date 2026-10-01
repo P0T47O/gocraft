@@ -34,6 +34,20 @@ func TestStreamingRadiusProfile(t *testing.T) {
 	}
 }
 
+func TestStreamingLODProfile(t *testing.T) {
+	if os.Getenv("GOCRAFT_STREAM_LOD_PROFILE") != "1" {
+		t.Skip("opt-in 32/96 LOD loading profile")
+	}
+	runStreamingProbe(t, 32, 45*time.Second, 96)
+}
+
+func TestStreamingSteadyProfile(t *testing.T) {
+	if os.Getenv("GOCRAFT_STREAM_STEADY_PROFILE") != "1" {
+		t.Skip("opt-in loaded-world and turn profile")
+	}
+	runStreamingProbe(t, 32, 75*time.Second, 96)
+}
+
 func streamingProbeProgress(w *World, plan *chunkRequestPlan) (received, target int) {
 	if !plan.valid {
 		return
@@ -51,8 +65,9 @@ func streamingProbeProgress(w *World, plan *chunkRequestPlan) (received, target 
 	return
 }
 
-func runStreamingProbe(t *testing.T, radius int, duration time.Duration) {
+func runStreamingProbe(t *testing.T, radius int, duration time.Duration, horizon ...int) {
 	t.Helper()
+	steady := os.Getenv("GOCRAFT_STREAM_STEADY_PROFILE") == "1"
 	r, cleanup := nativePreviewFixture(t)
 	defer cleanup()
 	var w *nativeWindow
@@ -73,6 +88,10 @@ func runStreamingProbe(t *testing.T, radius int, duration time.Duration) {
 	}()
 	activeWebGPUWorldRenderer, nativeGameWindow = r, w
 	currentSettings.RenderDistance = radius
+	if len(horizon) > 0 {
+		currentSettings.ExperimentalLOD = true
+		currentSettings.HorizonDistance = horizon[0]
+	}
 	save := t.TempDir()
 	if err := SaveLevelData(save, 12345); err != nil {
 		t.Fatal(err)
@@ -82,6 +101,12 @@ func runStreamingProbe(t *testing.T, radius int, duration time.Duration) {
 		t.Fatal(err)
 	}
 	prefix := fmt.Sprintf("work/stream-r%d", radius)
+	if len(horizon) > 0 {
+		prefix += fmt.Sprintf("-h%d", horizon[0])
+	}
+	if steady {
+		prefix += "-steady"
+	}
 	if radius == 128 {
 		prefix = "work/stress128"
 	}
@@ -103,8 +128,10 @@ func runStreamingProbe(t *testing.T, radius int, duration time.Duration) {
 		t.Fatal(err)
 	}
 	defer profile.Close()
-	if err = pprof.StartCPUProfile(profile); err != nil {
-		t.Fatal(err)
+	if !steady {
+		if err = pprof.StartCPUProfile(profile); err != nil {
+			t.Fatal(err)
+		}
 	}
 	defer pprof.StopCPUProfile()
 	startGame(save, "", false)
@@ -133,6 +160,9 @@ func runStreamingProbe(t *testing.T, radius int, duration time.Duration) {
 		currentGameMode = ModeCreative
 		camera.Position.Y = 143
 		camera.Target = newGameVec3(camera.Position.X+100, 100, camera.Position.Z+100)
+		if steady && readyAt >= 0 && time.Since(start)-readyAt >= 8*time.Second {
+			camera.Target = newGameVec3(camera.Position.X-100, 100, camera.Position.Z-100)
+		}
 		if err := drawExperimentalWebGPUFrame(); err != nil {
 			t.Fatal(err)
 		}
@@ -146,8 +176,19 @@ func runStreamingProbe(t *testing.T, radius int, duration time.Duration) {
 			visible, ready := world.render.visibleSections, world.render.readySections
 			_, _ = fmt.Fprintf(progress, "%.1f,%d,%d,%d,%d,%d,%d,%d,%.2f,%.2f,%.0f\n", time.Since(start).Seconds(), received, target, visible, ready, len(pendingChunkRequests), len(client.Incoming), world.render.drawCalls, perfMon.Metrics.FrameP95, perfMon.Metrics.FrameP99, float64(mem.HeapAlloc)/(1<<20))
 			t.Logf("%.1fs radius=%d received=%d/%d visible-ready=%d/%d draws=%d heap=%.0fMiB queue=%d pending=%d", time.Since(start).Seconds(), radius, received, target, ready, visible, world.render.drawCalls, float64(mem.HeapAlloc)/(1<<20), len(client.Incoming), len(pendingChunkRequests))
-			if target > 0 && received == target && ready == visible && len(world.meshJobs) == 0 && len(world.meshResults) == 0 && len(world.urgentMeshJobs) == 0 && len(world.urgentMeshResults) == 0 {
+			// Background prewarming is deliberately independent of visible readiness.
+			// Waiting for its queues to empty gives this version extra pre-turn time.
+			if readyAt < 0 && target > 0 && received == target && ready == visible {
 				readyAt = time.Since(start)
+				if !steady {
+					break
+				}
+				if err := pprof.StartCPUProfile(profile); err != nil {
+					t.Fatal(err)
+				}
+				t.Logf("steady profile begins at %.2fs; turn after 8s", readyAt.Seconds())
+			}
+			if steady && readyAt >= 0 && time.Since(start)-readyAt >= 16*time.Second {
 				break
 			}
 			nextLog = now.Add(time.Second)

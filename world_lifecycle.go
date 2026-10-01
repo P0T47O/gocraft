@@ -37,6 +37,8 @@ func (w *World) Close() {
 		return
 	}
 	w.stopOnce.Do(func() {
+		w.finishLODObservedCapture()
+		w.closeLODCache()
 		close(w.done)
 		w.workers.Wait()
 		for {

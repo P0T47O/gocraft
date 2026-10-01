@@ -97,6 +97,11 @@ func buildLODTileWithColumns(seed uint32, key lodTileKey, overrides map[lodPoint
 // them into the ground turns buildings into sharp hills. Digging and material
 // changes at the existing surface still belong to the terrain grid.
 func lodSampleColumn(seed uint32, x, z int, overrides map[lodPoint]lodColumn) lodColumn {
+	// Observed ground was already clamped to the seed surface at capture time;
+	// buildings are separate occupancy. Do not regenerate a known terrain column.
+	if changed, ok := overrides[lodPoint{x, z}]; ok && changed.observed {
+		return changed
+	}
 	column := sampleTerrainColumn(seed, x, z)
 	if changed, ok := overrides[lodPoint{x, z}]; ok && changed.height <= column.height {
 		return changed
@@ -200,8 +205,13 @@ func buildLODTileAtStep(seed uint32, key lodTileKey, overrides map[lodPoint]lodC
 			}
 		}
 	}
+	patches := lodObservedPatchCells(key, step, overrides)
 	for z := 0; z < cells; z++ {
 		for x := 0; x < cells; x++ {
+			if patches[z*cells+x] {
+				appendLODObservedPatch(&data, seed, key, x*step, z*step, step, side, overrides)
+				continue
+			}
 			a := uint32(z*side + x)
 			data.indices = append(data.indices, a, a+uint32(side), a+1, a+1, a+uint32(side), a+uint32(side)+1)
 			// Water is a separate horizontal layer. The terrain beneath remains
@@ -243,6 +253,9 @@ func buildLODTileAtStep(seed uint32, key lodTileKey, overrides map[lodPoint]lodC
 			if (hash2(seed+1, x, z)+1)*.5 >= maxTreeAnchorChance {
 				continue
 			}
+			if overrides[lodPoint{x, z}].observed {
+				continue
+			}
 			if anchor, ok := sampleTreeAnchor(seed, x, z); ok {
 				appendLODTree(&data, anchor)
 			}
@@ -279,12 +292,12 @@ func appendLODChunkBoundaryStrips(data *lodTileData, seed uint32, key lodTileKey
 	baseX, baseZ := key.X*lodTileSize, key.Z*lodTileSize
 	width := max(8, step)
 	for x := 0; x+width <= lodTileSize; x += chunkWidth {
-		var inner0 lodColumn
 		for z := 0; z < lodTileSize; z++ {
 			wx, wz := baseX+x, baseZ+z
-			if z == 0 {
-				inner0 = lodSampleColumn(seed, wx-1, wz, overrides)
+			if !overrides[lodPoint{wx - 1, wz}].observed {
+				continue
 			}
+			inner0 := lodSampleColumn(seed, wx-1, wz, overrides)
 			inner1 := lodSampleColumn(seed, wx-1, wz+1, overrides)
 			diff0 := float32(inner0.height) - (lodGridVertexAt(data, side, step, x, z).Position[1] + .5)
 			diff1 := float32(inner1.height) - (lodGridVertexAt(data, side, step, x, z+1).Position[1] + .5)
@@ -313,16 +326,15 @@ func appendLODChunkBoundaryStrips(data *lodTileData, seed uint32, key lodTileKey
 				}
 				data.indices = append(data.indices, base, base+1, base+2, base+2, base+1, base+3)
 			}
-			inner0 = inner1
 		}
 	}
 	for z := 0; z+width <= lodTileSize; z += chunkWidth {
-		var inner0 lodColumn
 		for x := 0; x < lodTileSize; x++ {
 			wx, wz := baseX+x, baseZ+z
-			if x == 0 {
-				inner0 = lodSampleColumn(seed, wx, wz-1, overrides)
+			if !overrides[lodPoint{wx, wz - 1}].observed {
+				continue
 			}
+			inner0 := lodSampleColumn(seed, wx, wz-1, overrides)
 			inner1 := lodSampleColumn(seed, wx+1, wz-1, overrides)
 			diff0 := float32(inner0.height) - (lodGridVertexAt(data, side, step, x, z).Position[1] + .5)
 			diff1 := float32(inner1.height) - (lodGridVertexAt(data, side, step, x+1, z).Position[1] + .5)
@@ -351,7 +363,6 @@ func appendLODChunkBoundaryStrips(data *lodTileData, seed uint32, key lodTileKey
 				}
 				data.indices = append(data.indices, base, base+1, base+2, base+2, base+1, base+3)
 			}
-			inner0 = inner1
 		}
 	}
 	// The first two loops join an outside cell east/south of a real chunk.
@@ -361,6 +372,9 @@ func appendLODChunkBoundaryStrips(data *lodTileData, seed uint32, key lodTileKey
 		wx := baseX + boundary
 		for z := 0; z < lodTileSize; z++ {
 			wz := baseZ + z
+			if !overrides[lodPoint{wx, wz}].observed {
+				continue
+			}
 			inner0 := lodSampleColumn(seed, wx, wz, overrides)
 			inner1 := lodSampleColumn(seed, wx, wz+1, overrides)
 			diff0 := float32(inner0.height) - (lodGridVertexAt(data, side, step, boundary, z).Position[1] + .5)
@@ -395,6 +409,9 @@ func appendLODChunkBoundaryStrips(data *lodTileData, seed uint32, key lodTileKey
 		wz := baseZ + boundary
 		for x := 0; x < lodTileSize; x++ {
 			wx := baseX + x
+			if !overrides[lodPoint{wx, wz}].observed {
+				continue
+			}
 			inner0 := lodSampleColumn(seed, wx, wz, overrides)
 			inner1 := lodSampleColumn(seed, wx+1, wz, overrides)
 			diff0 := float32(inner0.height) - (lodGridVertexAt(data, side, step, x, boundary).Position[1] + .5)

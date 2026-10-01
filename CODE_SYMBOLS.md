@@ -226,11 +226,45 @@
 
 函数/方法：`GetItem`、`initBlockItems`、`configureTools`、`GetItemVisual`、`MoveStack`、`StackLimit`、`CanStack`、`*ItemStack.Wear`、`validStack`、`*PlayerEntity.claimPendingItems`、`migratePlayerItems`、`initItemRegistry`
 
+## [lod_cache.go](lod_cache.go)
+
+类型：`lodCacheJob`、`lodDiskCache`
+
+函数/方法：`lodSessionCacheIdentity`、`*World.openLODCache`、`*lodDiskCache.files`、`*lodDiskCache.prune`、`*lodDiskCache.write`、`*lodDiskCache.read`、`*World.processLODCache`、`*World.touchLODCache`、`*World.trimLODCacheMemory`、`*World.closeLODCache`、`*World.requestLODCacheChunk`、`*World.requestLODCacheTile`
+
+## [lod_cache_identity_stub.go](lod_cache_identity_stub.go)
+
+函数/方法：`lodLocalCacheIdentity`
+
+## [lod_cache_identity_windows.go](lod_cache_identity_windows.go)
+
+函数/方法：`lodLocalCacheIdentity`
+
+## [lod_capture.go](lod_capture.go)
+
+类型：`lodCaptureJob`、`lodCaptureQueue`
+
+函数/方法：`*World.startLODObservedCapture`、`*World.queueLODObservedChunk`、`*World.applyLODObservedResult`、`*World.processLODObservedResults`、`*World.finishLODObservedCapture`
+
 ## [lod_colors.go](lod_colors.go)
 
 类型：`lodMaterialPalette`
 
 函数/方法：`lodTextureAverage`、`publishLODMaterialPalette`
+
+## [lod_observed.go](lod_observed.go)
+
+类型：`lodObservedChunk`
+
+函数/方法：`snapshotLODObservedColumn`、`*World.recordLODObservedChunk`、`buildLODObservedChunk`、`*World.recordLODObservedColumn`、`*World.installLODObservedChunk`
+
+## [lod_observed_foliage.go](lod_observed_foliage.go)
+
+函数/方法：`appendLODObservedFoliage`
+
+## [lod_observed_mesh.go](lod_observed_mesh.go)
+
+函数/方法：`lodObservedPatchCells`、`appendLODObservedPatch`、`lodPatchMorph`
 
 ## [lod_occupancy.go](lod_occupancy.go)
 
@@ -242,7 +276,11 @@
 
 类型：`lodBuildResult`、`lodBuildJob`、`lodBuildState`、`webGPULODRenderer`
 
-函数/方法：`newWebGPULODRenderer`、`*webGPULODRenderer.buildLoop`、`*webGPULODRenderer.close`、`*webGPULODRenderer.radiusOffsets`、`lodTileInRange`、`lodStepForDistance`、`lodStepForTile`、`*webGPULODRenderer.draw`、`*webGPULODRenderer.drawWater`、`*webGPULODRenderer.drawPreview`、`*webGPUWorldRenderer.drawDistantTerrain`
+函数/方法：`newWebGPULODRenderer`、`*webGPULODRenderer.buildLoop`、`*webGPULODRenderer.close`、`*webGPULODRenderer.radiusOffsets`、`lodTileInRange`、`lodStepForDistance`、`lodStepForTile`、`*webGPULODRenderer.draw`、`*webGPULODRenderer.drawWater`、`lodTileFullyCovered`、`*webGPULODRenderer.drawPreview`、`*webGPUWorldRenderer.drawDistantTerrain`
+
+## [lod_settings.go](lod_settings.go)
+
+函数/方法：`*World.syncExperimentalLOD`
 
 ## [lod_state.go](lod_state.go)
 
@@ -405,6 +443,12 @@
 类型：`Vertex`
 
 函数/方法：`UploadMesh`
+
+## [platform/mesh_arena.go](platform/mesh_arena.go)
+
+类型：`meshRange`、`meshArenaPage`
+
+函数/方法：`findMeshRange`、`takeMeshRange`、`freeMeshRange`、`*WebGPUMeshBackend.reserveMesh`、`*meshArenaPage.release`、`*WebGPUMeshBackend.DrawGrouped`
 
 ## [platform/renderer.go](platform/renderer.go)
 
@@ -620,6 +664,10 @@
 
 函数/方法：`*Server.ListenTCP`、`*Server.StartTCP`、`*Server.ServeTCP`、`*ClientConnection.close`、`*ClientConnection.enqueue`、`*Server.handleNewConnection`、`*Server.Broadcast`、`*Server.BroadcastTo`
 
+## [server_outbound.go](server_outbound.go)
+
+函数/方法：`*ClientConnection.outboundReserve`、`*ClientConnection.enqueueReliable`、`*ClientConnection.enqueueSnapshot`、`*ClientConnection.enqueueReplay`、`*ClientConnection.refillOutbound`
+
 ## [server_packets.go](server_packets.go)
 
 函数/方法：`*Server.HandlePacket`
@@ -650,7 +698,7 @@
 
 类型：`GameSettings`
 
-函数/方法：`clampHorizonDistance`、`horizonDistance`、`normalizeMSAASamples`、`renderDistance`、`clampRenderDistance`、`LoadSettings`、`SaveSettings`
+函数/方法：`clampHorizonDistance`、`horizonDistance`、`experimentalLODEnabled`、`normalizeMSAASamples`、`renderDistance`、`clampRenderDistance`、`LoadSettings`、`SaveSettings`
 
 ## [settings_window.go](settings_window.go)
 
@@ -774,7 +822,7 @@
 
 类型：`webGPUMip`
 
-函数/方法：`buildWebGPUMips`、`refreshWebGPUMips`、`*webGPUAtlasAnimation.mipFrame`
+函数/方法：`buildWebGPUMips`、`refreshWebGPUMips`、`*webGPUAtlasAnimation.mipFrame`、`prepareWebGPUAnimationMips`
 
 ## [webgpu_surface_windows.go](webgpu_surface_windows.go)
 
@@ -800,7 +848,7 @@
 
 类型：`webGPUWorldRenderer`
 
-函数/方法：`newWebGPUWorldRenderer`、`*webGPUWorldRenderer.createPipelineResources`、`*webGPUWorldRenderer.configureSurface`、`*webGPUWorldRenderer.drawMeshMap`、`*webGPUWorldRenderer.Close`、`*webGPUWorldRenderer.closeResources`
+函数/方法：`newWebGPUWorldRenderer`、`*webGPUWorldRenderer.createPipelineResources`、`*webGPUWorldRenderer.configureSurface`、`*webGPUWorldRenderer.drawMeshMap`、`*webGPUWorldRenderer.drawVisibleGroup`、`*webGPUWorldRenderer.Close`、`*webGPUWorldRenderer.closeResources`
 
 ## [window_input.go](window_input.go)
 
@@ -849,6 +897,12 @@
 类型：`chunkMeshChanges`
 
 函数/方法：`*Chunk.invalidateMeshSection`、`*chunkMeshChanges.mark`、`*chunkMeshChanges.apply`
+
+## [world_mesh_prewarm.go](world_mesh_prewarm.go)
+
+类型：`meshPrewarmSchedule`
+
+函数/方法：`*World.prewarmMeshes`
 
 ## [world_packet_light.go](world_packet_light.go)
 

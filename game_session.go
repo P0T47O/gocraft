@@ -62,6 +62,10 @@ func startGame(savePath string, ip string, isMultiplayer bool) {
 	clear(remoteEntities)
 	explosionEffects = nil
 	world = NewClientWorld()
+	if experimentalLODEnabled() {
+		world.startLODObservedCapture()
+	}
+	world.lodCacheSource = lodSessionCacheIdentity(savePath, ip, isMultiplayer)
 	world.StartMeshWorkers(assets, 8)
 
 	// Input

@@ -49,6 +49,9 @@ func refreshWebGPUMips(mips []webGPUMip) {
 // Refresh the complete extruded cell, not just its interior: linear/AF taps
 // must never sample the previous animation frame in the padding.
 func (a *webGPUAtlasAnimation) mipFrame(index int) []webGPUMip {
+	if index < len(a.cachedMips) && a.cachedMips[index] != nil {
+		return a.cachedMips[index]
+	}
 	if len(a.mips) == 0 {
 		a.mips = buildWebGPUMips(make([]byte, atlasCellSize*atlasCellSize*4), atlasCellSize, atlasCellSize, atlasMaxMipLevel+1)
 	}
@@ -64,4 +67,28 @@ func (a *webGPUAtlasAnimation) mipFrame(index int) []webGPUMip {
 	}
 	refreshWebGPUMips(a.mips)
 	return a.mips
+}
+
+// Immutable looping frames can share precomputed mips across every cycle.
+// Admit whole animations within a global atlas budget; oversized packs retain
+// the existing single-frame scratch buffer rather than growing without bound.
+func prepareWebGPUAnimationMips(animations []webGPUAtlasAnimation, budget int) {
+	frameBytes := 0
+	for level := 0; level <= atlasMaxMipLevel; level++ {
+		size := max(1, atlasCellSize>>level)
+		frameBytes += size * size * 4
+	}
+	for i := range animations {
+		a := &animations[i]
+		if len(a.frames) <= 1 || len(a.frames) > budget/frameBytes {
+			continue
+		}
+		budget -= len(a.frames) * frameBytes
+		a.cachedMips = make([][]webGPUMip, len(a.frames))
+		for frame := range a.frames {
+			a.mips = nil
+			a.cachedMips[frame] = a.mipFrame(frame)
+		}
+		a.mips = nil
+	}
 }

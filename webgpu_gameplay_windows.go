@@ -102,21 +102,17 @@ func (r *webGPUWorldRenderer) DrawGameplay(world *World, frame webGPUFrameContex
 
 	pass.SetPipeline(r.solidPipeline)
 	pass.SetBindGroup(0, r.bindGroup, nil)
-	for _, section := range cache.visible {
-		if err := r.drawMeshMap(pass, section.chunk.opaqueMeshes[section.sec], cache); err != nil {
-			_ = pass.End()
-			r.surface.DiscardTexture()
-			return err
-		}
+	if err := r.drawVisibleGroup(pass, cache, false); err != nil {
+		_ = pass.End()
+		r.surface.DiscardTexture()
+		return err
 	}
 	// Vegetation and crossed item faces remain double-sided.
 	pass.SetPipeline(r.opaquePipeline)
-	for _, section := range cache.visible {
-		if err := r.drawMeshMap(pass, section.chunk.cutoutMeshes[section.sec], cache); err != nil {
-			_ = pass.End()
-			r.surface.DiscardTexture()
-			return err
-		}
+	if err := r.drawVisibleGroup(pass, cache, true); err != nil {
+		_ = pass.End()
+		r.surface.DiscardTexture()
+		return err
 	}
 
 	entities, err := ensureWebGPUEntityRenderer(r)

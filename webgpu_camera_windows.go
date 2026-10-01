@@ -134,13 +134,21 @@ func (r *webGPUWorldRenderer) collectVisibleCamera(world *World, camera webGPUCa
 
 	deadline := time.Now().Add(2 * time.Millisecond)
 	submissions := 0
+	visibleWaiting := false
 	for _, section := range cache.visible {
+		if !section.chunk.sectionDirty[section.sec] || section.chunk.pendingOpaque[section.sec] || section.chunk.meshRetries[section.sec] > 5 {
+			continue
+		}
 		if submissions == 16 || !time.Now().Before(deadline) {
+			visibleWaiting = true
 			break
 		}
 		if section.chunk.meshRetries[section.sec] <= 5 && world.submitMesh(section.cx, section.cz, section.sec, assets) {
 			submissions++
 		}
+	}
+	if !visibleWaiting {
+		world.prewarmMeshes(cx, cz, renderDistance(), assets, time.Now().Add(time.Millisecond))
 	}
 	cache.collectTranslucent()
 }

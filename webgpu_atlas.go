@@ -12,6 +12,7 @@ import (
 
 type webGPUAtlasAnimation struct {
 	mips           []webGPUMip
+	cachedMips     [][]webGPUMip
 	frames         [][]byte
 	width, height  uint32
 	bytesPerRow    uint32
@@ -250,6 +251,7 @@ func buildWebGPUBlockAtlas() (*webGPUBlockAtlas, error) {
 		}
 	}
 
+	prepareWebGPUAnimationMips(animations, 32<<20)
 	activeWebGPUAtlasAnimations = animations
 	return &webGPUBlockAtlas{pixels: pixels, width: width, height: height, uvs: uvs, animations: animations, averages: averages}, nil
 }

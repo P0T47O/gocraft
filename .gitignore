@@ -22,3 +22,4 @@ saves/
 settings.json
 screenshot000.png
 work/
+.gocraft-cache/

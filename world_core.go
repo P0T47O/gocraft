@@ -36,6 +36,15 @@ type World struct {
 	lodColumns        map[lodPoint]lodColumn // Client-owned sparse deviations from seed terrain.
 	lodVersions       map[lodTileKey]uint64
 	lodOccupancyTiles map[lodTileKey]map[lodPoint]*lodOccupancy
+	lodObservedChunks map[chunkKey]*lodObservedChunk
+	lodCapture        *lodCaptureQueue
+	lodEnablePending  []chunkKey // Existing loaded chunks captured incrementally after opting in.
+	lodCache          *lodDiskCache
+	lodCacheSource    string
+	lodCacheDirty     map[chunkKey]bool
+	lodCacheAccess    map[chunkKey]uint64
+	lodCacheClock     uint64
+	lodCacheEpoch     map[chunkKey]uint64
 
 	// Entity System
 	entities   []Entity
@@ -397,11 +406,11 @@ func (w *World) SetBlockAt(x, y, z int, block byte) {
 	sec := sectionIndexForY(y)
 	chunk.invalidateMeshSection(sec)
 	chunk.mu.Unlock()
-	if w.IsClient && (chunk.lodCaptured || horizonDistance() > renderDistance()) {
+	if w.IsClient && experimentalLODEnabled() && (chunk.lodCaptured || horizonDistance() > renderDistance() || w.lodCache != nil) {
 		if x%lodCellSize == 0 && z%lodCellSize == 0 {
 			w.recordLODColumn(chunk, x, z)
 		}
-		w.recordLODOccupancy(chunk, x, z)
+		w.recordLODObservedColumn(chunk, x, z)
 	}
 	opacityChanged := lightOpaque(oldBlock, oldMeta) != lightOpaque(block, 0)
 	if emitsLight(oldBlock) || emitsLight(block) || opacityChanged {

@@ -149,6 +149,7 @@ type webGPUWorldRenderer struct {
 	width, height           uint32
 	surfaceNeedsReconfigure bool
 	camera                  webGPUCamera
+	groupMeshes             []platform.MeshHandle
 }
 
 func newWebGPUWorldRenderer(hwnd uintptr, assets *RenderAssets, width, height uint32, samples ...uint32) (*webGPUWorldRenderer, error) {
@@ -461,6 +462,26 @@ func (r *webGPUWorldRenderer) drawMeshMap(pass *wgpu.RenderPassEncoder, meshes m
 		}
 	}
 	return nil
+}
+
+func (r *webGPUWorldRenderer) drawVisibleGroup(pass *wgpu.RenderPassEncoder, cache *worldRenderCache, cutout bool) error {
+	r.groupMeshes = r.groupMeshes[:0]
+	defer func() { clear(r.groupMeshes); r.groupMeshes = r.groupMeshes[:0] }()
+	for _, s := range cache.visible {
+		meshes := s.chunk.opaqueMeshes[s.sec]
+		if cutout {
+			meshes = s.chunk.cutoutMeshes[s.sec]
+		}
+		for _, mesh := range meshes["atlas"] {
+			if mesh != nil && mesh.gpuMesh != nil {
+				r.groupMeshes = append(r.groupMeshes, mesh.gpuMesh)
+			}
+		}
+	}
+	draws, triangles, err := r.backend.DrawGrouped(pass, r.groupMeshes)
+	cache.drawCalls += draws
+	cache.triangles += triangles
+	return err
 }
 
 func (r *webGPUWorldRenderer) Close() {

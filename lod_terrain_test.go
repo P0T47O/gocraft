@@ -38,7 +38,13 @@ func TestLODTileMatchesTerrainColumnsAndNeighbors(t *testing.T) {
 
 func TestLODHandoffSamplesEveryVoxelOnRealChunkEdge(t *testing.T) {
 	const seed uint32 = 1234511
-	tile := buildLODTileAtStep(seed, lodTileKey{0, 0}, nil, lodNearCellSize)
+	columns := make(map[lodPoint]lodColumn)
+	for _, p := range []lodPoint{{-1, 7}, {16, 7}} {
+		c := lodSampleColumn(seed, p.X, p.Z, nil)
+		c.observed = true
+		columns[p] = c
+	}
+	tile := buildLODTileAtStep(seed, lodTileKey{0, 0}, columns, lodNearCellSize)
 	for _, edge := range []struct {
 		marker float32
 		x, z   int
@@ -99,7 +105,13 @@ func TestLODHandoffUsesClimateGrassAndSeparateWater(t *testing.T) {
 
 func TestLODBoundaryStripJoinsRealColumnWithoutChangingUnmaskedGrid(t *testing.T) {
 	const seed = uint32(1234511)
-	tile := buildLODTileAtStep(seed, lodTileKey{0, 0}, nil, lodNearCellSize)
+	columns := make(map[lodPoint]lodColumn)
+	for _, p := range []lodPoint{{15, 0}, {0, 15}, {16, 0}, {0, 16}} {
+		c := lodSampleColumn(seed, p.X, p.Z, nil)
+		c.observed = true
+		columns[p] = c
+	}
+	tile := buildLODTileAtStep(seed, lodTileKey{0, 0}, columns, lodNearCellSize)
 	wantX := float32(lodSampleColumn(seed, 15, 0, nil).height) - .52
 	wantZ := float32(lodSampleColumn(seed, 0, 15, nil).height) - .52
 	wantEast := float32(lodSampleColumn(seed, 16, 0, nil).height) - .52

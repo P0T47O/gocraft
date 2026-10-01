@@ -51,7 +51,7 @@ func (w *World) applyChunkPacket(p *PacketChunkData) bool {
 					changed[y/sectionHeight] = true
 					// Missing neighbors were sampled as air with full sky light.
 					// An empty, sunlit new voxel does not invalidate their meshes.
-					if !fresh || p.Data[idx] != blockAir || meta != 0 || light != 0xf0 {
+					if !fresh || (x == 0 || x == chunkWidth-1 || z == 0 || z == chunkWidth-1) && (p.Data[idx] != blockAir || meta != 0 || light != 0xf0) {
 						meshChanges.mark(x, y, z)
 					}
 				}

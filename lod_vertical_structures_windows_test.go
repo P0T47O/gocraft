@@ -21,6 +21,7 @@ func TestWebGPUDistantVerticalAndFloatingStructures(t *testing.T) {
 	r, cleanup := nativePreviewFixture(t, 4)
 	defer cleanup()
 	currentSettings.RenderDistance = 8
+	currentSettings.ExperimentalLOD = true
 	currentSettings.HorizonDistance = 64
 	w, _ := lodVerticalStructureFixture(1234511)
 	w.TimeTicks = 6000

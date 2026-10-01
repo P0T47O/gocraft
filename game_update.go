@@ -24,6 +24,11 @@ func (s *chunkUnloadSchedule) due(w *World, cx, cz, radius int, now time.Time) b
 }
 
 func updateGame() {
+	if world != nil {
+		world.syncExperimentalLOD()
+		world.processLODObservedResults()
+		world.processLODCache()
+	}
 	if isPaused && pauseSettings && inputKeyPressed(keyEscape) {
 		SaveSettings()
 		pauseSettings = false

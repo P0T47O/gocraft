@@ -8,6 +8,8 @@ type lodColumn struct {
 	height    int
 	top       byte
 	occupancy *lodOccupancy // Immutable authoritative above-ground voxel runs.
+	observed  bool
+	changed   bool // Real ground differs from seed ground; requires a fine patch.
 }
 
 func lodSurfaceBlock(block byte) bool {
@@ -86,7 +88,7 @@ func (w *World) recordLODColumn(chunk *Chunk, x, z int) {
 }
 
 func (w *World) recordChunkLODColumns(chunk *Chunk, cx, cz int) {
-	if !w.IsClient || (horizonDistance() <= renderDistance() && !chunk.lodCaptured) {
+	if !w.IsClient || !experimentalLODEnabled() || (horizonDistance() <= renderDistance() && !chunk.lodCaptured && w.lodCache == nil) {
 		return
 	}
 	for z := 0; z < chunkWidth; z += lodCellSize {
@@ -94,23 +96,31 @@ func (w *World) recordChunkLODColumns(chunk *Chunk, cx, cz int) {
 			w.recordLODColumn(chunk, cx*chunkWidth+x, cz*chunkWidth+z)
 		}
 	}
-	for z := 0; z < chunkWidth; z++ {
-		for x := 0; x < chunkWidth; x++ {
-			w.recordLODOccupancy(chunk, cx*chunkWidth+x, cz*chunkWidth+z)
-		}
-	}
 	chunk.lodCaptured = true
+	if w.queueLODObservedChunk(chunk, chunkKey{cx, cz}) {
+		return
+	}
+	w.recordLODObservedChunk(chunk, cx, cz)
 }
 
 func (w *World) resetLODState() {
+	async := w.lodCapture != nil
+	w.finishLODObservedCapture()
+	w.closeLODCache()
 	w.lodColumns = nil
 	w.lodVersions = nil
 	w.lodOccupancyTiles = nil
+	w.lodObservedChunks = nil
+	w.lodCacheAccess = nil
+	w.lodCacheEpoch = nil
 	w.chunksMu.RLock()
 	for _, chunk := range w.chunks {
 		chunk.lodCaptured = false
 	}
 	w.chunksMu.RUnlock()
+	if async {
+		w.startLODObservedCapture()
+	}
 }
 
 func (w *World) snapshotLODTile(key lodTileKey) map[lodPoint]lodColumn {
@@ -143,6 +153,32 @@ func (w *World) snapshotLODTile(key lodTileKey) map[lodPoint]lodColumn {
 				}
 				column.occupancy = occupancy
 				result[point] = column
+			}
+		}
+	}
+	// Observed columns supersede legacy samples and include the full eight-block
+	// halo used by near/full handoff strips and coarse-cell patch borders.
+	for cz := key.Z*8 - 1; cz <= key.Z*8+8; cz++ {
+		for cx := key.X*8 - 1; cx <= key.X*8+8; cx++ {
+			record := w.lodObservedChunks[chunkKey{cx, cz}]
+			if record == nil {
+				w.requestLODCacheChunk(chunkKey{cx, cz})
+				continue
+			}
+			if w.lodCache != nil {
+				w.touchLODCache(chunkKey{cx, cz})
+			}
+			if result == nil {
+				result = make(map[lodPoint]lodColumn)
+			}
+			for z := 0; z < chunkWidth; z++ {
+				for x := 0; x < chunkWidth; x++ {
+					point := lodPoint{cx*chunkWidth + x, cz*chunkWidth + z}
+					if point.X < key.X*lodTileSize-8 || point.X > (key.X+1)*lodTileSize+8 || point.Z < key.Z*lodTileSize-8 || point.Z > (key.Z+1)*lodTileSize+8 {
+						continue
+					}
+					result[point] = record.columns[z*chunkWidth+x]
+				}
 			}
 		}
 	}

@@ -14,9 +14,10 @@ type GameSettings struct {
 	PlayerName       string
 	RenderDistance   int // Chunks; client-pull streaming supports live changes.
 	Mipmaps          bool
-	Anisotropy       int // 1 disables anisotropic filtering; otherwise 2/4/8/16.
-	MSAASamples      int // 1 disables world-edge antialiasing; 4 enables it. UI remains single-sample.
-	HorizonDistance  int // Distant simplified terrain radius in chunks; 0 disables it.
+	Anisotropy       int  // 1 disables anisotropic filtering; otherwise 2/4/8/16.
+	MSAASamples      int  // 1 disables world-edge antialiasing; 4 enables it. UI remains single-sample.
+	HorizonDistance  int  // Distant simplified terrain radius in chunks; 0 disables it.
+	ExperimentalLOD  bool // Explicit opt-in; older settings files leave this disabled.
 }
 
 const minRenderDistance = 8
@@ -32,10 +33,14 @@ func clampHorizonDistance(v int) int {
 }
 
 func horizonDistance() int {
-	if currentSettings == nil {
-		return defaultHorizonDistance
+	if !experimentalLODEnabled() {
+		return 0
 	}
 	return clampHorizonDistance(currentSettings.HorizonDistance)
+}
+
+func experimentalLODEnabled() bool {
+	return currentSettings != nil && currentSettings.ExperimentalLOD
 }
 
 func normalizeMSAASamples(samples int) int {

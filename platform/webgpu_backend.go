@@ -13,9 +13,12 @@ import (
 // It deliberately does not own the surface/pipeline: those belong to the
 // higher-level renderer because they are frame- and material-specific.
 type WebGPUMeshBackend struct {
-	device  *wgpu.Device
-	compact bool
-	packing []CompactVertex
+	device    *wgpu.Device
+	compact   bool
+	packing   []CompactVertex
+	pages     []*meshArenaPage
+	nextPage  uint64
+	drawItems []*webGPUMesh
 }
 
 func NewWebGPUMeshBackend(device *wgpu.Device) *WebGPUMeshBackend {
@@ -30,8 +33,8 @@ func (b *WebGPUMeshBackend) Upload(vertices []Vertex, indices []uint32) MeshHand
 	return mesh
 }
 
-// UploadChecked creates vertex/index buffers from the backend-neutral GoCraft
-// mesh payload. Buffer creation and upload remain on the render thread.
+// UploadChecked reserves shared vertex/index ranges for a GoCraft mesh.
+// Buffer allocation, uploads and range reclamation stay on the render thread.
 func (b *WebGPUMeshBackend) UploadChecked(vertices []Vertex, indices []uint32) (MeshHandle, error) {
 	if b == nil || b.device == nil {
 		return nil, fmt.Errorf("webgpu mesh backend has no device")
@@ -46,66 +49,41 @@ func (b *WebGPUMeshBackend) UploadChecked(vertices []Vertex, indices []uint32) (
 	}
 	indexBytes := uint64(len(indices)) * uint64(unsafe.Sizeof(indices[0]))
 
-	vertexBuffer, err := b.device.CreateBuffer(&wgpu.BufferDescriptor{
-		Label: "GoCraft chunk vertices",
-		Usage: gputypes.BufferUsageVertex | gputypes.BufferUsageCopyDst,
-		Size:  vertexBytes,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("create WebGPU vertex buffer: %w", err)
-	}
-	if vertexBuffer == nil {
-		return nil, fmt.Errorf("create WebGPU vertex buffer: nil buffer")
-	}
-
-	indexBuffer, err := b.device.CreateBuffer(&wgpu.BufferDescriptor{
-		Label: "GoCraft chunk indices",
-		Usage: gputypes.BufferUsageIndex | gputypes.BufferUsageCopyDst,
-		Size:  indexBytes,
-	})
-	if err != nil {
-		vertexBuffer.Release()
-		return nil, fmt.Errorf("create WebGPU index buffer: %w", err)
-	}
-	if indexBuffer == nil {
-		vertexBuffer.Release()
-		return nil, fmt.Errorf("create WebGPU index buffer: nil buffer")
-	}
-
 	queue := b.device.Queue()
 	if queue == nil {
-		indexBuffer.Release()
-		vertexBuffer.Release()
 		return nil, fmt.Errorf("webgpu device returned nil queue")
 	}
+	page, vo, io, err := b.reserveMesh(uint32(len(vertices)), uint32(len(indices)))
+	if err != nil {
+		return nil, err
+	}
+	stride := vertexBytes / uint64(len(vertices))
 
 	vertexSrc := unsafe.Slice((*byte)(unsafe.Pointer(&vertices[0])), int(vertexBytes))
 	if b.compact {
 		b.packing = PackCompactVertices(b.packing, vertices)
 		vertexSrc = unsafe.Slice((*byte)(unsafe.Pointer(&b.packing[0])), int(vertexBytes))
 	}
-	if err := queue.WriteBuffer(vertexBuffer, 0, vertexSrc); err != nil {
-		indexBuffer.Release()
-		vertexBuffer.Release()
+	if err := queue.WriteBuffer(page.vertices, uint64(vo)*stride, vertexSrc); err != nil {
+		page.release(vo, uint32(len(vertices)), io, uint32(len(indices)))
 		return nil, fmt.Errorf("upload WebGPU vertex buffer: %w", err)
 	}
 	indexSrc := unsafe.Slice((*byte)(unsafe.Pointer(&indices[0])), int(indexBytes))
-	if err := queue.WriteBuffer(indexBuffer, 0, indexSrc); err != nil {
-		indexBuffer.Release()
-		vertexBuffer.Release()
+	if err := queue.WriteBuffer(page.indices, uint64(io)*4, indexSrc); err != nil {
+		page.release(vo, uint32(len(vertices)), io, uint32(len(indices)))
 		return nil, fmt.Errorf("upload WebGPU index buffer: %w", err)
 	}
 
 	atomic.AddInt64(&ActiveMeshCount, 1)
-	MeshBufferBytes.Add(int64(vertexBytes + indexBytes))
 	MeshUploadedBytes.Add(vertexBytes + indexBytes)
 	return &webGPUMesh{
 		counted:      true,
-		vertexBuffer: vertexBuffer,
-		indexBuffer:  indexBuffer,
-		vertexBytes:  vertexBytes,
-		indexBytes:   indexBytes,
-		indexCount:   int32(len(indices)),
+		vertexBuffer: page.vertices,
+		indexBuffer:  page.indices,
+		page:         page, firstVertex: vo, firstIndex: io, vertexCount: uint32(len(vertices)),
+		vertexBytes: vertexBytes,
+		indexBytes:  indexBytes,
+		indexCount:  int32(len(indices)),
 	}, nil
 }
 
@@ -130,21 +108,23 @@ func (b *WebGPUMeshBackend) DrawPass(pass *wgpu.RenderPassEncoder, mesh MeshHand
 	pass.DrawIndexed(gputypes.DrawIndexedArgs{
 		IndexCount:    uint32(gpu.indexCount),
 		InstanceCount: 1,
-		FirstIndex:    0,
-		BaseVertex:    0,
+		FirstIndex:    gpu.firstIndex,
+		BaseVertex:    int32(gpu.firstVertex),
 		FirstInstance: 0,
 	})
 	return nil
 }
 
 type webGPUMesh struct {
-	counted      bool
-	vertexBuffer *wgpu.Buffer
-	indexBuffer  *wgpu.Buffer
-	vertexBytes  uint64
-	indexBytes   uint64
-	indexCount   int32
-	uploadErr    error
+	page                                 *meshArenaPage
+	firstVertex, firstIndex, vertexCount uint32
+	counted                              bool
+	vertexBuffer                         *wgpu.Buffer
+	indexBuffer                          *wgpu.Buffer
+	vertexBytes                          uint64
+	indexBytes                           uint64
+	indexCount                           int32
+	uploadErr                            error
 }
 
 func (m *webGPUMesh) IndexCount() int32 {
@@ -160,17 +140,13 @@ func (m *webGPUMesh) Unload() {
 	}
 	if m.counted {
 		atomic.AddInt64(&ActiveMeshCount, -1)
-		MeshBufferBytes.Add(-int64(m.vertexBytes + m.indexBytes))
 		m.counted = false
 	}
-	if m.indexBuffer != nil {
-		m.indexBuffer.Release()
-		m.indexBuffer = nil
+	if m.page != nil {
+		m.page.release(m.firstVertex, m.vertexCount, m.firstIndex, uint32(m.indexCount))
+		m.page = nil
 	}
-	if m.vertexBuffer != nil {
-		m.vertexBuffer.Release()
-		m.vertexBuffer = nil
-	}
+	m.indexBuffer, m.vertexBuffer = nil, nil
 	m.vertexBytes = 0
 	m.indexBytes = 0
 	m.indexCount = 0

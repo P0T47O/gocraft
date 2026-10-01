@@ -87,6 +87,7 @@ func (w *World) recordLODOccupancy(chunk *Chunk, x, z int) {
 }
 
 func appendLODOccupancy(data *lodTileData, key lodTileKey, columns map[lodPoint]lodColumn) {
+	appendLODObservedFoliage(data, key, columns)
 	baseX, baseZ := key.X*lodTileSize, key.Z*lodTileSize
 	for point, column := range columns {
 		if column.occupancy == nil || point.X < baseX || point.X >= baseX+lodTileSize || point.Z < baseZ || point.Z >= baseZ+lodTileSize {
@@ -95,6 +96,9 @@ func appendLODOccupancy(data *lodTileData, key lodTileKey, columns map[lodPoint]
 		x0, x1 := float32(point.X)-.5, float32(point.X)+.5
 		z0, z1 := float32(point.Z)-.5, float32(point.Z)+.5
 		for _, span := range column.occupancy.spans {
+			if generationIsLeaf(span.block) {
+				continue
+			}
 			lo, hi := float32(span.lo)-.5, float32(span.hi)-.5
 			// Only true air gaps receive caps, including undersides of bridges.
 			if !lodOccupiedAt(column.occupancy, span.hi) {

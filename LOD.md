@@ -1,6 +1,10 @@
 # Distant terrain prototype
 
-This branch implements a first geometry-LOD horizon inspired by Distant Horizons.
+The geometry-LOD horizon is an experimental, opt-in feature inspired by Distant Horizons.
+It is disabled by default, including for old settings files that only specified
+HorizonDistance. Settings offers an Experimental LOD switch and a separate LOD
+distance control. Turning it off stops observation/cache workers and releases
+LOD rendering resources; turning it back on recaptures loaded chunks incrementally.
 It is an independent prototype, not a port of that mod or a replacement for
 full chunks. The normal render distance still controls real chunk requests,
 meshing, collision, entities and interaction. A separate horizon radius draws
@@ -12,6 +16,34 @@ implementation is original Go/WebGPU code; no Distant Horizons source or assets
 were copied.
 
 ## Data and budget
+
+### Observed-region cache (2026-10-01)
+
+The server continues to send only real chunks. The client records every seen
+column's ground and above-ground material/Y runs, including actual logs/leaves.
+Known chunks replace procedural trees; edited ground uses one-block local
+patches instead of relying on the old eight-block edit samples. Fill and roofs
+remain separate geometry, preserving air beneath suspended structures.
+
+Records live in `.gocraft-cache/lod/`, isolated by canonical save path or
+server address, seed and `lodCacheRevision`. Windows additionally includes
+save-directory creation time. The cache never changes player saves. Background
+workers index/read/write immutable records; the world owner admits four results
+and four coalesced writes per frame. Visible tiles request cold records even
+when their GPU meshes need no rebuild. Disk data cannot override a newer real
+chunk/edit. Closing the client flushes outstanding writes.
+
+Each namespace retains up to 4096 newest files/64 MiB, pruned every 64 writes
+and on close; temporary overshoot is possible between pruning passes. Cold
+resident records are trimmed toward 4096 (live chunks and pending writes are
+protected), and requested again from disk when visible. There is no unvisited
+building discovery, server LOD protocol, or permanent archive guarantee beyond
+these cache limits. A multiplayer server replaced at the same address with
+the same seed cannot be distinguished without a stable server world ID; fresh
+chunks still refresh its cached data.
+
+`GOCRAFT_WEBGPU_LOD_CACHE_PREVIEW=1` runs the actual receive/edit/unload/disk/
+new-client/read/render path and writes `work/lod-cache-restart.png`.
 
 - A 128×128-block LOD tile uses a 2-, 4-, 8-, or 16-block grid, chosen by distance
   from the camera beyond the full-chunk radius. The first four chunks beyond
@@ -83,8 +115,9 @@ were copied.
   before unloading if the horizon has since been enabled. These sparse deltas
   survive ordinary chunk unloads but are cleared on world-seed change.
 - The view projection and boundary fog follow the larger of full and distant
-  radii. The settings page cycles the horizon through Off/64/96/128 chunks;
-  default is 96, independently of the 24-chunk full-detail default.
+  radii. Settings has a default-off Experimental LOD switch and a separate
+  64/96/128 chunk distance button (96 when first enabled), independently of
+  the 24-chunk full-detail default.
 
 `BenchmarkLODTileLevels` on an i7-14700HX measured roughly 4.10 / 1.87 /
 1.21 ms per 4 / 8 / 16-block tile. The finer level is restricted to the
@@ -126,27 +159,24 @@ skip it entirely.
 
 ## Deliberate limits before considering a main-branch merge
 
-- Distant terrain remains a sampled heightfield with a sparse 2.5D prism layer,
-  not a full chunk or voxel-accurate structure mesh. Server-sent edits at its
-  grid points appear after the corresponding
-  chunk has been received, but details between those points, underground
-  caves, doors, vegetation edits and entities remain absent. Tree silhouettes
-  occupy real generated tree positions but do not reproduce every leaf block.
-  Natural logs/leaves are excluded from surface sampling, so log-only player
-  structures are also not yet represented. Unvisited distant edits cannot be
-  known without a separate server LOD protocol.
+- Unknown terrain remains a sampled heightfield with procedural tree silhouettes.
+  Seen regions use actual column records and vegetation, but underground caves,
+  partial-block shapes, entities and per-face lighting remain absent. Unvisited
+  player edits are deliberately unknown; no server LOD protocol is planned.
 - The four fixed-distance bands are not a multi-level quadtree. Terrain
   heights now morph between adjacent grid levels, but color variation, water
   cell boundaries and simplified tree silhouettes can still change at a mesh
-  swap. There is no LOD disk cache or underground occupancy representation.
-- Sparse authoritative edits are sampled on the 8-block lattice. Edits lying
-  between 16-block outer vertices or between 4-block inner vertices are not
-  fully represented. Coarse water-cell classifications can also differ at a
+  swap. There is no underground occupancy representation.
+- Legacy diagnostic summaries are sampled on the 8-block lattice. Live seen
+  ground edits instead trigger one-block patches. Coarse water classifications can still differ at a
   mixed-level shoreline even though the ground edges share a height profile.
 - Received chunks now retain every above-ground structure column as immutable
   material/Y runs. All block-edit coordinates update these records, which
-  survive full-chunk unloading. Logs matching procedural tree trunks are
-  excluded; other log geometry is retained. Exposed top/bottom/side surfaces
+  survive full-chunk unloading. Seen logs and leaves are retained instead of
+  being reconstructed as procedural trees. Leaf runs remain exact in the cache
+  but render as fitted boxes per occupied 4×4×8 cell to bound forest geometry;
+  small gaps inside each crown cell are simplified. Logs and buildings keep
+  the original occupancy surfaces. Exposed top/bottom/side surfaces
   preserve vertical holes and suspended platforms at every terrain LOD level.
   The real packet/edit/unload/reload/demolition regression covers an off-grid
   wooden roof; the GTX 1060 native occupancy preview shows a hollow vertical
@@ -155,20 +185,24 @@ skip it entirely.
   Underground structures, partial-block shapes, per-face textures and distant
   simplification of dense buildings remain unfinished. Structure-specific
   overlap with simultaneously rendered full chunks still needs live inspection.
-- Before a chunk has been received in the current session, player buildings
-  remain unknown. Restarting the game clears the in-memory summaries; receiving
-  the saved chunk restores them. Persistent server summaries are still needed
-  for unseen distant buildings after restarting.
+- Previously seen buildings can return from client disk cache after restarting,
+  without receiving full chunks again. Cache eviction, manual deletion or a
+  generator/cache revision change discards that history. Multiplayer remote
+  edits remain stale until the real chunk is received again.
+- Visible cache tiles poll at most every 250ms; memory eviction runs once per
+  second rather than scanning thousands of live records every frame. Ground
+  edits mark affected coarse cells once instead of repeated per-cell searches.
+  `lod_performance_test.go` checks the leaf geometry budget and patch margins,
+  and benchmarks crown aggregation against the original occupancy mesher.
 - Terrain uses texture averages rather than full textured surfaces; near-field
   AO and voxel-side shading are still absent. Water is textured and blended, but transitions at shorelines
   and near-full meshes still need visual inspection in live play. The distant
   terrain preview has no full chunks; the separate handoff preview draws both
   renderers with the actual chunk mask. Edited edge columns and complex
   overhangs can still differ from the seed-based transition strip.
-- The handoff strips use procedural columns except at stored 8-block edit
-  samples. Between samples, a player-edited real edge can still differ from
-  the LOD edge. Continuous sculpted geometry needs finer authoritative edge
-  data; four-direction strips only remove the directional omission.
+- The handoff strips read seen one-block columns when available. Their exterior
+  still interpolates toward a heightfield, so complex overhangs and edited
+  shorelines need live boundary inspection.
 - Full `RenderDistance=128` still requests complete chunks. For the intended
   experiment, keep full distance around 16–32 and use `Horizon=96/128`.
 

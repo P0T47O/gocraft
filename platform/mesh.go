@@ -4,7 +4,8 @@ import "sync/atomic"
 
 var ActiveMeshCount int64
 
-// World mesh buffers only, excluding textures, UI, driver allocations and staging.
+// Physical world mesh arena capacity (including unused ranges), excluding
+// textures, UI, driver allocations and staging.
 var MeshBufferBytes atomic.Int64
 var MeshUploadedBytes atomic.Uint64
 

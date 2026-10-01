@@ -3,6 +3,7 @@
 package main
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"testing"
@@ -20,6 +21,7 @@ func TestWebGPUNearDistantHandoffPreview(t *testing.T) {
 	r, cleanup := nativePreviewFixture(t, 4)
 	defer cleanup()
 	currentSettings.RenderDistance = 8
+	currentSettings.ExperimentalLOD = true
 	currentSettings.HorizonDistance = 64
 	const seed = uint32(1234511)
 	w := NewClientWorld()
@@ -42,6 +44,8 @@ func TestWebGPUNearDistantHandoffPreview(t *testing.T) {
 				}
 			}
 			ensureChunkSections(chunk)
+			// Match packet receipt: real columns provide the handoff strip data.
+			w.recordChunkLODColumns(chunk, cx, cz)
 		}
 	}
 	frame := webGPUFrameContext{
@@ -76,25 +80,42 @@ func TestWebGPUNearDistantHandoffPreview(t *testing.T) {
 	if len(cache.translucent) == 0 {
 		t.Fatal("no full-detail water is visible at the handoff")
 	}
-	img := captureNativePreview(t, r, frame.Width, frame.Height, func(pass *wgpu.RenderPassEncoder) error {
-		if err := r.lod.draw(pass, r, frame.Camera, w); err != nil {
-			return err
+	grouped, includeLOD := true, true
+	draw := func(pass *wgpu.RenderPassEncoder) error {
+		if includeLOD {
+			if err := r.lod.draw(pass, r, frame.Camera, w); err != nil {
+				return err
+			}
 		}
 		pass.SetPipeline(r.solidPipeline)
 		pass.SetBindGroup(0, r.bindGroup, nil)
-		for _, section := range cache.visible {
-			if err := r.drawMeshMap(pass, section.chunk.opaqueMeshes[section.sec], cache); err != nil {
+		if grouped {
+			if err := r.drawVisibleGroup(pass, cache, false); err != nil {
 				return err
+			}
+		} else {
+			for _, section := range cache.visible {
+				if err := r.drawMeshMap(pass, section.chunk.opaqueMeshes[section.sec], cache); err != nil {
+					return err
+				}
 			}
 		}
 		pass.SetPipeline(r.opaquePipeline)
-		for _, section := range cache.visible {
-			if err := r.drawMeshMap(pass, section.chunk.cutoutMeshes[section.sec], cache); err != nil {
+		if grouped {
+			if err := r.drawVisibleGroup(pass, cache, true); err != nil {
 				return err
 			}
+		} else {
+			for _, section := range cache.visible {
+				if err := r.drawMeshMap(pass, section.chunk.cutoutMeshes[section.sec], cache); err != nil {
+					return err
+				}
+			}
 		}
-		if err := r.lod.drawWater(pass, r, frame.Camera, cache); err != nil {
-			return err
+		if includeLOD {
+			if err := r.lod.drawWater(pass, r, frame.Camera, cache); err != nil {
+				return err
+			}
 		}
 		pass.SetPipeline(r.waterPipeline)
 		for _, item := range cache.translucent {
@@ -106,7 +127,25 @@ func TestWebGPUNearDistantHandoffPreview(t *testing.T) {
 			}
 		}
 		return nil
-	})
+	}
+	img := captureNativePreview(t, r, frame.Width, frame.Height, draw)
+	// Compare an immutable full-chunk scene. lod.draw also uploads completed
+	// background tiles, so two handoff captures need not contain the same LODs.
+	includeLOD, grouped = false, false
+	reference := captureNativePreview(t, r, frame.Width, frame.Height, draw)
+	grouped = true
+	groupedImg := captureNativePreview(t, r, frame.Width, frame.Height, draw)
+	saveNativePreview(t, groupedImg, filepath.Join("work", "lod-handoff-grouped.png"))
+	saveNativePreview(t, reference, filepath.Join("work", "lod-handoff-reference.png"))
+	if !bytes.Equal(reference.Pix, groupedImg.Pix) {
+		count := 0
+		for i := 0; i < len(reference.Pix); i += 4 {
+			if !bytes.Equal(reference.Pix[i:i+4], groupedImg.Pix[i:i+4]) {
+				count++
+			}
+		}
+		t.Fatalf("grouped buffers changed handoff rendering: %d pixels", count)
+	}
 	path := filepath.Join("work", "lod-handoff.png")
 	saveNativePreview(t, img, path)
 	t.Logf("full-chunk/LOD handoff: %s", path)

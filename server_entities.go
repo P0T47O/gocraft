@@ -23,7 +23,6 @@ func (s *Server) flushExistingEntities(c *ClientConnection) {
 	if c == nil || c.Send == nil || len(c.entityReplay) == 0 {
 		return
 	}
-	reserve := min(48, cap(c.Send)/2)
 	sent := 0
 	for len(c.entityReplay) > 0 && sent < entityReplayPacketsPerTick {
 		select {
@@ -53,7 +52,7 @@ func (s *Server) flushExistingEntities(c *ClientConnection) {
 		if _, mob := e.(*MobEntity); mob {
 			needed++
 		}
-		if sent+needed > entityReplayPacketsPerTick || cap(c.Send)-len(c.Send)-reserve < needed {
+		if sent+needed > entityReplayPacketsPerTick {
 			return
 		}
 		x, y, z := e.GetPosition()
@@ -62,12 +61,14 @@ func (s *Server) flushExistingEntities(c *ClientConnection) {
 		if item, ok := e.(*ItemEntity); ok {
 			meta = item.ID | (item.Count << 8) | (item.Damage << 16)
 		}
-		c.Send <- &PacketEntitySpawn{EntityID: e.GetUUID(), Type: e.GetType(), X: x, Y: y, Z: z, Yaw: yaw, Pitch: pitch, Metadata: meta}
-		sent++
+		packets := []Packet{&PacketEntitySpawn{EntityID: e.GetUUID(), Type: e.GetType(), X: x, Y: y, Z: z, Yaw: yaw, Pitch: pitch, Metadata: meta}}
 		if mob, ok := e.(*MobEntity); ok {
-			c.Send <- mob.snapshot()
-			sent++
+			packets = append(packets, mob.snapshot())
 		}
+		if !c.enqueueReplay(packets) {
+			return
+		}
+		sent += needed
 		c.entityReplay[0] = nil
 		c.entityReplay = c.entityReplay[1:]
 	}

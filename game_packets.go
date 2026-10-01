@@ -125,6 +125,9 @@ func handlePacket(pkt Packet) {
 			world.resetLODState()
 		}
 		world.seed = p.Seed
+		if experimentalLODEnabled() {
+			world.openLODCache(".gocraft-cache/lod", world.lodCacheSource)
+		}
 		fmt.Printf("Synced with server seed: %d\n", p.Seed)
 
 	case *PacketSpawnPoint:

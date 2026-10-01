@@ -33,7 +33,7 @@ func appendLODRaisedColumns(data *lodTileData, seed uint32, key lodTileKey, over
 	for z := baseZ; z < baseZ+lodTileSize; z += lodCellSize {
 		for x := baseX; x < baseX+lodTileSize; x += lodCellSize {
 			column, ok := overrides[lodPoint{x, z}]
-			if !ok || column.occupancy != nil {
+			if !ok || column.occupancy != nil || column.observed {
 				continue
 			}
 			base := columnAt(x, z).ground
@@ -70,6 +70,14 @@ func appendLODRaisedColumns(data *lodTileData, seed uint32, key lodTileKey, over
 
 func lodStructureColor(block byte, shade float32) [4]uint8 {
 	color := lodSurfaceColor(block)
+	if generationIsLeaf(block) {
+		color = [4]uint8{48, 91, 45, 255}
+		if block == blockLeavesBirch {
+			color = [4]uint8{66, 105, 45, 255}
+		} else if block == blockLeavesSpruce {
+			color = [4]uint8{40, 72, 57, 255}
+		}
+	}
 	for i := 0; i < 3; i++ {
 		color[i] = uint8(float32(color[i]) * shade)
 	}

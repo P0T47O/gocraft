@@ -61,16 +61,18 @@ type lastPos struct {
 }
 
 type ClientConnection struct {
-	done         chan struct{}
-	closeOnce    sync.Once
-	Name         string
-	Conn         net.Conn
-	Send         chan Packet // Critical/gameplay packets.
-	StreamSend   chan Packet // Chunk/light snapshots; bounded separately so bulk traffic cannot evict gameplay state.
-	entityReplay []Entity    // Initial world snapshot, drained gradually by the server owner.
-	KnownChunks  map[chunkKey]bool
-	LastChunkX   int
-	LastChunkZ   int
+	done            chan struct{}
+	closeOnce       sync.Once
+	Name            string
+	Conn            net.Conn
+	Send            chan Packet // Critical/gameplay packets.
+	StreamSend      chan Packet // Chunk/light snapshots; bounded separately so bulk traffic cannot evict gameplay state.
+	entityReplay    []Entity    // Initial world snapshot, drained gradually by the server owner.
+	outboundMu      sync.Mutex  // Serializes reliable FIFO admission and snapshot reservation.
+	outboundPending []Packet    // Bounded reliable overflow; drained by the socket writer.
+	KnownChunks     map[chunkKey]bool
+	LastChunkX      int
+	LastChunkZ      int
 }
 
 type PacketWrapper struct {

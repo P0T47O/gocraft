@@ -17,6 +17,7 @@ func TestWebGPULODOccupancyPreview(t *testing.T) {
 	r, cleanup := nativePreviewFixture(t, 4)
 	defer cleanup()
 	currentSettings.RenderDistance = 8
+	currentSettings.ExperimentalLOD = true
 	currentSettings.HorizonDistance = 64
 	w, chunks := lodVerticalStructureFixture(1234511)
 	w.lodColumns = nil // Capture actual voxel occupancy, without legacy prisms.

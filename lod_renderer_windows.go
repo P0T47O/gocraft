@@ -7,6 +7,7 @@ import (
 	"math"
 	"sort"
 	"sync"
+	"time"
 	"unsafe"
 
 	"github.com/go-gl/mathgl/mgl32"
@@ -162,6 +163,7 @@ type webGPULODRenderer struct {
 	versions      map[lodTileKey]uint64
 	steps         map[lodTileKey]int
 	pending       map[lodTileKey]lodBuildState
+	covered       map[lodTileKey]bool
 	jobs          chan lodBuildJob
 	results       chan lodBuildResult
 	stop          chan struct{}
@@ -246,7 +248,9 @@ func (lod *webGPULODRenderer) buildLoop() {
 				return
 			default:
 			}
+			start := time.Now()
 			result := lodBuildResult{key: job.key, version: job.version, step: job.step, data: buildLODTileAtStep(lod.seed, job.key, job.overrides, job.step)}
+			perfMon.recordLoading(phaseLODBuild, start)
 			select {
 			case lod.results <- result:
 			case <-lod.stop:
@@ -352,6 +356,10 @@ func lodStepForTile(key lodTileKey, camera webGPUCamera, fullRadius float32, pre
 }
 
 func (lod *webGPULODRenderer) draw(pass *wgpu.RenderPassEncoder, r *webGPUWorldRenderer, camera webGPUCamera, world *World) error {
+	if lod.covered == nil {
+		lod.covered = make(map[lodTileKey]bool)
+	}
+	clear(lod.covered)
 	cache := &world.render
 	center := lodTileKey{int(math.Floor(float64(camera.Position.X) / lodTileSize)), int(math.Floor(float64(camera.Position.Z) / lodTileSize))}
 	radius := (horizonDistance()*chunkWidth + lodTileSize - 1) / lodTileSize
@@ -423,6 +431,7 @@ func (lod *webGPULODRenderer) draw(pass *wgpu.RenderPassEncoder, r *webGPUWorldR
 	pass.SetPipeline(lod.pipeline)
 	pass.SetBindGroup(0, r.bindGroup, nil)
 	scheduled := 0
+	snapshotDeadline := time.Now().Add(time.Millisecond)
 	for _, offset := range lod.radiusOffsets(radius) {
 		key := lodTileKey{center.X + offset.X, center.Z + offset.Z}
 		min := mgl32.Vec3{float32(key.X * lodTileSize), 0, float32(key.Z * lodTileSize)}
@@ -430,6 +439,11 @@ func (lod *webGPULODRenderer) draw(pass *wgpu.RenderPassEncoder, r *webGPUWorldR
 		if !frustum.IntersectsAABB(min, max) {
 			continue
 		}
+		if lodTileFullyCovered(world, key, camera) {
+			lod.covered[key] = true
+			continue
+		}
+		world.requestLODCacheTile(key)
 		step := lodStepForTile(key, camera, fullRadius, lod.steps[key])
 		if mesh := lod.tiles[key]; mesh != nil {
 			if err := r.backend.DrawPass(pass, mesh); err != nil {
@@ -443,9 +457,14 @@ func (lod *webGPULODRenderer) draw(pass *wgpu.RenderPassEncoder, r *webGPUWorldR
 		}
 		version := world.lodVersions[key]
 		state := lodBuildState{version, step}
-		if pending, ok := lod.pending[key]; (!ok || pending != state) && scheduled < 16 {
+		// A pending job owns this tile until its result is drained. New versions
+		// coalesce on World; never queue multiple obsolete builds for one tile.
+		if _, pending := lod.pending[key]; !pending && scheduled < 2 && time.Now().Before(snapshotDeadline) && len(lod.jobs) < cap(lod.jobs) {
+			start := time.Now()
+			overrides := world.snapshotLODTile(key)
+			perfMon.recordLoading(phaseLODSnapshot, start)
 			select {
-			case lod.jobs <- lodBuildJob{key: key, version: version, step: step, overrides: world.snapshotLODTile(key)}:
+			case lod.jobs <- lodBuildJob{key: key, version: version, step: step, overrides: overrides}:
 				lod.pending[key] = state
 				scheduled++
 			default:
@@ -461,6 +480,9 @@ func (lod *webGPULODRenderer) drawWater(pass *wgpu.RenderPassEncoder, r *webGPUW
 	pass.SetPipeline(lod.waterPipeline)
 	pass.SetBindGroup(0, r.bindGroup, nil)
 	for key, mesh := range lod.waterTiles {
+		if lod.covered[key] {
+			continue
+		}
 		min := mgl32.Vec3{float32(key.X * lodTileSize), float32(seaLevel) - 1, float32(key.Z * lodTileSize)}
 		max := min.Add(mgl32.Vec3{lodTileSize, 2, lodTileSize})
 		if !frustum.IntersectsAABB(min, max) {
@@ -473,6 +495,32 @@ func (lod *webGPULODRenderer) drawWater(pass *wgpu.RenderPassEncoder, r *webGPUW
 		cache.triangles += int(mesh.IndexCount()) / 3
 	}
 	return nil
+}
+
+// Match the GPU mask, with a whole chunk halo for crowns and seam overhangs.
+// Fully hidden tiles need neither a draw nor a rebuild on each packet update.
+func lodTileFullyCovered(world *World, key lodTileKey, camera webGPUCamera) bool {
+	cx := int(math.Floor(float64(camera.Position.X) / chunkWidth))
+	cz := int(math.Floor(float64(camera.Position.Z) / chunkWidth))
+	radius := renderDistance()
+	x0, x1, z0, z1 := key.X*8-1, key.X*8+8, key.Z*8-1, key.Z*8+8
+	for _, p := range [4]chunkKey{{x0, z0}, {x0, z1}, {x1, z0}, {x1, z1}} {
+		dx, dz := p.X-cx, p.Z-cz
+		if dx*dx+dz*dz > radius*radius {
+			return false
+		}
+	}
+	world.chunksMu.RLock()
+	defer world.chunksMu.RUnlock()
+	for z := z0; z <= z1; z++ {
+		for x := x0; x <= x1; x++ {
+			c := world.chunks[chunkKey{x, z}]
+			if c == nil || !c.generated || !c.lodOccludes {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 func (lod *webGPULODRenderer) drawPreview(pass *wgpu.RenderPassEncoder, r *webGPUWorldRenderer, camera webGPUCamera, world *World) error {
