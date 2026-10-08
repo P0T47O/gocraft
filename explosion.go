@@ -122,11 +122,26 @@ func (s *Server) explode(x, y, z, radius float64, damage int, cause string) {
 						removeBlock(bx, otherY, bz)
 					}
 				}
+				if block == blockBed {
+					meta := s.World.MetaAt(bx, by, bz)
+					if bedPartsMatch(s.World, bx, by, bz, meta) {
+						ox, oy, oz := bedOtherPos(bx, by, bz, meta)
+						removeBlock(ox, oy, oz)
+					}
+				}
 				// Removing a supporting block must also remove both door halves,
 				// even when the door itself lies just outside the blast sphere.
 				if s.World.BlockAt(bx, by+1, bz) == blockWoodDoor && s.World.MetaAt(bx, by+1, bz)&shapeUpper == 0 {
 					if s.World.BlockAt(bx, by+2, bz) == blockWoodDoor && s.World.MetaAt(bx, by+2, bz)&shapeUpper != 0 {
 						removeBlock(bx, by+2, bz)
+					}
+					removeBlock(bx, by+1, bz)
+				}
+				if s.World.BlockAt(bx, by+1, bz) == blockBed {
+					meta := s.World.MetaAt(bx, by+1, bz)
+					if bedPartsMatch(s.World, bx, by+1, bz, meta) {
+						ox, oy, oz := bedOtherPos(bx, by+1, bz, meta)
+						removeBlock(ox, oy, oz)
 					}
 					removeBlock(bx, by+1, bz)
 				}

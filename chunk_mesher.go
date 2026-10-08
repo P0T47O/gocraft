@@ -352,12 +352,13 @@ func (a *RenderAssets) buildAllMeshDataWithLight(heightMap *[chunkWidth][chunkWi
 				px, py, pz := float32(wx), float32(y), float32(wz)
 				fluidMeta := byte(0)
 				fluidTop := py + 0.5
-				if block == blockBed {
-					fluidTop = py - 0.125
-				}
 				if isFluid(block) {
 					fluidMeta = getMeta(wx, y, wz)
 					fluidTop = py - 0.5 + fluidSurfaceHeight(fluidMeta)
+				}
+				if block == blockBed {
+					a.emitBedBlock(wx, y, wz, getMeta(wx, y, wz), getBlock, getMeta, getLight, getBlockLight, getBuilder)
+					continue
 				}
 				if isShapedBlock(block) {
 					a.emitShapedBlock(block, getMeta(wx, y, wz), wx, y, wz, textures, getBlock, getMeta, getLight, getBlockLight, getBuilder)

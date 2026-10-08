@@ -18,6 +18,14 @@
 
 常量或包级数据定义。
 
+## [bed.go](bed.go)
+
+函数/方法：`bedFacingFromYaw`、`bedOtherPos`、`bedPartsMatch`、`*World.canPlaceBed`、`*Server.removeOtherBedHalf`、`*Server.sendBedNeighbor`、`*Server.removeUnsupportedBedAbove`
+
+## [bed_mesher.go](bed_mesher.go)
+
+函数/方法：`*RenderAssets.emitBedBlock`
+
 ## [block_registry.go](block_registry.go)
 
 类型：`RenderType`、`BlockDef`
@@ -362,7 +370,7 @@
 
 类型：`MobDefinition`、`MobDrop`、`MobBone`、`MobModel`、`MobAnimation`、`MobContent`
 
-函数/方法：`mustMobContent`、`loadMobContent`、`reloadMobPreview`、`loadRuntimeMobs`
+函数/方法：`mobBoneUVSize`、`mustMobContent`、`loadMobContent`、`reloadMobPreview`、`loadRuntimeMobs`
 
 ## [mob_pose.go](mob_pose.go)
 
@@ -402,7 +410,7 @@
 
 类型：`MobEntity`
 
-函数/方法：`newMob`、`*MobEntity.random`、`*MobEntity.hasBehavior`、`colliderLoaded`、`spiderWallAhead`、`*MobEntity.Tick`、`*MobEntity.hit`
+函数/方法：`newMob`、`*MobEntity.random`、`*MobEntity.hasBehavior`、`stepMobYaw`、`colliderLoaded`、`spiderWallAhead`、`*MobEntity.Tick`、`*MobEntity.hit`
 
 ## [native_game_stub.go](native_game_stub.go)
 
@@ -782,7 +790,7 @@
 
 类型：`webGPUEntityRenderer`、`webGPUEntityBatch`
 
-函数/方法：`ensureWebGPUEntityRenderer`、`closeWebGPUEntityRenderer`、`*webGPUEntityRenderer.Close`、`newWebGPUEntityBatch`、`webGPUEntityUV`、`webGPUEntitySubUV`、`webGPUEntityItemTexture`、`*webGPUEntityBatch.addQuad`、`rotateY`、`rotateZVec`、`*webGPUEntityBatch.addBox`、`*webGPUEntityBatch.addPlayer`、`*webGPUEntityBatch.addItem`、`*webGPUEntityBatch.addArrow`、`*webGPUEntityBatch.addPrimedTNT`、`*webGPUEntityBatch.addExplosionEffect`、`webGPUMobFaceUVs`、`*webGPUEntityBatch.addMobBone`、`*webGPUEntityBatch.addMob`、`*webGPUEntityBatch.addMobPlaceholder`、`*webGPUEntityBatch.addMiningCrack`、`*webGPUEntityRenderer.Draw`
+函数/方法：`ensureWebGPUEntityRenderer`、`closeWebGPUEntityRenderer`、`*webGPUEntityRenderer.Close`、`newWebGPUEntityBatch`、`webGPUEntityUV`、`webGPUEntitySubUV`、`webGPUEntityItemTexture`、`*webGPUEntityBatch.addQuad`、`rotateY`、`rotateZVec`、`*webGPUEntityBatch.addBox`、`*webGPUEntityBatch.addPlayer`、`*webGPUEntityBatch.addItem`、`*webGPUEntityBatch.addArrow`、`*webGPUEntityBatch.addPrimedTNT`、`*webGPUEntityBatch.addExplosionEffect`、`webGPUMobFaceUVs`、`*webGPUEntityBatch.addMobBone`、`*webGPUEntityBatch.addMobSegment`、`*webGPUEntityBatch.addMob`、`*webGPUEntityBatch.addMobPlaceholder`、`*webGPUEntityBatch.addMiningCrack`、`*webGPUEntityRenderer.Draw`
 
 ## [webgpu_entity_bounds_windows.go](webgpu_entity_bounds_windows.go)
 
@@ -812,7 +820,7 @@
 
 类型：`webGPUHUDVertex`、`webGPUHUDRenderer`、`webGPUHUDBuilder`、`webGPUHUDIconTints`
 
-函数/方法：`ensureWebGPUHUDRenderer`、`closeWebGPUHUDRenderer`、`*webGPUHUDRenderer.Close`、`newWebGPUHUDBuilder`、`webGPUColorTint`、`webGPUItemTints`、`*webGPUHUDBuilder.point`、`*webGPUHUDBuilder.rect`、`*webGPUHUDBuilder.texturedRect`、`*webGPUHUDBuilder.texturedQuad`、`*webGPUHUDBuilder.border`、`webGPUHUDScale`、`*webGPUHUDBuilder.addCrosshair`、`webGPUHUDHotbarBlock`、`*webGPUHUDBuilder.addBlockIcon`、`*webGPUHUDBuilder.addShapedIcon`、`*webGPUHUDBuilder.addCubeIcon`、`*webGPUHUDBuilder.addHotbar`、`*webGPUHUDBuilder.addVitals`、`*webGPUHUDRenderer.Draw`
+函数/方法：`ensureWebGPUHUDRenderer`、`closeWebGPUHUDRenderer`、`*webGPUHUDRenderer.Close`、`newWebGPUHUDBuilder`、`webGPUColorTint`、`webGPUItemTints`、`*webGPUHUDBuilder.point`、`*webGPUHUDBuilder.rect`、`*webGPUHUDBuilder.texturedRect`、`*webGPUHUDBuilder.texturedQuad`、`*webGPUHUDBuilder.border`、`webGPUHUDScale`、`*webGPUHUDBuilder.addCrosshair`、`webGPUHUDHotbarBlock`、`*webGPUHUDBuilder.addBlockIcon`、`*webGPUHUDBuilder.addBedIcon`、`*webGPUHUDBuilder.addShapedIcon`、`*webGPUHUDBuilder.addCubeIcon`、`*webGPUHUDBuilder.addHotbar`、`*webGPUHUDBuilder.addVitals`、`*webGPUHUDRenderer.Draw`
 
 ## [webgpu_inventory_windows.go](webgpu_inventory_windows.go)
 

@@ -313,6 +313,9 @@ func (b *webGPUHUDBuilder) addBlockIcon(block byte, x, y, size float32) {
 			return
 		}
 	}
+	if block == blockBed && b.addBedIcon(x, y, size) {
+		return
+	}
 	if isShapedBlock(block) && b.addShapedIcon(def, x, y, size) {
 		return
 	}
@@ -330,6 +333,43 @@ func (b *webGPUHUDBuilder) addBlockIcon(block byte, x, y, size float32) {
 		tint = b.iconTints.foliage
 	}
 	b.texturedRect(x+pad, y+pad, size-pad*2, size-pad*2, uv.X, uv.Y, uv.X+uv.Width, uv.Y+uv.Height, tint)
+}
+
+// The bed item shows both mattress halves; a single shaped voxel would show
+// only the pillow half and suggest that the placed bed is one block long.
+func (b *webGPUHUDBuilder) addBedIcon(x, y, size float32) bool {
+	atlas := assets.atlas.UVs
+	head, okHead := atlas["textures/block/red_bed_head_up.png"]
+	foot, okFoot := atlas["textures/block/red_bed_foot_up.png"]
+	headSide, okHeadSide := atlas["textures/block/red_bed_head_east.png"]
+	footSide, okFootSide := atlas["textures/block/red_bed_foot_east.png"]
+	end, okEnd := atlas["textures/block/red_bed_foot_south.png"]
+	if !okHead || !okFoot || !okHeadSide || !okFootSide || !okEnd {
+		return false
+	}
+	project := func(px, py, pz float32) [2]float32 {
+		return [2]float32{x + size*(.5+.27*(px-pz)), y + size*(.48+.15*(px+pz)-.55*py)}
+	}
+	// Side textures contain the mattress and feet at their actual heights;
+	// their upper seven texel rows are transparent.
+	for _, part := range []struct {
+		z0, z1 float32
+		uv     AtlasRect
+	}{
+		{-1, 0, footSide}, {0, 1, headSide},
+	} {
+		b.texturedQuad([4][2]float32{project(.5, .5, part.z1), project(.5, .5, part.z0), project(.5, -.5, part.z0), project(.5, -.5, part.z1)}, part.uv, [4]float32{.82, .82, .82, 1})
+	}
+	b.texturedQuad([4][2]float32{project(-.5, .5, 1), project(.5, .5, 1), project(.5, -.5, 1), project(-.5, -.5, 1)}, end, [4]float32{.72, .72, .72, 1})
+	for _, part := range []struct {
+		z0, z1 float32
+		uv     AtlasRect
+	}{
+		{-1, 0, foot}, {0, 1, head},
+	} {
+		b.texturedQuad([4][2]float32{project(-.5, .0625, part.z1), project(.5, .0625, part.z1), project(.5, .0625, part.z0), project(-.5, .0625, part.z0)}, part.uv, [4]float32{1, 1, 1, 1})
+	}
+	return true
 }
 
 // Use the same boxes as world geometry so slabs, stairs and doors are not

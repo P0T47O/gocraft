@@ -463,7 +463,7 @@ func HandleInput(world *World, camera *gameCamera, state *InputState, client *Cl
 		}
 
 		if canPlace {
-			px, py, pz, ok := world.PlaceAdjacent(hit, state.CurrentBlock)
+			px, py, pz, ok := world.PlaceAdjacent(hit, state.CurrentBlock, state.Yaw)
 			if ok && client != nil {
 				upper := hit.normal.Y < 0
 				if hit.normal.Y == 0 {

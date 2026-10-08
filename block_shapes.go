@@ -15,9 +15,11 @@ const (
 
 type shapeBox struct{ minX, minY, minZ, maxX, maxY, maxZ float32 }
 
-func isSlab(id byte) bool        { return id == blockOakSlab || id == blockStoneSlab }
-func isStair(id byte) bool       { return id == blockOakStairs || id == blockCobbleStairs }
-func isShapedBlock(id byte) bool { return isSlab(id) || isStair(id) || id == blockWoodDoor }
+func isSlab(id byte) bool  { return id == blockOakSlab || id == blockStoneSlab }
+func isStair(id byte) bool { return id == blockOakStairs || id == blockCobbleStairs }
+func isShapedBlock(id byte) bool {
+	return isSlab(id) || isStair(id) || id == blockWoodDoor || id == blockBed
+}
 
 func facingFromYaw(yaw float32) byte {
 	sx, sz := math.Sin(float64(yaw)), math.Cos(float64(yaw))
@@ -47,6 +49,9 @@ func placementMeta(id byte, yaw float32, upper bool) byte {
 		}
 		return meta
 	}
+	if id == blockBed {
+		return bedFacingFromYaw(yaw)
+	}
 	if id == blockChest || id == blockFurnace || id == blockWoodDoor {
 		return facingFromYaw(yaw)
 	}
@@ -59,7 +64,7 @@ func validPlacementMeta(id, meta byte) bool {
 		return meta == 0 || meta == shapeUpper
 	case isStair(id):
 		return meta <= 7
-	case id == blockChest || id == blockFurnace || id == blockWoodDoor:
+	case id == blockChest || id == blockFurnace || id == blockWoodDoor || id == blockBed:
 		return meta <= 3
 	case id == blockTorch:
 		return meta <= 4
@@ -102,6 +107,30 @@ func shapeBoxes(id, meta byte) ([3]shapeBox, int) {
 			}
 		}
 		return boxes, 1
+	}
+	if id == blockBed {
+		// Mattress and two low feet at the exposed end of each half.
+		boxes[0] = shapeBox{-.5, -.3125, -.5, .5, .0625, .5}
+		const leg = float32(3.0 / 16.0)
+		outer := (meta & 3) + 2
+		if meta&shapeUpper != 0 {
+			outer = meta & 3
+		}
+		switch outer & 3 {
+		case faceNorth:
+			boxes[1] = shapeBox{-.5, -.5, -.5, -.5 + leg, -.3125, -.5 + leg}
+			boxes[2] = shapeBox{.5 - leg, -.5, -.5, .5, -.3125, -.5 + leg}
+		case faceSouth:
+			boxes[1] = shapeBox{-.5, -.5, .5 - leg, -.5 + leg, -.3125, .5}
+			boxes[2] = shapeBox{.5 - leg, -.5, .5 - leg, .5, -.3125, .5}
+		case faceEast:
+			boxes[1] = shapeBox{.5 - leg, -.5, -.5, .5, -.3125, -.5 + leg}
+			boxes[2] = shapeBox{.5 - leg, -.5, .5 - leg, .5, -.3125, .5}
+		case faceWest:
+			boxes[1] = shapeBox{-.5, -.5, -.5, -.5 + leg, -.3125, -.5 + leg}
+			boxes[2] = shapeBox{-.5, -.5, .5 - leg, -.5 + leg, -.3125, .5}
+		}
+		return boxes, 3
 	}
 	if isSlab(id) && meta&shapeDouble != 0 {
 		boxes[0] = shapeBox{-.5, -.5, -.5, .5, .5, .5}

@@ -2,11 +2,13 @@
   "texture": "textures/entity/chicken/chicken_temperate.png",
   "texture_size": [64, 32],
   "bones": [
-    {"name":"body","uv_axis":"z","pivot":[0,0.4,0],"size":[0.4,0.45,0.55],"offset":[0,0,0],"uv":[0,0]},
-    {"name":"head","parent":"body","pivot":[0,0.4,0.25],"size":[0.3,0.3,0.3],"offset":[0,0,0],"uv":[0,0]},
-    {"name":"leg_front_left","pivot":[-0.12,0.2,0.1],"size":[0.08,0.2,0.08],"offset":[0,-0.1,0],"uv":[0,16]},
-    {"name":"leg_front_right","pivot":[0.12,0.2,0.1],"size":[0.08,0.2,0.08],"offset":[0,-0.1,0],"uv":[0,16]},
-    {"name":"leg_back_left","pivot":[-0.12,0.2,-0.1],"size":[0.08,0.2,0.08],"offset":[0,-0.1,0],"uv":[0,16]},
-    {"name":"leg_back_right","pivot":[0.12,0.2,-0.1],"size":[0.08,0.2,0.08],"offset":[0,-0.1,0],"uv":[0,16]}
+    {"name":"body","pivot":[0,0.36,0],"size":[0.375,0.5,0.375],"offset":[0,0,0],"uv":[0,9]},
+    {"name":"head","parent":"body","pivot":[0,0.28,0.27],"size":[0.25,0.375,0.1875],"offset":[0,0,0],"uv":[0,0]},
+    {"name":"beak","parent":"head","pivot":[0,-0.08,0.2],"size":[0.25,0.125,0.125],"offset":[0,0,0],"uv":[14,0]},
+    {"name":"wattle","parent":"head","pivot":[0,-0.2,0.2],"size":[0.125,0.125,0.125],"offset":[0,0,0],"uv":[14,4]},
+    {"name":"wing_left","parent":"body","pivot":[-0.22,0,0],"size":[0.0625,0.25,0.375],"offset":[0,0,0],"uv":[24,13]},
+    {"name":"wing_right","parent":"body","pivot":[0.22,0,0],"size":[0.0625,0.25,0.375],"offset":[0,0,0],"uv":[24,13]},
+    {"name":"leg_left","pivot":[-0.13,0.28,0],"size":[0.1875,0.28,0.1875],"offset":[0,-0.14,0],"uv_size":[0.1875,0.3125,0.1875],"uv":[26,0]},
+    {"name":"leg_right","pivot":[0.13,0.28,0],"size":[0.1875,0.28,0.1875],"offset":[0,-0.14,0],"uv_size":[0.1875,0.3125,0.1875],"uv":[26,0]}
   ]
 }

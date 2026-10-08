@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"io/fs"
+	"math"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -48,6 +49,60 @@ func TestMobContentValidationAndPose(t *testing.T) {
 	source[p] = &fstest.MapFile{Data: bytes.ReplaceAll(source[p].Data, []byte("leg_front_left"), []byte("missing_leg"))}
 	if _, err = loadMobContent(source); err == nil {
 		t.Fatal("missing animation bone accepted")
+	}
+}
+
+func TestMobVisualModelLayout(t *testing.T) {
+	chicken := mobContent.Models[mobContent.Definitions["chicken"].Model]
+	legs, wings := 0, 0
+	for _, bone := range chicken.Bones {
+		if bone.Name == "leg_left" || bone.Name == "leg_right" {
+			legs++
+		}
+		if bone.Name == "wing_left" || bone.Name == "wing_right" {
+			wings++
+		}
+	}
+	if legs != 2 || wings != 2 || mobContent.Definitions["chicken"].Animation != "chicken" {
+		t.Fatalf("chicken model: %d legs, %d wings, animation %q", legs, wings, mobContent.Definitions["chicken"].Animation)
+	}
+	sheep := mobContent.Models[mobContent.Definitions["sheep"].Model]
+	wool := 0
+	for _, bone := range sheep.Bones {
+		if bone.Texture == "textures/block/white_wool.png" {
+			wool++
+			if !bone.HideWhenSheared || !bone.FullTexture {
+				t.Fatalf("sheep wool bone %s does not disappear when sheared", bone.Name)
+			}
+		}
+	}
+	if wool != 6 {
+		t.Fatalf("sheep wool layer has %d bones, want body, head and four leg cuffs", wool)
+	}
+	spider := mobContent.Models[mobContent.Definitions["spider"].Model]
+	upperLegs, lowerLegs := 0, 0
+	spiderBones := make(map[string]MobBone, len(spider.Bones))
+	for _, bone := range spider.Bones {
+		spiderBones[bone.Name] = bone
+		if len(bone.Name) >= 4 && bone.Name[:4] == "leg_" {
+			if bone.SegmentTo == ([3]float32{}) || bone.SegmentTo[0] == 0 {
+				t.Fatalf("spider leg %s must have a diagonal segment: %v", bone.Name, bone.SegmentTo)
+			}
+			if bone.Parent == "" {
+				upperLegs++
+			} else {
+				lowerLegs++
+				if bone.Pivot != spiderBones[bone.Parent].SegmentTo {
+					t.Fatalf("spider leg %s knee does not meet %s", bone.Name, bone.Parent)
+				}
+				if bone.SegmentTo[1] >= -.5 {
+					t.Fatalf("spider lower leg %s does not reach the ground", bone.Name)
+				}
+			}
+		}
+	}
+	if upperLegs != 8 || lowerLegs != 8 {
+		t.Fatalf("spider has %d upper and %d lower legs, want 8 each", upperLegs, lowerLegs)
 	}
 }
 func TestMobCollisionStepAndCliff(t *testing.T) {
@@ -96,6 +151,62 @@ func TestMobCollisionStepAndCliff(t *testing.T) {
 	if m.Y != before {
 		t.Fatal("unloaded terrain advanced gravity")
 	}
+}
+
+func TestPassiveMobStopsTurningAtObstacle(t *testing.T) {
+	w := mobTestWorld(t)
+	w.SetBlockAt(8, 71, 5, blockStone)
+	w.SetBlockAt(8, 72, 5, blockStone)
+	m := newMob("pig", "blocked-turn", 8, 70.501, 3)
+	m.State, m.Timer, m.Yaw = "walk", 1000, 0
+	for i := 0; i < 30 && m.State == "walk"; i++ {
+		m.Tick(w)
+	}
+	if m.State != "turn" {
+		t.Fatal("pig did not pause after hitting the wall")
+	}
+	position := [2]float64{m.X, m.Z}
+	yaw := m.Yaw
+	for i := 0; i < 5; i++ {
+		m.Tick(w)
+		if m.State != "turn" || abs32(m.Yaw-yaw) > .121 {
+			t.Fatalf("pig turned too sharply or resumed walking while blocked: state=%s yaw=%f", m.State, m.Yaw)
+		}
+		yaw = m.Yaw
+	}
+	if m.X != position[0] || m.Z != position[1] {
+		t.Fatal("pig moved while turning in place")
+	}
+}
+
+func TestPassiveMobTurnsBeforeWandering(t *testing.T) {
+	w := mobTestWorld(t)
+	m := newMob("pig", "wander-turn", 8, 70.501, 8)
+	m.State, m.Timer = "idle", 1
+	m.Tick(w)
+	if m.State != "turn" || m.X != 8 || m.Z != 8 {
+		t.Fatalf("pig started walking before turning: state=%s pos=(%f,%f)", m.State, m.X, m.Z)
+	}
+	for i := 0; i < 30; i++ {
+		previousYaw := m.Yaw
+		oldX, oldZ := m.X, m.Z
+		m.Tick(w)
+		if m.State == "turn" {
+			if math.Abs(float64(m.Yaw-previousYaw)) > .121 || m.X != oldX || m.Z != oldZ {
+				t.Fatal("pig moved or snapped its heading while turning")
+			}
+			continue
+		}
+		if m.State != "walk" || math.Hypot(m.X-oldX, m.Z-oldZ) < .001 {
+			t.Fatal("pig did not resume walking after its turn")
+		}
+		motionYaw := math.Atan2(m.X-oldX, m.Z-oldZ)
+		if math.Cos(motionYaw-float64(m.Yaw)) < .99 {
+			t.Fatalf("pig walked away from its facing: heading=%f motion=%f", m.Yaw, motionYaw)
+		}
+		return
+	}
+	t.Fatal("pig never finished turning")
 }
 func TestMobAttackCooldownWallAndDrops(t *testing.T) {
 	w := mobTestWorld(t)

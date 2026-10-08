@@ -212,9 +212,6 @@ func (b *webGPUEntityBatch) addPrimedTNT(e *RemoteEntity, now float32) {
 		return
 	}
 	color := [4]uint8{255, 255, 255, 255}
-	if e.MobKind == "sheep" && e.MobSheared {
-		color = [4]uint8{185, 185, 185, 255}
-	}
 	if int(now*8)%2 == 0 {
 		color = [4]uint8{255, 145, 125, 255}
 	}
@@ -257,11 +254,27 @@ func (b *webGPUEntityBatch) addExplosionEffect(effect explosionEffect) {
 }
 
 func webGPUMobFaceUVs(model MobModel, bone MobBone) ([6][4]float32, bool) {
-	w, h, d := bone.Size[0]*16, bone.Size[1]*16, bone.Size[2]*16
+	uvSize := mobBoneUVSize(bone)
+	w, h, d := uvSize[0]*16, uvSize[1]*16, uvSize[2]*16
 	if bone.UVAxis == "z" {
 		h, d = d, h
 	}
 	u, v := bone.UV[0], bone.UV[1]
+	texture := model.Texture
+	if bone.Texture != "" {
+		texture = bone.Texture
+	}
+	if bone.FullTexture {
+		u0, v0, u1, v1, ok := webGPUEntityUV(texture)
+		if !ok {
+			return [6][4]float32{}, false
+		}
+		var faces [6][4]float32
+		for i := range faces {
+			faces[i] = [4]float32{u0, v0, u1, v1}
+		}
+		return faces, true
+	}
 	regions := [6][4]float32{
 		{u + d, v + d, w, h},       // front
 		{u + 2*d + w, v + d, w, h}, // back
@@ -270,9 +283,16 @@ func webGPUMobFaceUVs(model MobModel, bone MobBone) ([6][4]float32, bool) {
 		{u, v + d, d, h},           // right
 		{u + d + w, v + d, d, h},   // left
 	}
+	if bone.UVAxis == "z" {
+		// The skin's long (vertical) axis is the model's Z axis. A cube
+		// rotated onto its side exchanges the front/back and top/bottom
+		// texture faces; merely swapping their dimensions stretches them.
+		regions[0], regions[2] = regions[2], regions[0]
+		regions[1], regions[3] = regions[3], regions[1]
+	}
 	var out [6][4]float32
 	for i, r := range regions {
-		uv, ok := webGPUEntitySubUV(model.Texture, model.TextureSize, r[0], r[1], r[2], r[3])
+		uv, ok := webGPUEntitySubUV(texture, model.TextureSize, r[0], r[1], r[2], r[3])
 		if !ok {
 			return [6][4]float32{}, false
 		}
@@ -299,6 +319,35 @@ func (b *webGPUEntityBatch) addMobBone(center, size [3]float32, angleX, staticYa
 	b.addQuad(point(-hx, -hy, hz), point(hx, -hy, hz), point(hx, -hy, -hz), point(-hx, -hy, -hz), uvs[3], color, [3]float32{0, -1, 0})
 	b.addQuad(point(hx, hy, hz), point(hx, hy, -hz), point(hx, -hy, -hz), point(hx, -hy, hz), uvs[4], color, [3]float32{1, 0, 0})
 	b.addQuad(point(-hx, hy, -hz), point(-hx, hy, hz), point(-hx, -hy, hz), point(-hx, -hy, -hz), uvs[5], color, [3]float32{-1, 0, 0})
+}
+
+// addMobSegment builds a thin cuboid between two articulated joints. Unlike a
+// rotated vertical box, its end caps meet at the knee even for splayed legs.
+func (b *webGPUEntityBatch) addMobSegment(start, end [3]float32, width, depth float32, uvs [6][4]float32, color [4]uint8) {
+	cross := func(a, c [3]float32) [3]float32 {
+		return [3]float32{a[1]*c[2] - a[2]*c[1], a[2]*c[0] - a[0]*c[2], a[0]*c[1] - a[1]*c[0]}
+	}
+	normalize := func(v [3]float32) [3]float32 {
+		length := float32(math.Sqrt(float64(v[0]*v[0] + v[1]*v[1] + v[2]*v[2])))
+		return [3]float32{v[0] / length, v[1] / length, v[2] / length}
+	}
+	direction := normalize([3]float32{end[0] - start[0], end[1] - start[1], end[2] - start[2]})
+	helper := [3]float32{0, 0, 1}
+	if float32(math.Abs(float64(direction[2]))) > .9 {
+		helper = [3]float32{0, 1, 0}
+	}
+	right := normalize(cross(direction, helper))
+	forward := cross(right, direction)
+	point := func(center [3]float32, x, z float32) [3]float32 {
+		return [3]float32{center[0] + right[0]*x + forward[0]*z, center[1] + right[1]*x + forward[1]*z, center[2] + right[2]*x + forward[2]*z}
+	}
+	hx, hz := width/2, depth/2
+	b.addQuad(point(end, -hx, hz), point(end, hx, hz), point(start, hx, hz), point(start, -hx, hz), uvs[0], color, forward)
+	b.addQuad(point(end, hx, -hz), point(end, -hx, -hz), point(start, -hx, -hz), point(start, hx, -hz), uvs[1], color, [3]float32{-forward[0], -forward[1], -forward[2]})
+	b.addQuad(point(end, -hx, -hz), point(end, hx, -hz), point(end, hx, hz), point(end, -hx, hz), uvs[2], color, direction)
+	b.addQuad(point(start, -hx, hz), point(start, hx, hz), point(start, hx, -hz), point(start, -hx, -hz), uvs[3], color, [3]float32{-direction[0], -direction[1], -direction[2]})
+	b.addQuad(point(end, hx, hz), point(end, hx, -hz), point(start, hx, -hz), point(start, hx, hz), uvs[4], color, right)
+	b.addQuad(point(end, -hx, -hz), point(end, -hx, hz), point(start, -hx, hz), point(start, -hx, -hz), uvs[5], color, [3]float32{-right[0], -right[1], -right[2]})
 }
 
 func (b *webGPUEntityBatch) addMob(e *RemoteEntity, now float32) {
@@ -328,9 +377,32 @@ func (b *webGPUEntityBatch) addMob(e *RemoteEntity, now float32) {
 		color = [4]uint8{255, 255, 185, 255}
 	}
 	for i, bone := range model.Bones {
+		if e.MobSheared && bone.HideWhenSheared {
+			continue
+		}
 		pose := poses[i]
 		uvs, ok := webGPUMobFaceUVs(model, bone)
 		if !ok {
+			continue
+		}
+		if bone.SegmentTo != ([3]float32{}) {
+			worldPoint := func(local [3]float32) [3]float32 {
+				if e.MobBaby {
+					for axis := range local {
+						local[axis] *= .6
+					}
+				}
+				x, z := rotateY(local[0], local[2], e.Yaw)
+				return addVec3(rotateZVec([3]float32{x, local[1], z}, deathAngle), root)
+			}
+			start := worldPoint(pose.joint)
+			end := worldPoint(addVec3(pose.joint, rotateXVec(bone.SegmentTo, pose.angleX)))
+			width, depth := bone.Size[0], bone.Size[2]
+			if e.MobBaby {
+				width *= .6
+				depth *= .6
+			}
+			b.addMobSegment(start, end, width, depth, uvs, color)
 			continue
 		}
 		center, size := pose.center, bone.Size

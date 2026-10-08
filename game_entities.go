@@ -32,8 +32,17 @@ func updateInterpolation(dt float32) {
 				target = 1
 			}
 			e.AnimBlend += (target - e.AnimBlend) * min(dt*anim.BlendSpeed, float32(1))
-			diff := float32(math.Atan2(math.Sin(float64(e.TargetYaw-e.Yaw)), math.Cos(float64(e.TargetYaw-e.Yaw))))
-			e.Yaw += diff * float32(lerpFactor)
+			// Passive mobs can change course abruptly at a wall or a ledge.
+			// Position and yaw are interpolated independently, so using the
+			// server yaw while the old position catches up makes them slide
+			// sideways or even walk backwards. Face the visible motion while
+			// walking; keep the server yaw for idle and hostile aiming.
+			if !d.Hostile && (e.MobState == "walk" || e.MobState == "flee") && distance > .0001 {
+				e.Yaw = float32(math.Atan2(e.X-oldX, e.Z-oldZ))
+			} else {
+				diff := float32(math.Atan2(math.Sin(float64(e.TargetYaw-e.Yaw)), math.Cos(float64(e.TargetYaw-e.Yaw))))
+				e.Yaw += diff * float32(lerpFactor)
+			}
 			e.MobHurt = max(0, e.MobHurt-dt)
 			if e.MobHealth <= 0 {
 				e.DeathTime += dt

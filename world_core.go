@@ -185,10 +185,16 @@ func (w *World) RemoveBlock(x, y, z int) {
 	if y < 0 || y >= chunkHeight {
 		return
 	}
-	if w.BlockAt(x, y, z) == blockAir {
+	old := w.BlockAt(x, y, z)
+	if old == blockAir {
 		return
 	}
+	oldMeta := w.MetaAt(x, y, z)
 	w.SetBlockAt(x, y, z, blockAir)
+	if old == blockBed && bedPartsMatch(w, x, y, z, oldMeta) {
+		ox, oy, oz := bedOtherPos(x, y, z, oldMeta)
+		w.SetBlockAt(ox, oy, oz, blockAir)
+	}
 
 	// Check if block above needs support
 	up := w.BlockAt(x, y+1, z)
@@ -197,14 +203,14 @@ func (w *World) RemoveBlock(x, y, z int) {
 		// If it's a plant or cactus, check if it still has support (which it likely doesn't since we just removed it)
 		// Simpler: Just check if it IS a plant, if so, remove it.
 		// Standard MC: If support is gone, break it.
-		if def.RenderType == RenderTypeCross || up == blockCactus {
+		if def.RenderType == RenderTypeCross || up == blockCactus || up == blockBed {
 			// Recursive removal
 			w.RemoveBlock(x, y+1, z)
 		}
 	}
 }
 
-func (w *World) PlaceAdjacent(hit hitInfo, block byte) (int, int, int, bool) {
+func (w *World) PlaceAdjacent(hit hitInfo, block byte, yaw float32) (int, int, int, bool) {
 	if !hit.hit {
 		return 0, 0, 0, false
 	}
@@ -219,6 +225,18 @@ func (w *World) PlaceAdjacent(hit hitInfo, block byte) (int, int, int, bool) {
 	}
 	if block == blockWoodDoor && !w.canPlaceDoor(nx, ny, nz) {
 		return 0, 0, 0, false
+	}
+	if block == blockBed {
+		facing := bedFacingFromYaw(yaw)
+		if !w.canPlaceBed(nx, ny, nz, facing) {
+			return 0, 0, 0, false
+		}
+		hx, hy, hz := bedOtherPos(nx, ny, nz, facing)
+		w.SetBlockAt(nx, ny, nz, blockBed)
+		w.SetMetaAt(nx, ny, nz, facing)
+		w.SetBlockAt(hx, hy, hz, blockBed)
+		w.SetMetaAt(hx, hy, hz, facing|shapeUpper)
+		return nx, ny, nz, true
 	}
 	if block == blockTorch {
 		if hit.normal.Y < 0 {

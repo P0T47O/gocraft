@@ -323,6 +323,11 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 		}
 		if !s.blockChangeReach(player, pos) {
 			s.SendTo(wrap.From, &PacketBlockChange{X: p.X, Y: p.Y, Z: p.Z, BlockID: s.World.BlockAt(int(p.X), int(p.Y), int(p.Z)), Meta: s.World.MetaAt(int(p.X), int(p.Y), int(p.Z))})
+			if p.BlockID == blockBed {
+				s.sendBedNeighbor(wrap.From, int(p.X), int(p.Y), int(p.Z), bedFacingFromYaw(player.Yaw))
+			} else if p.BlockID == blockAir && s.World.BlockAt(int(p.X), int(p.Y), int(p.Z)) == blockBed {
+				s.sendBedNeighbor(wrap.From, int(p.X), int(p.Y), int(p.Z), s.World.MetaAt(int(p.X), int(p.Y), int(p.Z)))
+			}
 			return
 		}
 
@@ -331,6 +336,9 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 		mergeSlab := isSlab(p.BlockID) && old == p.BlockID && (oldMeta == 0 || oldMeta == shapeUpper) && p.Meta == shapeDouble
 		if p.BlockID != blockAir && (p.BlockID >= 100 || GetBlock(p.BlockID).ID == blockAir || (old != blockAir && old != blockWater && !mergeSlab)) {
 			s.BroadcastTo(wrap.From, &PacketBlockChange{X: p.X, Y: p.Y, Z: p.Z, BlockID: old, Meta: s.World.MetaAt(int(p.X), int(p.Y), int(p.Z))})
+			if p.BlockID == blockBed {
+				s.sendBedNeighbor(wrap.From, int(p.X), int(p.Y), int(p.Z), bedFacingFromYaw(player.Yaw))
+			}
 			return
 		}
 		if p.BlockID == blockFarmland || isCrop(p.BlockID) {
@@ -339,10 +347,14 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 		}
 		if p.BlockID != blockAir && !validPlacementMeta(p.BlockID, p.Meta) && !mergeSlab {
 			s.BroadcastTo(wrap.From, &PacketBlockChange{X: p.X, Y: p.Y, Z: p.Z, BlockID: old, Meta: s.World.MetaAt(int(p.X), int(p.Y), int(p.Z))})
+			if p.BlockID == blockBed {
+				s.sendBedNeighbor(wrap.From, int(p.X), int(p.Y), int(p.Z), bedFacingFromYaw(player.Yaw))
+			}
 			return
 		}
-		if p.BlockID == blockBed && (p.Y <= 0 || !GetBlock(s.World.BlockAt(int(p.X), int(p.Y)-1, int(p.Z))).IsCollidable) {
-			s.BroadcastTo(wrap.From, &PacketBlockChange{X: p.X, Y: p.Y, Z: p.Z, BlockID: old})
+		if p.BlockID == blockBed && !s.World.canPlaceBed(int(p.X), int(p.Y), int(p.Z), bedFacingFromYaw(player.Yaw)) {
+			s.BroadcastTo(wrap.From, &PacketBlockChange{X: p.X, Y: p.Y, Z: p.Z, BlockID: old, Meta: oldMeta})
+			s.sendBedNeighbor(wrap.From, int(p.X), int(p.Y), int(p.Z), bedFacingFromYaw(player.Yaw))
 			return
 		}
 		if p.BlockID == blockWoodDoor && (old != blockAir || !s.World.canPlaceDoor(int(p.X), int(p.Y), int(p.Z))) {
@@ -384,6 +396,9 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 			oldBlockID := s.World.BlockAt(int(p.X), int(p.Y), int(p.Z))
 			if player.GameMode == ModeSurvival && !s.mayFinishMining(player, pos, oldBlockID, time.Now()) {
 				s.BroadcastTo(wrap.From, &PacketBlockChange{X: p.X, Y: p.Y, Z: p.Z, BlockID: oldBlockID, Meta: s.World.MetaAt(int(p.X), int(p.Y), int(p.Z))})
+				if oldBlockID == blockBed {
+					s.sendBedNeighbor(wrap.From, int(p.X), int(p.Y), int(p.Z), oldMeta)
+				}
 				return
 			}
 			if oldBlockID != blockAir {
@@ -474,7 +489,7 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 		// Validation logic would go here
 		fmt.Printf("Server: Block set at %d %d %d\n", p.X, p.Y, p.Z)
 		s.World.SetBlockAt(int(p.X), int(p.Y), int(p.Z), p.BlockID)
-		if p.BlockID == blockChest || p.BlockID == blockFurnace || isStair(p.BlockID) || p.BlockID == blockWoodDoor {
+		if p.BlockID == blockChest || p.BlockID == blockFurnace || isStair(p.BlockID) || p.BlockID == blockWoodDoor || p.BlockID == blockBed {
 			p.Meta = placementMeta(p.BlockID, player.Yaw, p.Meta&shapeUpper != 0)
 		} else if p.BlockID != blockTorch && !isSlab(p.BlockID) {
 			p.Meta = 0
@@ -482,13 +497,22 @@ func (s *Server) HandlePacket(wrap PacketWrapper) {
 		s.World.SetMetaAt(int(p.X), int(p.Y), int(p.Z), p.Meta)
 		if p.BlockID == blockAir {
 			s.removeUnsupportedDoorAbove(int(p.X), int(p.Y), int(p.Z), player.GameMode == ModeSurvival)
+			s.removeUnsupportedBedAbove(int(p.X), int(p.Y), int(p.Z), player.GameMode == ModeSurvival)
 		}
-		if p.BlockID == blockWoodDoor {
+		if p.BlockID == blockBed {
+			hx, hy, hz := bedOtherPos(int(p.X), int(p.Y), int(p.Z), p.Meta)
+			s.World.SetBlockAt(hx, hy, hz, blockBed)
+			s.World.SetMetaAt(hx, hy, hz, p.Meta|shapeUpper)
+			s.scheduleFluidAround(BlockPos{int32(hx), int32(hy), int32(hz)})
+			s.Broadcast(&PacketBlockChange{X: int32(hx), Y: int32(hy), Z: int32(hz), BlockID: blockBed, Meta: p.Meta | shapeUpper})
+		} else if p.BlockID == blockWoodDoor {
 			s.World.SetBlockAt(int(p.X), int(p.Y)+1, int(p.Z), blockWoodDoor)
 			s.World.SetMetaAt(int(p.X), int(p.Y)+1, int(p.Z), p.Meta|shapeUpper)
 			s.Broadcast(&PacketBlockChange{X: p.X, Y: p.Y + 1, Z: p.Z, BlockID: blockWoodDoor, Meta: p.Meta | shapeUpper})
 		} else if p.BlockID == blockAir && old == blockWoodDoor {
 			s.removeOtherDoorHalf(int(p.X), int(p.Y), int(p.Z), oldMeta)
+		} else if p.BlockID == blockAir && old == blockBed {
+			s.removeOtherBedHalf(int(p.X), int(p.Y), int(p.Z), oldMeta)
 		}
 		s.scheduleFluidAround(BlockPos{p.X, p.Y, p.Z})
 

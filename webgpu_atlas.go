@@ -162,6 +162,11 @@ func buildWebGPUBlockAtlas() (*webGPUBlockAtlas, error) {
 		if model.Texture != "" {
 			pathsSet[model.Texture] = struct{}{}
 		}
+		for _, bone := range model.Bones {
+			if bone.Texture != "" {
+				pathsSet[bone.Texture] = struct{}{}
+			}
+		}
 	}
 
 	for i := 0; i < 10; i++ {
@@ -176,6 +181,9 @@ func buildWebGPUBlockAtlas() (*webGPUBlockAtlas, error) {
 		}
 	}
 	pathsSet["textures/block/farmland_moist.png"] = struct{}{}
+	for _, suffix := range []string{"up", "east", "west", "south"} {
+		pathsSet["textures/block/red_bed_foot_"+suffix+".png"] = struct{}{}
+	}
 
 	// Grass side overlay is emitted directly by the chunk mesher rather than
 	// being referenced by BlockDef.Textures.

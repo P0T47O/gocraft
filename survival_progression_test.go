@@ -110,6 +110,9 @@ func TestBedSleepAndRespawnFallback(t *testing.T) {
 	w := lifeTestWorld(t)
 	s, p := lifeTestPlayer(w)
 	w.SetBlockAt(8, 71, 8, blockBed)
+	w.SetMetaAt(8, 71, 8, faceSouth)
+	w.SetBlockAt(8, 71, 9, blockBed)
+	w.SetMetaAt(8, 71, 9, faceSouth|shapeUpper)
 	w.TimeTicks = 18000
 	if !s.useBed(p, BlockPos{8, 71, 8}) || !p.Vitals.HasHome || math.Mod(w.TimeTicks, 24000) != 0 {
 		t.Fatal("bed did not set home and skip night")
@@ -118,7 +121,7 @@ func TestBedSleepAndRespawnFallback(t *testing.T) {
 	if !ok || x != 9 || z != 8 || math.Abs(y-72.13) > .02 {
 		t.Fatalf("unsafe bed spawn: %v %v %v %v", x, y, z, ok)
 	}
-	w.SetBlockAt(8, 71, 8, blockAir)
+	w.RemoveBlock(8, 71, 8)
 	x, _, z, ok = s.safeRespawn(p.Vitals)
 	if !ok || x != 8 || z != 8 {
 		t.Fatal("destroyed bed did not fall back to original spawn")
@@ -143,6 +146,9 @@ func TestBedRespawnWaitsForHomeChunk(t *testing.T) {
 		}
 	}
 	w.SetBlockAt(20, 71, 8, blockBed)
+	w.SetMetaAt(20, 71, 8, faceSouth)
+	w.SetBlockAt(20, 71, 9, blockBed)
+	w.SetMetaAt(20, 71, 9, faceSouth|shapeUpper)
 	x, _, z, ok := s.safeRespawn(p.Vitals)
 	if !ok || x != 21 || z != 8 {
 		t.Fatalf("loaded bed was not used: %v %v %v", x, z, ok)
@@ -158,7 +164,13 @@ func TestBedRequiresOnlineSurvivorsToSleep(t *testing.T) {
 	s.Clients[first.UUID] = &ClientConnection{Send: make(chan Packet, 8)}
 	s.Clients[second.UUID] = &ClientConnection{Send: make(chan Packet, 8)}
 	w.SetBlockAt(8, 71, 8, blockBed)
+	w.SetMetaAt(8, 71, 8, faceSouth)
+	w.SetBlockAt(8, 71, 9, blockBed)
+	w.SetMetaAt(8, 71, 9, faceSouth|shapeUpper)
 	w.SetBlockAt(10, 71, 8, blockBed)
+	w.SetMetaAt(10, 71, 8, faceSouth)
+	w.SetBlockAt(10, 71, 9, blockBed)
+	w.SetMetaAt(10, 71, 9, faceSouth|shapeUpper)
 	w.TimeTicks = 18000
 	if !s.useBed(first, BlockPos{8, 71, 8}) || w.TimeTicks != 18000 {
 		t.Fatal("one sleeper skipped a multiplayer night")

@@ -56,12 +56,25 @@ var mobDropItems = map[string]byte{
 
 type MobBone struct {
 	UVAxis              string  `json:"uv_axis"`
+	Texture             string  `json:"texture,omitempty"`
+	FullTexture         bool    `json:"full_texture,omitempty"`
+	HideWhenSheared     bool    `json:"hide_when_sheared,omitempty"`
 	RotationY           float32 `json:"rotation_y"`
 	RotationZ           float32 `json:"rotation_z"`
 	Name, Parent        string
 	Pivot, Size, Offset [3]float32
+	SegmentTo           [3]float32 `json:"segment_to,omitempty"`
+	UVSize              [3]float32 `json:"uv_size,omitempty"`
 	UV                  [2]float32
 }
+
+func mobBoneUVSize(b MobBone) [3]float32 {
+	if b.UVSize == ([3]float32{}) {
+		return b.Size
+	}
+	return b.UVSize
+}
+
 type MobModel struct {
 	Texture     string     `json:"texture"`
 	TextureSize [2]float32 `json:"texture_size"`
@@ -155,13 +168,25 @@ func loadMobContent(source fs.FS) (*MobContent, error) {
 					return nil, fmt.Errorf("model %s: invalid size", d.Model)
 				}
 			}
+			if b.SegmentTo != ([3]float32{}) {
+				lengthSquared := float64(b.SegmentTo[0]*b.SegmentTo[0] + b.SegmentTo[1]*b.SegmentTo[1] + b.SegmentTo[2]*b.SegmentTo[2])
+				if lengthSquared < 0.0001 || math.IsNaN(lengthSquared) || math.IsInf(lengthSquared, 0) {
+					return nil, fmt.Errorf("model %s bone %s: invalid segment", d.Model, b.Name)
+				}
+			}
+			for _, v := range mobBoneUVSize(b) {
+				if v <= 0 || v > 8 {
+					return nil, fmt.Errorf("model %s: invalid UV size", d.Model)
+				}
+			}
 			if b.UVAxis != "" && b.UVAxis != "z" {
 				return nil, fmt.Errorf("model %s: unknown UV axis", d.Model)
 			}
 			if math.IsNaN(float64(b.RotationY)) || math.IsInf(float64(b.RotationY), 0) || math.IsNaN(float64(b.RotationZ)) || math.IsInf(float64(b.RotationZ), 0) {
 				return nil, fmt.Errorf("model %s: invalid bone rotation", d.Model)
 			}
-			width, height, depth := b.Size[0]*16, b.Size[1]*16, b.Size[2]*16
+			uvSize := mobBoneUVSize(b)
+			width, height, depth := uvSize[0]*16, uvSize[1]*16, uvSize[2]*16
 			if b.UVAxis == "z" {
 				height, depth = depth, height
 			}

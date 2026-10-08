@@ -98,7 +98,7 @@ func initBlockRegistry() {
 		faces := blockFaces{Top: shaped.texture, Bottom: shaped.texture, North: shaped.texture, South: shaped.texture, East: shaped.texture, West: shaped.texture}
 		RegisterBlock(&BlockDef{ID: shaped.id, Name: shaped.name, Textures: faces, RenderType: RenderTypeCube, IsTransparent: true, IsCollidable: true})
 	}
-	RegisterBlock(&BlockDef{ID: blockBed, Name: "Bed", Textures: blockFaces{Top: "textures/block/red_bed_head_up.png", Bottom: "textures/block/bed_down.png", North: "textures/block/red_bed_head_east.png", South: "textures/block/red_bed_head_west.png", East: "textures/block/red_bed_head_east.png", West: "textures/block/red_bed_head_west.png"}, RenderType: RenderTypeCube, IsTransparent: true, IsCollidable: false})
+	RegisterBlock(&BlockDef{ID: blockBed, Name: "Bed", Textures: blockFaces{Top: "textures/block/red_bed_head_up.png", Bottom: "textures/block/bed_down.png", North: "textures/block/red_bed_head_east.png", South: "textures/block/red_bed_head_west.png", East: "textures/block/red_bed_head_east.png", West: "textures/block/red_bed_head_west.png"}, RenderType: RenderTypeCube, IsTransparent: true, IsCollidable: true})
 	for _, crop := range []struct {
 		id            byte
 		name, texture string

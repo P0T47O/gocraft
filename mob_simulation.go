@@ -15,6 +15,7 @@ type MobEntity struct {
 	LostTicks, AttackCooldown, Fuse, SunTicks int
 	AvoidTicks                                int
 	AvoidYaw                                  float32
+	TurnYaw                                   float32
 	LoveTicks, BreedCooldown, BabyTicks       int
 	Sheared                                   bool
 	ShearCooldown                             int
@@ -44,6 +45,17 @@ func (m *MobEntity) hasBehavior(name string) bool {
 		}
 	}
 	return false
+}
+
+func stepMobYaw(current, target, maxStep float32) (float32, bool) {
+	diff := float32(math.Atan2(math.Sin(float64(target-current)), math.Cos(float64(target-current))))
+	if abs32(diff) <= maxStep {
+		return target, true
+	}
+	if diff < 0 {
+		return current - maxStep, false
+	}
+	return current + maxStep, false
 }
 func colliderLoaded(w *World, pos gameVec3, c Collider) bool {
 	for _, x := range []float32{pos.X - c.Width/2, pos.X + c.Width/2} {
@@ -94,12 +106,20 @@ func (m *MobEntity) Tick(w *World) {
 		m.Flee--
 		m.State = "flee"
 	} else if m.State != "chase" && m.State != "aim" && m.State != "fuse" {
-		m.Timer--
-		if m.Timer <= 0 {
-			if m.State == "idle" && m.hasBehavior("wander") {
+		if m.State == "turn" {
+			var aligned bool
+			m.Yaw, aligned = stepMobYaw(m.Yaw, m.TurnYaw, .12)
+			if aligned {
 				m.State = "walk"
 				m.Timer = d.WalkTicks + int(m.random()%40)
-				m.Yaw = float32(m.random()%6283) / 1000
+			}
+		} else {
+			m.Timer--
+		}
+		if m.Timer <= 0 && m.State != "turn" {
+			if m.State == "idle" && m.hasBehavior("wander") {
+				m.State = "turn"
+				m.TurnYaw = float32(m.random()%6283) / 1000
 			} else {
 				m.State = "idle"
 				m.Timer = d.IdleTicks + int(m.random()%40)
@@ -149,7 +169,10 @@ func (m *MobEntity) Tick(w *World) {
 			m.AvoidTicks = 16 + int(m.random()%20)
 			m.Yaw = m.AvoidYaw
 		} else {
-			m.Yaw += 1.5
+			// Turn in place once, then continue in the new direction. Turning
+			// every blocked walking tick made passive mobs spin at obstacles.
+			m.TurnYaw = m.Yaw + 1.5
+			m.State = "turn"
 		}
 		m.Timer = 20
 	}

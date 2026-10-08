@@ -2,11 +2,17 @@
   "texture": "textures/entity/sheep/sheep.png",
   "texture_size": [64, 32],
   "bones": [
-    {"name":"body","uv_axis":"z","pivot":[0,0.625,0],"size":[0.625,0.5,1],"offset":[0,0,0],"uv":[0,0]},
+    {"name":"body","uv_axis":"z","pivot":[0,0.625,0],"size":[0.625,0.5,1],"offset":[0,0,0],"uv":[28,8]},
     {"name":"head","parent":"body","pivot":[0,0.125,0.625],"size":[0.5,0.5,0.5],"offset":[0,0,0],"uv":[0,0]},
     {"name":"leg_front_left","pivot":[-0.1875,0.375,0.375],"size":[0.25,0.375,0.25],"offset":[0,-0.1875,0],"uv":[0,16]},
     {"name":"leg_front_right","pivot":[0.1875,0.375,0.375],"size":[0.25,0.375,0.25],"offset":[0,-0.1875,0],"uv":[0,16]},
     {"name":"leg_back_left","pivot":[-0.1875,0.375,-0.375],"size":[0.25,0.375,0.25],"offset":[0,-0.1875,0],"uv":[0,16]},
-    {"name":"leg_back_right","pivot":[0.1875,0.375,-0.375],"size":[0.25,0.375,0.25],"offset":[0,-0.1875,0],"uv":[0,16]}
+    {"name":"leg_back_right","pivot":[0.1875,0.375,-0.375],"size":[0.25,0.375,0.25],"offset":[0,-0.1875,0],"uv":[0,16]},
+    {"name":"wool_body","texture":"textures/block/white_wool.png","full_texture":true,"hide_when_sheared":true,"pivot":[0,0.625,0],"size":[0.78,0.68,1.17],"offset":[0,0,0],"uv":[0,0]},
+    {"name":"wool_head","parent":"body","texture":"textures/block/white_wool.png","full_texture":true,"hide_when_sheared":true,"pivot":[0,0.155,0.54],"size":[0.59,0.59,0.55],"offset":[0,0,0],"uv":[0,0]},
+    {"name":"wool_leg_front_left","texture":"textures/block/white_wool.png","full_texture":true,"hide_when_sheared":true,"pivot":[-0.1875,0.375,0.375],"size":[0.3,0.25,0.3],"offset":[0,-0.065,0],"uv":[0,0]},
+    {"name":"wool_leg_front_right","texture":"textures/block/white_wool.png","full_texture":true,"hide_when_sheared":true,"pivot":[0.1875,0.375,0.375],"size":[0.3,0.25,0.3],"offset":[0,-0.065,0],"uv":[0,0]},
+    {"name":"wool_leg_back_left","texture":"textures/block/white_wool.png","full_texture":true,"hide_when_sheared":true,"pivot":[-0.1875,0.375,-0.375],"size":[0.3,0.25,0.3],"offset":[0,-0.065,0],"uv":[0,0]},
+    {"name":"wool_leg_back_right","texture":"textures/block/white_wool.png","full_texture":true,"hide_when_sheared":true,"pivot":[0.1875,0.375,-0.375],"size":[0.3,0.25,0.3],"offset":[0,-0.065,0],"uv":[0,0]}
   ]
 }
